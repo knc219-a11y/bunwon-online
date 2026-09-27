@@ -167,6 +167,20 @@ func _ready() -> void:
 	_check(main.farm._mask(fx, main.farm._is_tilled) == 2 | 4, "갈아 둔 밭은 오른쪽·아래 이웃과 연결 (젖은 밭 포함)")
 	_check(main.farm._mask(Vector2i(17, 6), main.farm._is_path) == 1 | 2 | 4 | 8, "흙길 교차점은 네 방향 연결")
 
+	# 11) 마을 오브젝트: 그림 크기와 칸 수, 흙길 끝 칸에서 상호작용
+	var props := {
+		main.incubator: [Vector2(48, 48), Vector2i(2, 2), Vector2i(17, 5)],
+		main.supply_box: [Vector2(48, 44), Vector2i(2, 1), Vector2i(17, 8)],
+		main.hunt_gate: [Vector2(72, 56), Vector2i(3, 2), Vector2i(22, 5)],
+	}
+	for p: Prop in props:
+		var spec: Array = props[p]
+		_check(p.texture.get_size() == spec[0] and p.footprint == spec[1], "%s 그림 %s, %s칸" % [p.label, spec[0], spec[1]])
+		_check(main.farm._is_path(spec[2]) and p.is_near(Farm.center_of(spec[2]), Config.PROP_INTERACT_DISTANCE),
+			"%s 앞 흙길에서 상호작용" % p.label)
+		_check(not p.is_near(Farm.center_of(spec[2] + Vector2i(-3, 0)), Config.PROP_INTERACT_DISTANCE),
+			"%s 세 칸 떨어지면 상호작용 안 됨" % p.label)
+
 	print("SMOKE TEST: %s (%d failures)" % ["PASS" if _failures == 0 else "FAIL", _failures])
 	get_tree().quit(1 if _failures > 0 else 0)
 
