@@ -6,6 +6,8 @@ enum Work { TILL, SOW, WATER, HARVEST }
 
 const TILES := preload("res://assets/tiles/farm_tiles.png")
 const CROPS := preload("res://assets/tiles/crops.png")
+## 밭 울타리 (열 = 이웃 연결 비트, docs/sprites.md "마을 배경 오브젝트")
+const FENCE := preload("res://assets/tiles/fence.png")
 ## 타일셋 행: 0 풀·흙길 속 채움, 1 갈아 둔 밭, 2 물 준 밭, 3 흙길 가장자리 (열 = 이웃 연결 비트)
 const ROW_TILLED := 1
 const ROW_WATERED := 2
@@ -29,6 +31,7 @@ class Cell:
 
 var _cells: Dictionary[Vector2i, Cell] = {}
 var _path: Dictionary[Vector2i, bool] = {}
+var _fence: Dictionary[Vector2i, bool] = {}
 
 
 func _ready() -> void:
@@ -39,6 +42,15 @@ func _ready() -> void:
 		for x in r.size.x:
 			for y in r.size.y:
 				_path[r.position + Vector2i(x, y)] = true
+	var f := Config.FENCE_RECT
+	for x in range(f.position.x, f.end.x):
+		_fence[Vector2i(x, f.position.y)] = true
+		_fence[Vector2i(x, f.end.y - 1)] = true
+	for y in range(f.position.y, f.end.y):
+		_fence[Vector2i(f.position.x, y)] = true
+		_fence[Vector2i(f.end.x - 1, y)] = true
+	for gap in Config.FENCE_GAPS:
+		_fence.erase(gap)
 
 
 static func cell_of(pos: Vector2) -> Vector2i:
@@ -133,6 +145,10 @@ func _is_tilled(cell: Vector2i) -> bool:
 	return c != null and c.tilled
 
 
+func _is_fence(cell: Vector2i) -> bool:
+	return _fence.has(cell)
+
+
 func _is_path(cell: Vector2i) -> bool:
 	return _path.has(cell)
 
@@ -172,3 +188,8 @@ func _draw() -> void:
 			_tile(cell, TILES, _mask(cell, _is_tilled), ROW_WATERED if c.watered else ROW_TILLED)
 		if c.planted:
 			_tile(cell, CROPS, crop_stage(c), 0)
+	# 울타리는 위 줄부터 그려 아래 칸 기둥이 위 칸 가로대를 덮게 한다
+	var fence_cells := _fence.keys()
+	fence_cells.sort_custom(func(a: Vector2i, b: Vector2i) -> bool: return a.y < b.y)
+	for cell: Vector2i in fence_cells:
+		_tile(cell, FENCE, _mask(cell, _is_fence), 0)
