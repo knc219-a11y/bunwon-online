@@ -84,8 +84,8 @@ func _ready() -> void:
 	supply_box = _add_prop("마을 공급함", preload("res://assets/props/supply_box.png"), SUPPLY_RECT)
 	hunt_gate = _add_prop("사냥터 입구", preload("res://assets/props/hunt_gate.png"), HUNT_GATE_RECT)
 
-	farmer = _add_character("농부", preload("res://assets/characters/player.png"), Vector2i(14, 6))
-	hunter = _add_character("사냥꾼", preload("res://assets/characters/hunter.png"), Vector2i(20, 6))
+	farmer = _add_character("농부", preload("res://assets/characters/player.png"), Vector2i(14, 6), &"farmer")
+	hunter = _add_character("사냥꾼", preload("res://assets/characters/hunter.png"), Vector2i(20, 6), &"hunter")
 	_set_active(farmer)
 
 	_build_hud()
@@ -108,9 +108,10 @@ func _add_prop(label: String, texture: Texture2D, rect: Rect2i, block := Rect2()
 	return p
 
 
-func _add_character(display_name: String, sheet: Texture2D, cell: Vector2i) -> Character:
+func _add_character(display_name: String, sheet: Texture2D, cell: Vector2i, who: StringName) -> Character:
 	var c := Character.new()
 	c.display_name = display_name
+	c.who = who
 	c.sheet = sheet
 	c.position = Farm.center_of(cell)
 	c.farm = farm
@@ -213,6 +214,8 @@ func use_tool() -> void:
 func tool_cells(work: Farm.Work) -> Array[Vector2i]:
 	var first := farmer.facing_cell()
 	var reach := Config.TOOL_UPGRADE_REACH if GameState.tool_level(work) > 0 else 1
+	if work == Farm.Work.SOW:
+		reach = Wearables.sow_reach(farmer.who)
 	var cells: Array[Vector2i] = []
 	for i in reach:
 		cells.append(first + farmer.facing * i)
@@ -304,6 +307,9 @@ func supply_options() -> Array[StringName]:
 			options.append(id)
 	if not GameState.hunter_knife:
 		options.append(&"buy_knife")
+	for id: StringName in Wearables.ITEMS:
+		if not Wearables.is_owned(id):
+			options.append(id)
 	options.append(&"close")
 	return options
 
@@ -324,6 +330,9 @@ func supply_option_text(id: StringName) -> String:
 			return "도구 손보기: %s → %s (앞 %d칸, %d원)" % [TOOL_NAMES[work], UPGRADED_TOOL_NAMES[work], Config.TOOL_UPGRADE_REACH, TOOL_UPGRADES[id][1]]
 		&"buy_knife":
 			return "사냥꾼 튼튼한 사냥칼 (%d원)" % Config.HUNTER_KNIFE_PRICE
+		_ when Wearables.ITEMS.has(id):
+			var item: Dictionary = Wearables.ITEMS[id]
+			return "%s %s: %s (%s, %d원)" % ["농부" if item.who == &"farmer" else "사냥꾼", Wearables.SLOT_NAMES[item.slot], item.name, item.effect, item.price]
 		_:
 			return "닫기"
 
@@ -418,8 +427,28 @@ func supply_action(id: StringName) -> bool:
 			GameState.money -= Config.HUNTER_KNIFE_PRICE
 			GameState.hunter_knife = true
 			GameState.notify("사냥꾼에게 튼튼한 사냥칼을 사 줬다! -%d원. 이제 태어나는 크리처는 능력치가 너무 낮게 나오지 않는다." % Config.HUNTER_KNIFE_PRICE)
+		_ when Wearables.ITEMS.has(id):
+			return buy_wear(id)
 		_:
 			return false
+	return true
+
+
+## 입는 장비를 사서 바로 입힌다 (옷장은 다음 단계).
+func buy_wear(id: StringName) -> bool:
+	var item: Dictionary = Wearables.ITEMS[id]
+	if Wearables.is_owned(id):
+		GameState.notify("이미 %s이(가) 있다." % item.name)
+		return false
+	if GameState.money < item.price:
+		GameState.notify("돈이 모자라다. %s %d원 (가진 돈 %d원)." % [item.name, item.price, GameState.money])
+		return false
+	GameState.money -= item.price
+	GameState.owned_wear.append(id)
+	GameState.worn[item.who][item.slot] = id
+	var c := farmer if item.who == &"farmer" else hunter
+	c.refresh_wear()
+	GameState.notify("%s이(가) %s을(를) 입었다! -%d원. %s" % [c.display_name, item.name, item.price, item.effect])
 	return true
 
 

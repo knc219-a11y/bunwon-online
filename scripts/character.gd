@@ -15,6 +15,8 @@ const FEET_Y := 10
 const FEET_BOX := Vector2(12, 6)
 
 @export var display_name := ""
+## 입는 장비 주인 구분 (&"farmer" / &"hunter"). Wearables 참고.
+@export var who: StringName = &""
 @export var sheet: Texture2D
 
 var active := false:
@@ -30,6 +32,8 @@ var facing := Vector2i.DOWN
 var moving := false
 
 var _sprite: Sprite2D
+## 입은 장비 덧그림. 몸 시트와 같은 칸을 겹쳐 그린다.
+var _wear: Array[Sprite2D] = []
 var _anim_time := 0.0
 
 
@@ -41,6 +45,23 @@ func _ready() -> void:
 	_sprite.vframes = 3
 	_sprite.position = Vector2(-FRAME_SIZE / 2.0, FEET_Y - FRAME_SIZE)
 	add_child(_sprite)
+	refresh_wear()
+
+
+## 입은 장비에 맞춰 덧그림을 다시 만든다 (산 뒤에 부른다).
+func refresh_wear() -> void:
+	for w in _wear:
+		w.queue_free()
+	_wear.clear()
+	for id in Wearables.worn_by(who):
+		var w := Sprite2D.new()
+		w.texture = Wearables.ITEMS[id].sheet
+		w.centered = false
+		w.hframes = 6
+		w.vframes = 3
+		w.position = _sprite.position
+		add_child(w)
+		_wear.append(w)
 	_update_sprite()
 
 
@@ -95,7 +116,7 @@ func _process(delta: float) -> void:
 		facing = Vector2i(int(signf(dir.x)), 0)
 	else:
 		facing = Vector2i(0, int(signf(dir.y)))
-	step(dir * Config.CHARACTER_SPEED * delta)
+	step(dir * Config.CHARACTER_SPEED * Wearables.speed_mult(who) * delta)
 	queue_redraw()
 
 
@@ -116,9 +137,10 @@ func _update_sprite() -> void:
 	if _sprite == null:
 		return
 	var f := frame_coords()
-	_sprite.frame_coords = Vector2i(f.x, f.y)
-	_sprite.flip_h = f.z == 1
-	_sprite.modulate.a = 1.0 if active else 0.55
+	for sp: Sprite2D in [_sprite] + _wear:
+		sp.frame_coords = Vector2i(f.x, f.y)
+		sp.flip_h = f.z == 1
+		sp.modulate.a = 1.0 if active else 0.55
 
 
 func _draw() -> void:
