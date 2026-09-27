@@ -85,6 +85,38 @@ func _ready() -> void:
 		rc.watered = false
 	main.close_menu()
 
+	# 1-3) 입는 장비 (B): 공급함에서 사면 바로 입고, 덧그림이 몸 시트와 같은 칸을 따라간다
+	_check(main.supply_options().has(&"rain_boots") and main.supply_option_text(&"seed_vest").contains("씨앗 주머니 조끼"), "공급함에 입는 장비")
+	_check(not main.supply_action(&"rain_boots") and Wearables.speed_mult(&"farmer") == 1.0, "돈이 모자라면 장비를 못 삼")
+	var wear_total := 0
+	for id: StringName in Wearables.ITEMS:
+		wear_total += Wearables.ITEMS[id].price
+	GameState.money = wear_total
+	for id: StringName in Wearables.ITEMS:
+		_check(main.supply_action(id), "장비 사서 입기: %s" % Wearables.ITEMS[id].name)
+	_check(GameState.money == 0 and not main.supply_action(&"rain_boots"), "산 장비는 다시 못 삼")
+	_check(Wearables.worn_by(&"farmer").size() == 3 and Wearables.worn_by(&"hunter").size() == 2, "농부 모자·옷·신발, 사냥꾼 모자·신발")
+	_check(is_equal_approx(Wearables.speed_mult(&"farmer"), 1.15) and is_equal_approx(Wearables.speed_mult(&"hunter"), 1.15), "장화·등산화는 걷기 +15%")
+	_check(farmer._wear.size() == 3 and main.hunter._wear.size() == 2, "입은 장비 덧그림")
+	farmer.facing = Vector2i.LEFT
+	farmer._update_sprite()
+	_check(farmer._wear[0].frame_coords == farmer._sprite.frame_coords and farmer._wear[0].flip_h, "덧그림이 몸과 같은 칸 · 좌우 반전")
+	var sow_row := Vector2i(8, 4)
+	for i in 3:
+		farm0.do_work(Farm.Work.TILL, sow_row + Vector2i(i, 0))
+	farmer.position = Farm.center_of(sow_row + Vector2i.LEFT)
+	farmer.facing = Vector2i.RIGHT
+	main.tool_index = 1
+	var seeds_now := GameState.seeds
+	main.use_tool()
+	_check(GameState.seeds == seeds_now - 3 and farm0.get_cell(sow_row + Vector2i(2, 0)).planted, "씨앗 주머니 조끼: 씨앗도 앞 3칸 한 번에")
+	for i in 3:
+		var sc: Farm.Cell = farm0.get_cell(sow_row + Vector2i(i, 0))
+		sc.tilled = false
+		sc.planted = false
+	GameState.seeds = seeds_now
+	main.close_menu()
+
 	# 2) 시작 상태: 공급함에 알 1개, 사냥꾼은 잠김
 	_check(GameState.village_eggs.size() == Config.START_VILLAGE_EGGS and GameState.village_eggs[0] == CreatureCatalog.SLIME, "공급함에 슬라임 알 1개로 시작")
 	main.switch_character()

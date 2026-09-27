@@ -24,6 +24,9 @@ var hunts_today := 0
 var tool_levels := {}
 ## 사냥꾼 튼튼한 사냥칼을 샀는지
 var hunter_knife := false
+## 입는 장비 (Wearables). 산 장비 id, 캐릭터별 입은 장비 (칸 → id)
+var owned_wear: Array[StringName] = []
+var worn := {&"farmer": {}, &"hunter": {}}
 ## 사냥꾼 조작 해금 여부. 첫 슬라임을 밭에 배치하면 열린다 (임시 조건).
 var hunter_unlocked := false
 
@@ -60,6 +63,8 @@ func reset() -> void:
 	hunts_today = 0
 	tool_levels = {}
 	hunter_knife = false
+	owned_wear = []
+	worn = {&"farmer": {}, &"hunter": {}}
 	hunter_unlocked = false
 	changed.emit()
 
