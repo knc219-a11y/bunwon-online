@@ -269,6 +269,8 @@ func supply_options() -> Array[StringName]:
 	if GameState.crops > 0:
 		options.append(&"display_crops")
 	options.append(&"buy_seeds")
+	if Farm.next_plot() >= 0:
+		options.append(&"expand_field")
 	options.append(&"close")
 	return options
 
@@ -281,6 +283,9 @@ func supply_option_text(id: StringName) -> String:
 			return "무 진열하기 (%d개, 밤사이 %d원)" % [GameState.crops, GameState.crops * Config.CROP_PRICE]
 		&"buy_seeds":
 			return "씨앗 %d개 사기 (%d원)" % [Config.SEED_PACK_SIZE, Config.SEED_PACK_PRICE]
+		&"expand_field":
+			var i := Farm.next_plot()
+			return "밭 넓히기: %s (%d원)" % [Config.FIELD_PLOT_NAMES[i], Config.FIELD_PLOT_PRICES[i]]
 		_:
 			return "닫기"
 
@@ -341,6 +346,18 @@ func supply_action(id: StringName) -> bool:
 			GameState.money -= Config.SEED_PACK_PRICE
 			GameState.seeds += Config.SEED_PACK_SIZE
 			GameState.notify("씨앗 %d개를 샀다. -%d원" % [Config.SEED_PACK_SIZE, Config.SEED_PACK_PRICE])
+		&"expand_field":
+			var i := Farm.next_plot()
+			if i < 0:
+				GameState.notify("밭을 모두 넓혔다.")
+				return false
+			var price := Config.FIELD_PLOT_PRICES[i]
+			if GameState.money < price:
+				GameState.notify("돈이 모자라다. %s %d원 (가진 돈 %d원)." % [Config.FIELD_PLOT_NAMES[i], price, GameState.money])
+				return false
+			GameState.money -= price
+			farm.open_next_plot()
+			GameState.notify("밭을 넓혔다: %s -%d원. 잡초와 돌을 걷어 냈으니 괭이로 갈 수 있다." % [Config.FIELD_PLOT_NAMES[i], price])
 		_:
 			return false
 	return true
@@ -353,7 +370,7 @@ func _rebuild_menu() -> void:
 	for i in _menu_options.size():
 		lines.append(("▶ " if i == menu_index else "   ") + supply_option_text(_menu_options[i]))
 	_menu_text.text = "\n".join(lines)
-	_menu.size = Vector2(190, 14 + lines.size() * 14)
+	_menu.size = Vector2(210, 14 + lines.size() * 14)
 	# 공급함 오른쪽 위에 띄우되 화면 밖으로 나가지 않게
 	var at := supply_box.position + Vector2(36, -80)
 	_menu.position = at.clamp(Vector2(4, 32), Vector2(636, 324) - _menu.size)

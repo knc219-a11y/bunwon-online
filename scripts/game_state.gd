@@ -10,6 +10,8 @@ var crops := 0
 var money := Config.START_MONEY
 ## 마을 공급함에 진열한 작물. 밤사이 팔리고 아침에 돈이 들어온다.
 var displayed_crops := 0
+## 열린 밭 구역 수 (Config.FIELD_PLOTS 앞에서부터)
+var open_plots := Config.START_FIELD_PLOTS
 ## 알은 종 정보만 가진다. 능력치와 Trait은 부화할 때 정해진다.
 ## 농부가 들고 있는 알
 var farmer_eggs: Array[CreatureSpecies] = []
@@ -41,6 +43,7 @@ func reset() -> void:
 	crops = 0
 	money = Config.START_MONEY
 	displayed_crops = 0
+	open_plots = Config.START_FIELD_PLOTS
 	farmer_eggs = []
 	hunter_eggs = []
 	village_eggs = []
