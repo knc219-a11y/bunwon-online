@@ -53,6 +53,7 @@ func _ready() -> void:
 	var slime: Slime = main.slimes[0]
 	_check(slime.trait_name != "" and slime.speed > 0.0, "부화 시 능력치/Trait 생성")
 	_check(slime.role == Slime.Role.WATER, "첫 슬라임은 급수 역할")
+	_check(slime.speed >= Config.FIRST_SLIME_MIN_SPEED and slime.radius >= Config.FIRST_SLIME_MIN_RADIUS, "첫 슬라임 최저 능력치 보장")
 
 	# 4) 슬라임 옮겨서 배치 → 급수 역할 → 자동으로 물주기
 	farmer.position = slime.position

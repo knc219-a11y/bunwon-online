@@ -215,6 +215,7 @@ func _hatch(at_cell: Vector2i) -> Slime:
 	if slimes.is_empty():
 		# 첫 슬라임은 급수 담당으로 태어난다 (2026-09-27 결정)
 		s.role = Slime.Role.WATER
+		s.guarantee_minimum(Config.FIRST_SLIME_MIN_SPEED, Config.FIRST_SLIME_MIN_RADIUS)
 	slimes.append(s)
 	return s
 

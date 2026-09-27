@@ -50,6 +50,13 @@ func setup(farm: Farm, at_cell: Vector2i, rng: RandomNumberGenerator) -> void:
 	_timer = Config.SLIME_WORK_INTERVAL
 
 
+## 능력치 최저치 보장 (첫 슬라임용). 더 높게 나온 값은 그대로 둔다.
+func guarantee_minimum(min_speed: float, min_radius: int) -> void:
+	speed = maxf(speed, min_speed)
+	radius = maxi(radius, min_radius)
+	_timer = Config.SLIME_WORK_INTERVAL / speed
+
+
 func describe() -> String:
 	return "슬라임 [%s] 속도 %.2f / 범위 %d / %s" % [ROLE_NAMES[role], speed, radius, trait_name]
 
