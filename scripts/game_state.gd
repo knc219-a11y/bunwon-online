@@ -1,0 +1,65 @@
+extends Node
+## 전역 상태 (autoload: GameState). 인벤토리, 날짜, 마을 공급함.
+
+signal changed
+signal message(text: String)
+
+var day := 1
+var seeds := Config.START_SEEDS
+var crops := 0
+## 농부가 들고 있는 알
+var farmer_eggs := 0
+## 사냥꾼이 들고 있는 알 (마을 공급함에 넣기 전)
+var hunter_eggs := 0
+## 마을 공급함에 있는 알
+var village_eggs := 0
+var hunts_today := 0
+
+
+func _ready() -> void:
+	_register_inputs()
+
+
+func notify(text: String) -> void:
+	message.emit(text)
+	changed.emit()
+
+
+func touch() -> void:
+	changed.emit()
+
+
+func reset() -> void:
+	day = 1
+	seeds = Config.START_SEEDS
+	crops = 0
+	farmer_eggs = 0
+	hunter_eggs = 0
+	village_eggs = 0
+	hunts_today = 0
+	changed.emit()
+
+
+## 입력 매핑. 에디터의 Input Map 대신 코드로 등록해 둔다.
+func _register_inputs() -> void:
+	var map := {
+		"move_up": [KEY_W, KEY_UP],
+		"move_down": [KEY_S, KEY_DOWN],
+		"move_left": [KEY_A, KEY_LEFT],
+		"move_right": [KEY_D, KEY_RIGHT],
+		"use_tool": [KEY_SPACE, KEY_J],
+		"interact": [KEY_F, KEY_K],
+		"tool_prev": [KEY_Q],
+		"tool_next": [KEY_E],
+		"slime_role": [KEY_R],
+		"switch_character": [KEY_TAB],
+		"next_day": [KEY_N],
+	}
+	for action: String in map:
+		if InputMap.has_action(action):
+			continue
+		InputMap.add_action(action)
+		for key: Key in map[action]:
+			var ev := InputEventKey.new()
+			ev.physical_keycode = key
+			InputMap.action_add_event(action, ev)
