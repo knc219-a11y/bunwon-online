@@ -42,3 +42,8 @@ const CREATURE_WORK_INTERVAL := 1.6
 const CREATURE_HOP_TIME := 0.35
 ## 도착한 칸에서 일하는 동작 시간(초). 급수 4프레임 x 8fps
 const CREATURE_WORK_ANIM_TIME := 0.5
+
+## 잠자기 (2026-09-27 결정 A②): 현관 F → 밤으로 어두워짐 → 아침 카드 → F로 일어남
+const SLEEP_FADE_TIME := 1.0
+const WAKE_FADE_TIME := 0.4
+const NIGHT_ALPHA := 0.85

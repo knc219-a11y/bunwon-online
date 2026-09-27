@@ -238,6 +238,33 @@ func _ready() -> void:
 	_check(carried.z_index > farmer.z_index, "들고 있는 슬라임은 캐릭터 앞에 그림")
 	carried.place(Vector2i(6, 6))
 
+	# 14) 잠자기 (A②): 집 현관에서 F → 밤 1초 → 아침 카드 → F로 일어남
+	if main.active != farmer:
+		main.switch_character()
+	farmer.position = Farm.center_of(Vector2i(10, 6))
+	_check(not main.near_door(), "현관에서 멀면 잠잘 수 없음")
+	var sleep_cell := Vector2i(3, 3)
+	farm.do_work(Farm.Work.TILL, sleep_cell)
+	farm.do_work(Farm.Work.SOW, sleep_cell)
+	farm.do_work(Farm.Work.WATER, sleep_cell)
+	var day_before := GameState.day
+	farmer.position = Farm.center_of(main.DOOR_CELL)
+	_check(main.near_door(), "현관 앞 칸에서는 잠잘 수 있음")
+	main.interact()
+	_check(main.sleeping and not farmer.active, "잠들면 조작이 멈춤")
+	_check(GameState.day == day_before, "어두워지는 동안에는 아직 같은 날")
+	main.interact()
+	_check(main.sleeping, "어두워지는 중에 F를 눌러도 깨지 않음")
+	await get_tree().create_timer(Config.SLEEP_FADE_TIME + 0.2).timeout
+	_check(GameState.day == day_before + 1 and GameState.hunts_today == 0, "자고 나면 다음 날, 사냥 횟수 초기화")
+	_check(main._morning_card.visible and main._night.color.a > 0.8, "밤 화면 위에 아침 카드")
+	var card: String = main._morning_text.text
+	_check(card.contains("%d일째 아침" % GameState.day) and card.contains("작물") and card.contains("F 일어나기"), "아침 카드에 밤사이 결과 표시")
+	main.interact()
+	_check(not main._morning_card.visible, "F로 아침 카드 닫기")
+	await get_tree().create_timer(Config.WAKE_FADE_TIME + 0.2).timeout
+	_check(not main.sleeping and farmer.active and main._night.color.a < 0.01, "일어나면 다시 조작 가능")
+
 	print("SMOKE TEST: %s (%d failures)" % ["PASS" if _failures == 0 else "FAIL", _failures])
 	get_tree().quit(1 if _failures > 0 else 0)
 

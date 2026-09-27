@@ -111,12 +111,24 @@ func do_work(work: Work, cell: Vector2i) -> bool:
 
 
 ## 하루가 지난다. 물 준 작물만 자라고, 방치해도 죽지 않는다.
-func advance_day() -> void:
+## 하루를 넘긴다. 물을 받아 자란 작물 수를 돌려준다.
+func advance_day() -> int:
+	var grown := 0
 	for c: Cell in _cells.values():
 		if c.planted and c.watered:
 			c.growth += 1
+			grown += 1
 		c.watered = false
 	queue_redraw()
+	return grown
+
+
+func ripe_count() -> int:
+	var n := 0
+	for c: Cell in _cells.values():
+		if c.is_ripe():
+			n += 1
+	return n
 
 
 ## center 기준 반경 안에서 해당 작업이 가능한 가장 가까운 칸. 없으면 null.
