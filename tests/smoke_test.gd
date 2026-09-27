@@ -172,8 +172,13 @@ func _ready() -> void:
 	var hunter: Character = main.hunter
 	hunter.position = main.hunt_gate.position
 	main.interact()
+	# 밭에 크리처가 있으면 누구랑 갈지 먼저 묻는다. 여기서는 혼자 간다.
+	_check(main.menu_open and main.menu_kind == &"companion" and main.companion_options() == [&"companion_0", &"solo"], "사냥터 입구 F → 누구랑 갈까? 창 (크리처 1 + 혼자)")
+	_check(main.companion_option_text(&"companion_0").contains("물총"), "물 슬라임은 물총으로 돕는다고 표시")
+	main._unhandled_input(_action(&"move_down"))
+	main._unhandled_input(_action(&"interact"))
 	var hunt: HuntGround = main.hunt
-	_check(hunt != null and not main.farm.visible and not farmer.visible and hunt.slimes.size() == Config.WILD_SLIME_COUNT, "사냥터 입구 F → 사냥터 화면, 야생 슬라임 3마리")
+	_check(hunt != null and hunt.companion == null and not main.menu_open and not main.farm.visible and not farmer.visible and hunt.slimes.size() == Config.WILD_SLIME_COUNT, "사냥터 입구 F → 사냥터 화면, 야생 슬라임 3마리")
 	hunt.set_ai(false)
 	_check(hunt.hearts == Config.HUNTER_HEARTS, "하트 5개로 시작")
 	# Space(바라보는 쪽)로 두 번 휘두르면 쓰러진다
@@ -434,6 +439,8 @@ func _ready() -> void:
 	main._set_active(main.hunter)
 	main.hunter.position = main.hunt_gate.position
 	main.interact()
+	main.menu_index = main.companion_options().size() - 1
+	main.menu_confirm()
 	var h2: HuntGround = main.hunt
 	_check(h2 != null, "자고 나면 다시 사냥터에 들어감")
 	h2.set_ai(false)
@@ -450,6 +457,85 @@ func _ready() -> void:
 	_check(main.hunt == null and main.farm.visible, "하트가 0이 되면 쓰러져 마을로 돌아옴")
 	_check(GameState.hunter_eggs.size() == eggs_before + 1, "쓰러져도 떨어진 알은 챙겨 옴")
 	_check(main._near(main.hunt_gate), "쓰러지면 사냥터 입구 앞으로")
+
+	# 18) 크리처 동행 (A. 따라오는 동료): 입구에서 고른 크리처가 따라와 알아서 싸우고, 돌아오면 제자리로
+	main.next_day()
+	var buddy: Creature = main.companion_candidates()[0]
+	var buddy_home := buddy.home
+	var buddy_job := buddy.job
+	var buddy_pos := buddy.position
+	main.hunter.position = main.hunt_gate.position
+	main.interact()
+	main.menu_index = 0
+	main.menu_confirm()
+	var h3: HuntGround = main.hunt
+	_check(h3 != null and h3.companion != null and h3.companion.source == buddy, "고른 크리처와 함께 사냥터에 들어감")
+	_check(not buddy.visible and not buddy.can_process(), "데려간 크리처는 사냥 동안 농장 일을 쉰다")
+	_check(h3.companion.style == HuntCompanion.Style.SHOT, "물 슬라임은 물총")
+	h3.set_ai(false)
+	h3.companion_ai = false
+	# 물총: 먼 거리의 야생 슬라임을 맞힌다. 그날 첫 슬라임이라 알 보장.
+	var far: WildSlime = h3.slimes[0]
+	h3.companion.position = main.hunter.feet() + Vector2(0, 20)
+	for other in h3.slimes:
+		other.position = h3.companion.position + Vector2(200, 0)
+	far.position = h3.companion.position + Vector2(Config.COMPANION_SHOT_RANGE - 10, 0)
+	h3.tick(0.01)
+	_check(far.hp == Config.WILD_SLIME_HP - 1, "물총은 먼 거리의 야생 슬라임을 맞힘")
+	far.position = h3.companion.position + Vector2(Config.COMPANION_SHOT_RANGE - 10, 0)
+	h3.tick(0.01)
+	_check(far.hp == Config.WILD_SLIME_HP - 1, "물총은 간격을 두고 쏜다")
+	far.position = h3.companion.position + Vector2(Config.COMPANION_SHOT_RANGE - 10, 0)
+	h3.tick(h3.companion.attack_interval())
+	_check(h3.slimes.size() == Config.WILD_SLIME_COUNT - 1 and h3.drops.size() == 1, "크리처가 쓰러뜨린 슬라임도 그날 첫 알 보장")
+	# 따라다니기
+	h3.companion_ai = true
+	for other in h3.slimes:
+		other.position = main.hunter.feet() + Vector2(0, -200)
+	h3.companion.position = main.hunter.feet() + Vector2(80, 0)
+	for i in 30:
+		h3.tick(0.05)
+	_check(h3.companion.position.distance_to(main.hunter.feet()) <= Config.COMPANION_FOLLOW_DISTANCE + 4.0, "사냥꾼 뒤를 따라온다")
+	_check(h3.hearts == Config.HUNTER_HEARTS, "크리처 동행 중에도 하트는 그대로 (크리처는 다치지 않음)")
+	# 돌아오면 원래 자리·원래 일
+	var eggs_before_buddy := GameState.hunter_eggs.size()
+	main.hunter.position = h3.SPAWN_AT
+	main.interact()
+	_check(main.hunt == null and buddy.visible and buddy.can_process(), "돌아오면 크리처가 농장에 다시 나타나 일한다")
+	_check(buddy.home == buddy_home and buddy.job == buddy_job and buddy.position == buddy_pos, "원래 자리·원래 일 그대로")
+	_check(GameState.hunter_eggs.size() == eggs_before_buddy + 1, "크리처 덕에 떨어진 알도 챙겨 옴")
+	# 땅 슬라임은 붙어서 박치기
+	main.next_day()
+	var earth_buddy: Creature = main._hatch(CreatureCatalog.SLIME, Vector2i(3, 3))
+	earth_buddy.data.set_element(load("res://data/creatures/elements/earth.tres"))
+	main.hunter.position = main.hunt_gate.position
+	main.interact()
+	main.menu_index = main.companion_candidates().find(earth_buddy)
+	_check(main.companion_option_text(main.companion_options()[main.menu_index]).contains("박치기"), "땅 슬라임은 박치기로 돕는다고 표시")
+	main.menu_confirm()
+	var h4: HuntGround = main.hunt
+	_check(h4.companion.style == HuntCompanion.Style.BUMP, "땅 슬라임은 박치기")
+	h4.set_ai(false)
+	h4.companion_ai = false
+	var near: WildSlime = h4.slimes[0]
+	for other in h4.slimes:
+		other.position = main.hunter.feet() + Vector2(0, -150)
+	h4.companion.position = main.hunter.feet() + Vector2(0, 20)
+	near.position = h4.companion.position + Vector2(40, 0)
+	h4.tick(0.01)
+	_check(near.hp == Config.WILD_SLIME_HP, "박치기는 멀리서는 못 때림")
+	near.position = h4.companion.position + Vector2(Config.COMPANION_BUMP_RANGE - 4, 0)
+	var before_x := near.position.x
+	h4.tick(0.01)
+	_check(near.hp == Config.WILD_SLIME_HP - 1 and near.position.x - before_x > 14.0, "붙어서 박치기, 더 멀리 밀쳐냄")
+	h4.companion_ai = true
+	near.position = h4.companion.position + Vector2(50, 0)
+	var gap := h4.companion.position.distance_to(near.position)
+	h4.tick(0.1)
+	_check(h4.companion.position.distance_to(near.position) < gap, "박치기 크리처는 가까운 야생 슬라임에게 다가간다")
+	main.hunter.position = h4.SPAWN_AT
+	main.interact()
+	_check(main.hunt == null and earth_buddy.can_process(), "땅 슬라임도 돌아와 다시 일함")
 
 	print("SMOKE TEST: %s (%d failures)" % ["PASS" if _failures == 0 else "FAIL", _failures])
 	get_tree().quit(1 if _failures > 0 else 0)

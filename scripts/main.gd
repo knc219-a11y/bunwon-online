@@ -58,6 +58,8 @@ var _morning_card: Control
 var _morning_text: Label
 ## 마을 공급함 선택창 (농부가 F로 연다). 열려 있는 동안 W/S로 고르고 F로 정한다.
 var menu_open := false
+## 열려 있는 선택창 종류: &"supply" 마을 공급함, &"companion" 사냥터 입구 동행 고르기
+var menu_kind := &"supply"
 var menu_index := 0
 var _menu_options: Array[StringName] = []
 var _menu: ColorRect
@@ -66,6 +68,8 @@ var _menu_text: Label
 var hunt: HuntGround
 ## 사냥터에 있는 동안 숨기는 마을 쪽 노드
 var _village_nodes: Array[Node2D] = []
+## 사냥에 데려간 농장 크리처 (돌아오면 제자리로). 없으면 혼자.
+var _companion_source: Creature
 
 var _rng := RandomNumberGenerator.new()
 var _status: Label
@@ -291,7 +295,11 @@ func _farmer_interact() -> void:
 
 func _hunter_interact() -> void:
 	if _near(hunt_gate):
-		enter_hunt()
+		# 밭에 크리처가 있으면 누구랑 갈지 먼저 고른다 (2026-09-27 결정 A. 따라오는 동료)
+		if GameState.hunts_today < Config.HUNTS_PER_DAY and not companion_candidates().is_empty():
+			open_menu(&"companion")
+		else:
+			enter_hunt()
 	elif _near(supply_box):
 		if GameState.hunter_eggs.is_empty():
 			GameState.notify("공급할 알이 없다. 사냥터 입구로 가자.")
@@ -305,8 +313,18 @@ func _hunter_interact() -> void:
 
 # --- 사냥터 (2026-09-27 결정 A. 실시간 한 화면, 첫 조각) ------------------
 
+## 사냥에 데려갈 수 있는 크리처 (농장에 나와 있고 들려 있지 않은 크리처)
+func companion_candidates() -> Array[Creature]:
+	var list: Array[Creature] = []
+	for s in creatures:
+		if s.carried_by == null:
+			list.append(s)
+	return list
+
+
 ## 사냥터 입구에서 F. 하루 한 번 들어간다. 마을은 숨기고 사냥터 화면을 띄운다.
-func enter_hunt() -> bool:
+## companion 을 주면 그 크리처가 따라온다. 사냥하는 동안 농장 일은 쉬고, 돌아오면 원래 자리·원래 일로 돌아간다.
+func enter_hunt(companion: Creature = null) -> bool:
 	if hunt:
 		return false
 	if GameState.hunts_today >= Config.HUNTS_PER_DAY:
@@ -324,6 +342,12 @@ func enter_hunt() -> bool:
 	hunter.farm = null
 	hunt.start(hunter, first_today)
 	hunt.knocked_out.connect(leave_hunt)
+	if companion:
+		_companion_source = companion
+		companion.process_mode = Node.PROCESS_MODE_DISABLED
+		var c := hunt.add_companion(companion)
+		GameState.notify("%s과(와) 사냥터에 들어왔다. 클릭(또는 Space)으로 휘두르면 %s도 알아서 돕는다!" % [c.display_name(), c.display_name()])
+		return true
 	GameState.notify("사냥터에 들어왔다. 클릭(또는 Space)으로 사냥칼을 휘두른다. 야생 슬라임을 쓰러뜨리자!")
 	return true
 
@@ -340,6 +364,10 @@ func leave_hunt() -> void:
 	for n in _village_nodes:
 		n.visible = true
 	_village_nodes.clear()
+	if _companion_source:
+		# 데려간 크리처는 원래 자리에서 원래 일을 다시 한다
+		_companion_source.process_mode = Node.PROCESS_MODE_INHERIT
+		_companion_source = null
 	hunter.farm = farm
 	hunter.walk_area = Rect2()
 	hunter.show_facing_cell = true
@@ -400,7 +428,8 @@ func supply_option_text(id: StringName) -> String:
 			return "닫기"
 
 
-func open_menu() -> void:
+func open_menu(kind := &"supply") -> void:
+	menu_kind = kind
 	menu_open = true
 	menu_index = 0
 	active.frozen = true
@@ -423,6 +452,11 @@ func menu_move(step: int) -> void:
 
 func menu_confirm() -> void:
 	var id := _menu_options[menu_index]
+	if menu_kind == &"companion":
+		var pick := companion_from_option(id)
+		close_menu()
+		enter_hunt(pick)
+		return
 	if id == &"close":
 		close_menu()
 		return
@@ -515,16 +549,47 @@ func buy_wear(id: StringName) -> bool:
 	return true
 
 
+# --- 사냥터 입구 동행 고르기 (2026-09-27 결정 A. 따라오는 동료) -----------
+
+## 동행 선택창 항목: 크리처마다 &"companion_<번호>", 마지막에 &"solo" (혼자 가기)
+func companion_options() -> Array[StringName]:
+	var options: Array[StringName] = []
+	for i in companion_candidates().size():
+		options.append(StringName("companion_%d" % i))
+	options.append(&"solo")
+	return options
+
+
+func companion_from_option(id: StringName) -> Creature:
+	if not String(id).begins_with("companion_"):
+		return null
+	var list := companion_candidates()
+	var i := String(id).trim_prefix("companion_").to_int()
+	return list[i] if i < list.size() else null
+
+
+func companion_option_text(id: StringName) -> String:
+	var s := companion_from_option(id)
+	if s == null:
+		return "혼자 가기"
+	var fight := "멀리서 물총" if not s.data.elements.is_empty() and s.data.elements[0].id == &"water" else "붙어서 박치기"
+	return "%s %s (밭: %s · 사냥: %s)" % [s.data.element_names(), s.data.species.display_name, CreatureJobs.display_name(s.job), fight]
+
+
 func _rebuild_menu() -> void:
-	_menu_options = supply_options()
+	var companion := menu_kind == &"companion"
+	_menu_options = companion_options() if companion else supply_options()
 	menu_index = clampi(menu_index, 0, _menu_options.size() - 1)
-	var lines: Array[String] = ["마을 공급함   가진 돈 %d원" % GameState.money]
+	var lines: Array[String] = ["사냥터 입구 · 누구랑 갈까?" if companion else "마을 공급함   가진 돈 %d원" % GameState.money]
 	for i in _menu_options.size():
-		lines.append(("▶ " if i == menu_index else "   ") + supply_option_text(_menu_options[i]))
+		var text := companion_option_text(_menu_options[i]) if companion else supply_option_text(_menu_options[i])
+		lines.append(("▶ " if i == menu_index else "   ") + text)
+	if companion:
+		lines.append("데려간 크리처는 돌아오면 제자리에서 다시 일한다")
 	_menu_text.text = "\n".join(lines)
 	_menu.size = _menu_text.get_minimum_size() + Vector2(16, 10)
-	# 공급함 오른쪽 위에 띄우되 화면 밖으로 나가지 않게
-	var at := supply_box.position + Vector2(36, -80)
+	# 공급함(또는 사냥터 입구) 옆에 띄우되 화면 밖으로 나가지 않게
+	var at := (hunt_gate.position + Vector2(-200, 8)) if companion else supply_box.position + Vector2(36, -80)
 	_menu.position = at.clamp(Vector2(4, 32), Vector2(636, 324) - _menu.size)
 	_menu.visible = menu_open
 
@@ -720,7 +785,8 @@ func _refresh_hud() -> void:
 		return
 	var tool_text: String = tool_name(TOOLS[tool_index]) if active == farmer else ("튼튼한 사냥칼" if GameState.hunter_knife else "사냥칼")
 	if hunt:
-		_status.text = "%d일째 | 사냥터 | 도구: %s | 남은 야생 슬라임 %d | 주운 알 %d" % [GameState.day, tool_text, hunt.slimes.size(), hunt.picked.size()]
+		var buddy := hunt.companion.display_name() if hunt.companion else "혼자"
+		_status.text = "%d일째 | 사냥터 | 도구: %s | 동행: %s | 남은 야생 슬라임 %d | 주운 알 %d" % [GameState.day, tool_text, buddy, hunt.slimes.size(), hunt.picked.size()]
 		return
 	_status.text = "%d일째 | %s | 도구: %s | 돈 %d원 | 씨앗 %d  작물 %d | 알: 농부 %d · 사냥꾼 %d · 공급함 %d | 크리처 %d" % [
 		GameState.day, active.display_name, tool_text, GameState.money, GameState.seeds, GameState.crops,
