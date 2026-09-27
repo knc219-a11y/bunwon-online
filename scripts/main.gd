@@ -24,6 +24,8 @@ const PERSIMMON_BLOCK := Rect2(-8, -12, 16, 12)
 const DANGSAN_BLOCK := Rect2(-20, -18, 40, 18)
 ## 알이 부화하면 크리처가 나타나는 칸 (부화기 왼쪽 아래)
 const HATCH_CELL := Vector2i(16, 5)
+## 농부 집 현관 앞 흙길 칸. 여기서 F를 누르면 잔다 (2026-09-27 결정 A②).
+const DOOR_CELL := Vector2i(22, 12)
 
 var farm: Farm
 var farmer: Character
@@ -39,6 +41,11 @@ var tool_index := 0
 ## 부화기에 든 알이 부화하기까지 남은 날. -1 이면 비어 있음.
 var incubating_days := -1
 var incubating_species: CreatureSpecies
+## 잠든 동안(밤 → 아침 카드)에는 이동·도구를 막고 F만 받는다.
+var sleeping := false
+var _night: ColorRect
+var _morning_card: Control
+var _morning_text: Label
 
 var _rng := RandomNumberGenerator.new()
 var _status: Label
@@ -124,6 +131,10 @@ func update_fading() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_echo():
 		return
+	if sleeping:
+		if event.is_action_pressed("interact"):
+			interact()
+		return
 	if event.is_action_pressed("switch_character"):
 		switch_character()
 	elif event.is_action_pressed("use_tool"):
@@ -132,7 +143,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		interact()
 	elif event.is_action_pressed("creature_job"):
 		change_creature_job()
-	elif event.is_action_pressed("next_day"):
+	elif event.is_action_pressed("next_day") and OS.is_debug_build():
+		# 개발용 단축키. 정식 빌드에서는 현관에서 자야 하루가 넘어간다.
 		next_day()
 	elif event.is_action_pressed("tool_next"):
 		cycle_tool(1)
@@ -168,6 +180,13 @@ func use_tool() -> void:
 
 
 func interact() -> void:
+	if sleeping:
+		if _morning_card.visible:
+			wake_up()
+		return
+	if near_door() and _carried_creature() == null:
+		go_to_sleep()
+		return
 	if active == farmer:
 		_farmer_interact()
 	else:
@@ -204,7 +223,7 @@ func _farmer_interact() -> void:
 		else:
 			incubating_species = GameState.farmer_eggs.pop_front()
 			incubating_days = Config.EGG_HATCH_DAYS
-			GameState.notify("알을 부화기에 넣었다. 하루가 지나면 부화한다 (N).")
+			GameState.notify("알을 부화기에 넣었다. 하룻밤 자고 나면 부화한다 (집 현관에서 F).")
 
 
 func _hunter_interact() -> void:
@@ -238,11 +257,50 @@ func change_creature_job() -> void:
 	GameState.notify(s.describe())
 
 
-## 하루를 넘긴다. 강제 취침 없이 원할 때 넘긴다.
-func next_day() -> void:
+## 현관에서 잔다: 밤으로 어두워지고(1초), 하루를 넘긴 뒤 아침 카드를 띄운다. F로 일어난다.
+func go_to_sleep() -> void:
+	if sleeping:
+		return
+	sleeping = true
+	active.active = false
+	GameState.notify("집에 들어가 잠자리에 들었다.")
+	var tween := create_tween()
+	tween.tween_property(_night, "color:a", Config.NIGHT_ALPHA, Config.SLEEP_FADE_TIME)
+	await tween.finished
+	var lines := next_day()
+	_morning_text.text = "%d일째 아침\n\n%s\n\nF 일어나기" % [GameState.day, "\n".join(lines)]
+	_morning_card.visible = true
+
+
+func wake_up() -> void:
+	if not sleeping or not _morning_card.visible:
+		return
+	_morning_card.visible = false
+	var tween := create_tween()
+	tween.tween_property(_night, "color:a", 0.0, Config.WAKE_FADE_TIME)
+	await tween.finished
+	sleeping = false
+	active.active = true
+	GameState.touch()
+
+
+func near_door() -> bool:
+	return active.position.distance_to(Farm.center_of(DOOR_CELL)) <= Config.PROP_INTERACT_DISTANCE
+
+
+## 하루를 넘기고 밤사이 일어난 일을 줄마다 돌려준다 (아침 카드에 쓴다).
+func next_day() -> Array[String]:
 	GameState.day += 1
+	var lines: Array[String] = []
+	var grown := farm.advance_day()
+	if grown > 0:
+		lines.append("밤사이 작물 %d개가 자랐다." % grown)
+	var ripe := farm.ripe_count()
+	if ripe > 0:
+		lines.append("수확할 수 있는 작물 %d개." % ripe)
+	if GameState.hunter_unlocked and GameState.hunts_today > 0:
+		lines.append("사냥꾼이 다시 사냥을 나갈 수 있다.")
 	GameState.hunts_today = 0
-	farm.advance_day()
 	if incubating_days > 0:
 		incubating_days -= 1
 	var text := "%d일째 아침." % GameState.day
@@ -250,9 +308,15 @@ func next_day() -> void:
 		incubating_days = -1
 		var s := _hatch(incubating_species, HATCH_CELL)
 		incubating_species = null
+		lines.append("알이 부화했다! " + s.describe())
 		text += " 알이 부화했다! " + s.describe() + " F로 들어서 밭 옆에 놓아 주자."
+	elif incubating_days > 0:
+		lines.append("알 부화까지 %d일." % incubating_days)
+	if lines.is_empty():
+		lines.append("조용한 밤이었다.")
 	_refresh_props()
 	GameState.notify(text)
+	return lines
 
 
 func _hatch(species: CreatureSpecies, at_cell: Vector2i) -> Creature:
@@ -322,8 +386,29 @@ func _build_hud() -> void:
 	help.position = Vector2(6, 345)
 	help.add_theme_font_size_override("font_size", 9)
 	help.modulate = Color(1, 1, 1, 0.7)
-	help.text = "이동 WASD · 도구 Space · 도구 변경 Q/E · 상호작용 F · 크리처 일 R · 캐릭터 전환 Tab · 다음 날 N"
+	help.text = "이동 WASD · 도구 Space · 도구 변경 Q/E · 상호작용 F · 크리처 일 R · 캐릭터 전환 Tab · 잠자기 집 현관 F"
 	layer.add_child(help)
+	# 잠잘 때 화면 전체를 덮는 밤 색. 평소에는 투명.
+	_night = ColorRect.new()
+	_night.color = Color(0.05, 0.06, 0.18, 0.0)
+	_night.size = Vector2(640, 360)
+	_night.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	layer.add_child(_night)
+	_morning_card = ColorRect.new()
+	(_morning_card as ColorRect).color = Color(0.99, 0.95, 0.85)
+	_morning_card.size = Vector2(300, 150)
+	_morning_card.position = (Vector2(640, 360) - _morning_card.size) / 2
+	_morning_card.visible = false
+	layer.add_child(_morning_card)
+	_morning_text = Label.new()
+	_morning_text.position = Vector2(12, 10)
+	_morning_text.size = _morning_card.size - Vector2(24, 20)
+	_morning_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_morning_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_morning_text.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_morning_text.add_theme_font_size_override("font_size", 10)
+	_morning_text.add_theme_color_override("font_color", Color(0.3, 0.2, 0.15))
+	_morning_card.add_child(_morning_text)
 	_refresh_hud()
 
 
