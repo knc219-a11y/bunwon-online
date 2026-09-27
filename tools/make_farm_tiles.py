@@ -7,7 +7,7 @@
     행 1: 갈아 둔 밭, 열 = 이웃 연결 비트 (위 1, 오른쪽 2, 아래 4, 왼쪽 8)
     행 2: 물 준 밭, 열 = 이웃 연결 비트
     행 3: 흙길 가장자리, 열 = 이웃 연결 비트
-  crops.png (96 x 24, 4열): 작물 성장 단계 0 씨앗, 1 싹, 2 자람, 3 다 자람
+  crops.png (96 x 24, 4열): 첫 작물 무의 성장 단계 0 씨앗, 1 싹, 2 자람, 3 다 자람
 
 밭과 흙길 칸은 가장자리가 투명하다. 게임은 풀을 먼저 깔고 그 위에 그린다.
 
@@ -49,9 +49,13 @@ PATH_L = (230, 212, 176)
 LEAF = (96, 176, 84)
 LEAF_D = (62, 132, 70)
 LEAF_L = (150, 214, 110)
-ROOT = (240, 150, 70)
-ROOT_D = (206, 110, 56)
-ROOT_L = (252, 190, 120)
+# 무 (첫 작물, 2026-09-27 결정): 흰 뿌리, 윗부분 연두 어깨
+RADISH = (244, 240, 228)
+RADISH_D = (212, 206, 192)
+RADISH_DD = (186, 178, 168)
+RADISH_TOP = (178, 212, 134)
+RADISH_TOP_D = (140, 186, 112)
+RADISH_TOP_L = (200, 226, 160)
 SEED = (236, 214, 160)
 
 
@@ -194,7 +198,25 @@ def path_edge(mask):
     return t
 
 
+def ellipse(t, cx, cy, rx, ry, c):
+    for y in range(int(cy - ry), int(cy + ry) + 1):
+        for x in range(int(cx - rx), int(cx + rx) + 1):
+            if ((x - cx) / (rx + 0.5)) ** 2 + ((y - cy) / (ry + 0.5)) ** 2 <= 1:
+                t.px(x, y, c)
+
+
+def radish_leaf(t, x0, y0, dx, n):
+    """톱니 있는 긴 무청 한 장. 줄기 밑동에서 비스듬히(dx) 위로 n칸 뻗는다."""
+    for i in range(n):
+        x, y = x0 + dx * i, y0 - i
+        t.px(x, y, LEAF_D if i == 0 else LEAF)
+        t.px(x + dx, y, LEAF)
+        if i % 2 == 1:
+            t.px(x - dx, y - 1, LEAF_L)
+
+
 def crop(stage):
+    """첫 작물 무 (2026-09-27 결정). 0 씨앗, 1 떡잎, 2 무청과 흰 머리, 3 다 자란 무."""
     t = Tile()
     cx, ground = 12, 18
     if stage == 0:
@@ -204,30 +226,33 @@ def crop(stage):
         t.px(cx - 1, ground - 1, SEED)
         t.px(cx + 1, ground - 1, SEED)
     elif stage == 1:
+        # 둥근 떡잎 두 장
         for y in range(ground - 3, ground + 1):
             t.px(cx, y, LEAF_D)
-        t.rect(cx - 3, ground - 5, cx - 1, ground - 4, LEAF)
-        t.rect(cx + 1, ground - 6, cx + 3, ground - 5, LEAF_L)
+        ellipse(t, cx - 2.5, ground - 4.5, 1.5, 1, LEAF)
+        ellipse(t, cx + 2.5, ground - 5, 1.5, 1, LEAF_L)
     elif stage == 2:
-        for y in range(ground - 7, ground + 1):
-            t.px(cx, y, LEAF_D)
-        for (lx, ly, w) in ((-5, -4, 4), (1, -5, 4), (-4, -9, 3), (1, -10, 3)):
-            t.rect(cx + lx, ground + ly, cx + lx + w, ground + ly + 1, LEAF)
-            t.px(cx + lx + (0 if lx < 0 else w), ground + ly, LEAF_L)
+        # 무청이 뻗고 흙 위로 하얀 머리가 살짝
+        t.rect(cx - 1, ground - 1, cx + 1, ground, RADISH)
+        t.px(cx + 1, ground, RADISH_D)
+        radish_leaf(t, cx - 1, ground - 2, -1, 6)
+        radish_leaf(t, cx + 1, ground - 2, 1, 6)
+        radish_leaf(t, cx, ground - 2, 0, 8)
     else:
-        # 다 자람: 흙 위로 드러난 주황 뿌리와 무성한 잎 (작물 종류는 미정, 임시 모양)
-        for y in range(ground - 4, ground + 2):
+        # 다 자람: 흙 위로 올라온 굵은 흰 뿌리(윗부분 연두)와 무성한 무청
+        for y in range(ground - 5, ground + 2):
             half = 3 if y < ground else 2
+            top = y < ground - 2
             for x in range(cx - half, cx + half + 1):
-                t.px(x, y, ROOT)
-            t.px(cx - half, y, ROOT_L)
-            t.px(cx + half, y, ROOT_D)
-        for y in range(ground - 3, ground + 1, 2):
-            t.px(cx + 1, y, ROOT_D)
-        for (lx, ly, w, h) in ((-6, -9, 4, 3), (-2, -12, 3, 5), (2, -10, 4, 3), (-1, -7, 2, 2)):
-            t.rect(cx + lx, ground + ly, cx + lx + w, ground + ly + h, LEAF)
-            t.px(cx + lx + 1, ground + ly, LEAF_L)
-            t.px(cx + lx + w, ground + ly + h, LEAF_D)
+                t.px(x, y, RADISH_TOP if top else RADISH)
+            t.px(cx + half, y, RADISH_TOP_D if top else RADISH_D)
+            t.px(cx - half, y, RADISH_TOP_L if top else RADISH)
+        t.px(cx + 1, ground - 1, RADISH_DD)
+        t.px(cx - 1, ground + 1, RADISH_DD)
+        radish_leaf(t, cx - 2, ground - 6, -1, 7)
+        radish_leaf(t, cx + 2, ground - 6, 1, 7)
+        radish_leaf(t, cx - 1, ground - 6, 0, 10)
+        radish_leaf(t, cx + 1, ground - 6, 0, 9)
     return t
 
 
