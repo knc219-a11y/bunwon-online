@@ -4,7 +4,11 @@ extends Resource
 
 @export var id: StringName
 @export var display_name := ""
-@export var elements: Array[CreatureElement] = []
+## 이 종이 가질 수 있는 속성 후보. 개체의 속성은 부화할 때 이 안에서 정해진다.
+## (예: 슬라임은 물·땅만 가능하고 비행은 불가)
+@export var possible_elements: Array[CreatureElement] = []
+## 한 개체가 가지는 속성 수
+@export var element_count := 1
 ## 종 고유의 일 재능. 일 id → 배율 (없으면 1.0)
 @export var job_aptitude: Dictionary = {}
 

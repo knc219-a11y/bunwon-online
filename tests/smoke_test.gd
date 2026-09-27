@@ -53,6 +53,7 @@ func _ready() -> void:
 	var slime: Creature = main.creatures[0]
 	_check(slime.data.creature_trait != null and slime.data.base_work_speed > 0.0, "부화 시 능력치/Trait 생성")
 	_check(slime.job == CreatureJobs.WATER, "첫 슬라임은 급수 역할")
+	_check(slime.data.element_names() == "물", "첫 슬라임은 물속성")
 	_check(slime.data.base_work_speed >= Config.FIRST_CREATURE_MIN_WORK_SPEED and slime.data.base_radius >= Config.FIRST_CREATURE_MIN_RADIUS, "첫 슬라임 최저 능력치 보장")
 
 	# 4) 슬라임 옮겨서 배치 → 급수 역할 → 자동으로 물주기
@@ -102,14 +103,31 @@ func _ready() -> void:
 	var flying: CreatureElement = load("res://data/creatures/elements/flying.tres")
 	var plain := CreatureData.hatch(CreatureCatalog.SLIME, RandomNumberGenerator.new())
 	plain.creature_trait = null
-	var test_species := CreatureSpecies.new()
-	test_species.elements = [water, flying]
+	plain.elements = []
 	var wet: CreatureData = plain.duplicate()
-	wet.species = test_species
+	wet.elements = [water, flying]
 	_check(is_equal_approx(wet.work_speed(CreatureJobs.WATER), plain.work_speed(CreatureJobs.WATER) * 1.5), "물속성은 급수가 1.5배")
 	_check(is_equal_approx(wet.work_speed(CreatureJobs.SOW), plain.work_speed(CreatureJobs.SOW)), "물속성은 다른 일에는 영향 없음")
 	_check(wet.move_speed() > plain.move_speed(), "비행 속성은 이동이 빠름")
 	_check(wet.element_names() == "물, 비행" and plain.element_names() == "무속성", "속성 이름 표시")
+
+	# 7) 종별 속성 제한: 슬라임은 물·땅 중 하나만, 비행은 불가
+	var rng := RandomNumberGenerator.new()
+	var seen := {}
+	var only_pool := true
+	for i in 60:
+		var d := CreatureData.hatch(CreatureCatalog.SLIME, rng)
+		if d.elements.size() != 1 or d.elements[0] not in CreatureCatalog.SLIME.possible_elements:
+			only_pool = false
+		else:
+			seen[d.elements[0].id] = true
+	_check(only_pool and seen.has(&"water") and seen.has(&"earth"), "슬라임은 물 또는 땅으로만 부화")
+	var s2 := CreatureData.hatch(CreatureCatalog.SLIME, rng)
+	_check(not s2.set_element(flying), "슬라임에게 비행 속성 부여 불가")
+	var earth: CreatureElement = load("res://data/creatures/elements/earth.tres")
+	var dirt: CreatureData = plain.duplicate()
+	dirt.elements = [earth]
+	_check(dirt.work_speed(CreatureJobs.SOW) > plain.work_speed(CreatureJobs.SOW), "땅속성은 파종 재능")
 
 	print("SMOKE TEST: %s (%d failures)" % ["PASS" if _failures == 0 else "FAIL", _failures])
 	get_tree().quit(1 if _failures > 0 else 0)

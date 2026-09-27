@@ -219,6 +219,7 @@ func _hatch(species: CreatureSpecies, at_cell: Vector2i) -> Creature:
 		# 첫 크리처는 급수 담당, 최저 능력치 보장 (2026-09-27 결정)
 		data.guarantee_minimum(Config.FIRST_CREATURE_MIN_WORK_SPEED, Config.FIRST_CREATURE_MIN_RADIUS)
 		s.job = CreatureCatalog.FIRST_JOB
+		data.set_element(CreatureCatalog.FIRST_ELEMENT)
 	add_child(s)
 	s.setup(farm, data, at_cell)
 	creatures.append(s)

@@ -10,12 +10,15 @@
 | 일 (Job) | `scripts/creatures/creature_jobs.gd` | 크리처가 맡는 일의 id. 지금은 쉬기, 파종, 급수, 수확 |
 | 속성 (Element) | `data/creatures/elements/*.tres` | 물, 비행 등. 일별 재능 배율과 이동 속도 배율 |
 | Trait | `data/creatures/traits/*.tres` | 개체 특성. 작업 속도, 이동 속도, 범위, 일별 재능 |
-| 종 (Species) | `data/creatures/species/*.tres` | 몬스터 종류. 속성 목록, 고유 재능, 부화 시 능력치 범위, Trait 후보 |
-| 개체 (CreatureData) | `scripts/creatures/creature_data.gd` | 부화로 태어난 한 마리. 능력치와 Trait은 부화할 때 정해짐 |
+| 종 (Species) | `data/creatures/species/*.tres` | 몬스터 종류. 가질 수 있는 속성 후보, 고유 재능, 부화 시 능력치 범위, Trait 후보 |
+| 개체 (CreatureData) | `scripts/creatures/creature_data.gd` | 부화로 태어난 한 마리. 속성, 능력치, Trait은 부화할 때 정해짐 |
 | 목록 (Catalog) | `scripts/creatures/creature_catalog.gd` | 시작 알, 사냥에서 나오는 알 후보, 첫 크리처의 일 |
 | 농장 위 크리처 | `scripts/creatures/creature.gd` | 움직임과 그리기. 데이터는 CreatureData 에 있음 |
 
-알은 종 정보만 가진다. 능력치와 Trait은 부화할 때 굴려서 정한다 (부화 전 선별 방지 원칙).
+알은 종 정보만 가진다. 속성, 능력치, Trait은 부화할 때 굴려서 정한다 (부화 전 선별 방지 원칙).
+
+**종마다 가질 수 있는 속성이 제한된다.** 예를 들어 슬라임은 날 수 없으므로 물·땅 중에서만 속성이 나온다.
+종의 `possible_elements` 에 후보를 넣고, `element_count` 로 한 개체가 가지는 속성 수를 정한다 (지금은 1).
 
 ## 능력치 계산
 
@@ -27,12 +30,13 @@
 ```
 
 예: 물속성(`water.tres`)은 급수 재능 1.5배라서, 같은 개체라도 급수를 맡기면 1.5배 빠르다.
+땅속성(`earth.tres`)은 파종 재능 1.5배, 대신 이동이 조금 느리다(0.9배).
 비행(`flying.tres`)은 이동 속도 1.6배라서 밭 사이를 더 빨리 오간다.
 
 ## 새 몬스터 추가하기
 
 1. Godot 파일시스템에서 `data/creatures/species/` 에 새 리소스 → `CreatureSpecies` 선택
-2. 이름, 속성, 고유 재능, 능력치 범위, Trait 후보, 임시 색을 채운다
+2. 이름, 가질 수 있는 속성 후보, 고유 재능, 능력치 범위, Trait 후보, 임시 색을 채운다
 3. `creature_catalog.gd` 의 `HUNT_TABLE` (또는 다른 획득 경로)에 넣는다
 
 새 속성이나 Trait도 같은 방식으로 `data/creatures/elements/`, `data/creatures/traits/` 에 리소스를 만들면 된다.
@@ -43,8 +47,30 @@
 2. 종·속성·Trait 의 `job_aptitude` 에 그 id로 재능 배율을 적는다
 3. 그 일을 실제로 수행하는 쪽(전투 시스템, 대장간 등)에서 `data.work_speed(id)` 나 `data.aptitude(id)` 를 읽어 쓴다
 
+## 현재 데이터
+
+| 종 | 가능한 속성 | 비고 |
+|---|---|---|
+| 슬라임 | 물, 땅 | 첫 슬라임은 물속성 고정 (2026-09-27 결정) |
+
+| 속성 | 효과 (임시값) |
+|---|---|
+| 물 | 급수 재능 1.5배 |
+| 땅 | 파종 재능 1.5배, 이동 0.9배 |
+| 비행 | 이동 1.6배 (아직 가진 종 없음) |
+
+## 속성 후보 (미확정, 흔한 판타지 설정 참고)
+
+| 속성 | 떠올리기 쉬운 몬스터 | 어울리는 일 |
+|---|---|---|
+| 불 | 불도마뱀, 불꽃 정령 | 대장장이 제련, 요리·가공 |
+| 바람 | 새, 요정 | 이동, 운반, 씨앗 뿌리기 범위 |
+| 식물(자연) | 버섯, 덩굴 몬스터 | 작물 성장, 수확 |
+| 얼음 | 눈 정령 | 저장, 신선도 유지 |
+| 빛 / 어둠 | 반딧불 정령, 박쥐 | 밤 작업, 희귀 재료, 연금술 |
+
 ## 아직 정하지 않은 것
 
-- 슬라임의 속성 (지금은 무속성으로 둠)
-- 어떤 속성과 종을 첫 출시에 넣을지
+- 첫 출시에 넣을 종과 속성 목록
 - 재능 배율, Trait 종류와 수치 (전부 임시값)
+- 한 개체가 속성을 두 개 이상 가질 수 있는지

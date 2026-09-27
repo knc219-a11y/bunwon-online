@@ -8,5 +8,6 @@ const SLIME: CreatureSpecies = preload("res://data/creatures/species/slime.tres"
 const STARTER_EGG := SLIME
 ## 사냥꾼이 사냥에서 가져오는 알 후보 (전투 구현 전 임시)
 const HUNT_TABLE: Array[CreatureSpecies] = [SLIME]
-## 첫 크리처가 태어날 때 맡는 일 (2026-09-27 결정: 급수)
+## 첫 크리처가 태어날 때 맡는 일과 속성 (2026-09-27 결정: 급수, 물)
 const FIRST_JOB := CreatureJobs.WATER
+const FIRST_ELEMENT: CreatureElement = preload("res://data/creatures/elements/water.tres")

@@ -88,7 +88,8 @@ func _process(delta: float) -> void:
 func _draw() -> void:
 	var squash := 1.0 + 0.08 * sin(_bob)
 	draw_set_transform(Vector2(0, 4), 0.0, Vector2(squash, 2.0 - squash))
-	draw_circle(Vector2.ZERO, 9.0, data.species.color)
+	var body := data.elements[0].color if not data.elements.is_empty() else data.species.color
+	draw_circle(Vector2.ZERO, 9.0, body)
 	draw_set_transform(Vector2.ZERO)
 	draw_circle(Vector2(-3, 2), 1.5, Color.BLACK)
 	draw_circle(Vector2(3, 2), 1.5, Color.BLACK)

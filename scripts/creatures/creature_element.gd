@@ -8,3 +8,5 @@ extends Resource
 @export var job_aptitude: Dictionary = {}
 ## 이동 속도 배율 (비행 등)
 @export var move_speed_mult := 1.0
+## 임시 그래픽에서 이 속성 개체의 몸 색
+@export var color := Color.WHITE

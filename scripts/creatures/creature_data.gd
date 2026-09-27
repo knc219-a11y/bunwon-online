@@ -5,6 +5,8 @@ extends Resource
 
 @export var species: CreatureSpecies
 @export var creature_trait: CreatureTrait
+## 부화 때 종의 속성 후보 중에서 정해진 속성
+@export var elements: Array[CreatureElement] = []
 ## 부화 때 굴린 기본 능력치 (속성·Trait 배율 적용 전)
 @export var base_work_speed := 1.0
 @export var base_radius := 1
@@ -18,13 +20,24 @@ static func hatch(from_species: CreatureSpecies, rng: RandomNumberGenerator) -> 
 	d.base_radius = rng.randi_range(from_species.radius_range.x, from_species.radius_range.y)
 	if not from_species.traits.is_empty():
 		d.creature_trait = from_species.traits[rng.randi_range(0, from_species.traits.size() - 1)]
+	var pool := from_species.possible_elements.duplicate()
+	for i in mini(from_species.element_count, pool.size()):
+		d.elements.append(pool.pop_at(rng.randi_range(0, pool.size() - 1)))
 	return d
+
+
+## 속성을 지정한다 (첫 슬라임 등). 종이 가질 수 없는 속성이면 false.
+func set_element(element: CreatureElement) -> bool:
+	if element not in species.possible_elements:
+		return false
+	elements = [element]
+	return true
 
 
 ## 해당 일의 재능 배율 = 종 × 모든 속성 × Trait
 func aptitude(job: StringName) -> float:
 	var a: float = species.job_aptitude.get(job, 1.0)
-	for e in species.elements:
+	for e in elements:
 		a *= e.job_aptitude.get(job, 1.0)
 	if creature_trait:
 		a *= creature_trait.job_aptitude.get(job, 1.0)
@@ -40,7 +53,7 @@ func work_speed(job: StringName) -> float:
 
 func move_speed() -> float:
 	var s := species.move_speed
-	for e in species.elements:
+	for e in elements:
 		s *= e.move_speed_mult
 	if creature_trait:
 		s *= creature_trait.move_speed_mult
@@ -58,9 +71,9 @@ func guarantee_minimum(min_work_speed: float, min_radius: int) -> void:
 
 
 func element_names() -> String:
-	if species.elements.is_empty():
+	if elements.is_empty():
 		return "무속성"
-	return ", ".join(species.elements.map(func(e: CreatureElement) -> String: return e.display_name))
+	return ", ".join(elements.map(func(e: CreatureElement) -> String: return e.display_name))
 
 
 func trait_name() -> String:
