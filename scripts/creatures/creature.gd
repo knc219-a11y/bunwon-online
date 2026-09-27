@@ -81,7 +81,7 @@ func work_once() -> bool:
 	if not CreatureJobs.FARM_WORK.has(job) or carried_by != null or _busy:
 		return false
 	var work: Farm.Work = CreatureJobs.FARM_WORK[job]
-	var target: Variant = _farm.find_work(work, home, data.work_radius())
+	var target: Variant = _farm.find_work(work, home, data.work_radius(), [], position)
 	if target == null:
 		return false
 	_busy = true
@@ -113,6 +113,11 @@ func frame_column() -> int:
 	return IDLE_COLUMNS[int(_anim_time * IDLE_FPS) % IDLE_COLUMNS.size()]
 
 
+## 앞뒤 가림 기준 y (몸 아래). 이 값이 작을수록 뒤에 그린다.
+func sort_y() -> float:
+	return position.y + BOTTOM_Y
+
+
 func _play(anim: Anim) -> void:
 	_anim = anim
 	_anim_time = 0.0
@@ -134,11 +139,15 @@ func _process(delta: float) -> void:
 		_sprite.frame = frame_column()
 	if carried_by != null:
 		position = carried_by.position + Vector2(0, -48)
-	elif auto_work:
-		_timer -= delta
-		if _timer <= 0.0:
-			_reset_timer()
-			work_once()
+		# 들고 있으면 든 캐릭터 바로 앞에 그린다
+		z_index = carried_by.z_index + 1
+	else:
+		z_index = int(sort_y())
+		if auto_work:
+			_timer -= delta
+			if _timer <= 0.0:
+				_reset_timer()
+				work_once()
 	queue_redraw()
 
 

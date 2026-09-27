@@ -8,6 +8,12 @@ extends Node2D
 ## 차지하는 칸 수 (가로, 세로)
 @export var footprint := Vector2i.ONE
 
+## 캐릭터·크리처가 지나갈 수 없는 범위 (로컬 좌표, 아래쪽 가운데 기준). 비어 있으면 막지 않는다.
+var blocker := Rect2()
+## 캐릭터·크리처가 뒤로 가면 반투명해진다
+var fade_behind := false
+var faded := false
+
 var badge := ""
 
 
@@ -15,6 +21,34 @@ var badge := ""
 func place(origin: Vector2i, size: Vector2i) -> void:
 	footprint = size
 	position = Vector2(origin.x + size.x / 2.0, origin.y + size.y) * Config.TILE
+	z_index = int(sort_y())
+
+
+## 앞뒤 가림 기준 y (칸 묶음 아래 끝). 이 값이 작을수록 뒤에 그린다.
+func sort_y() -> float:
+	return position.y
+
+
+## 그림이 차지하는 영역 (로컬 좌표)
+func picture_rect() -> Rect2:
+	if texture == null:
+		return footprint_rect()
+	var size := texture.get_size()
+	return Rect2(Vector2(-size.x / 2, -size.y), size)
+
+
+func blocker_world() -> Rect2:
+	return Rect2(blocker.position + position, blocker.size)
+
+
+func set_faded(value: bool) -> void:
+	faded = value
+
+
+func _process(delta: float) -> void:
+	var target := 0.45 if faded else 1.0
+	if not is_equal_approx(modulate.a, target):
+		modulate.a = move_toward(modulate.a, target, delta * 4.0)
 
 
 ## 차지하는 칸 영역(로컬 좌표).
