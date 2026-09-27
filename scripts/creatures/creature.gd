@@ -22,6 +22,8 @@ var job: StringName = CreatureJobs.REST
 var home := Vector2i.ZERO
 ## 들고 옮기는 중이면 따라갈 캐릭터
 var carried_by: Character = null
+## false 면 타이머로 스스로 일하지 않는다 (work_once 를 직접 불러야 함). 테스트에서 끈다.
+var auto_work := true
 
 var _farm: Farm
 var _timer := 0.0
@@ -132,7 +134,7 @@ func _process(delta: float) -> void:
 		_sprite.frame = frame_column()
 	if carried_by != null:
 		position = carried_by.position + Vector2(0, -48)
-	else:
+	elif auto_work:
 		_timer -= delta
 		if _timer <= 0.0:
 			_reset_timer()

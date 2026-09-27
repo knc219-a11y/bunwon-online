@@ -68,6 +68,8 @@ func _ready() -> void:
 	for target in [home + Vector2i.RIGHT, home + Vector2i.LEFT]:
 		main.farm.do_work(Farm.Work.TILL, target)
 		main.farm.do_work(Farm.Work.SOW, target)
+	# 자동 작업 타이머가 테스트보다 먼저 일감을 가져가지 않도록 끄고 직접 일을 시킨다
+	slime.auto_work = false
 	for i in 2:
 		_check(slime.work_once(), "슬라임이 일감 찾음 %d" % i)
 		await get_tree().create_timer(slime.hop_time() + 0.1).timeout
