@@ -40,8 +40,8 @@ func _ready() -> void:
 	supply_box = _add_prop("마을 공급함", Color("c08552"), SUPPLY_CELL)
 	hunt_gate = _add_prop("사냥터 입구", Color("5c4d7d"), HUNT_GATE_CELL, Vector2(16, 40))
 
-	farmer = _add_character("농부", Color("8d99ae"), Vector2i(14, 6))
-	hunter = _add_character("사냥꾼", Color("6a994e"), Vector2i(20, 6))
+	farmer = _add_character("농부", preload("res://assets/characters/player.png"), Vector2i(14, 6))
+	hunter = _add_character("사냥꾼", preload("res://assets/characters/hunter.png"), Vector2i(20, 6))
 	_set_active(farmer)
 
 	_build_hud()
@@ -61,10 +61,10 @@ func _add_prop(label: String, color: Color, cell: Vector2i, size := Vector2(22, 
 	return p
 
 
-func _add_character(display_name: String, color: Color, cell: Vector2i) -> Character:
+func _add_character(display_name: String, sheet: Texture2D, cell: Vector2i) -> Character:
 	var c := Character.new()
 	c.display_name = display_name
-	c.body_color = color
+	c.sheet = sheet
 	c.position = Farm.center_of(cell)
 	add_child(c)
 	return c
