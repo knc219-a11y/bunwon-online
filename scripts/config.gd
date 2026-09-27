@@ -9,6 +9,12 @@ const TILE := 24
 const MAP_SIZE := Vector2i(26, 15)
 ## 밭으로 쓸 수 있는 영역 (타일 좌표)
 const FIELD_RECT := Rect2i(1, 2, 12, 8)
+## 밭 넓히기 (2026-09-27 후보 A): 밭을 네 구역으로 나눠 처음엔 첫 구역만 쓰고, 나머지는 공급함에서 돈으로 연다.
+## 여는 순서는 이 배열 순서. 값은 전부 임시.
+const FIELD_PLOTS: Array[Rect2i] = [Rect2i(1, 2, 6, 4), Rect2i(7, 2, 6, 4), Rect2i(1, 6, 6, 4), Rect2i(7, 6, 6, 4)]
+const FIELD_PLOT_NAMES: Array[String] = ["처음 밭", "오른쪽 구역", "왼쪽 아래 구역", "오른쪽 아래 구역"]
+const FIELD_PLOT_PRICES: Array[int] = [0, 300, 500, 800]
+const START_FIELD_PLOTS := 1
 ## 흙길 (타일 좌표). 밭 → 부화기·공급함 → 사냥터 입구(오른쪽 위, 정면)를 잇는 임시 배치
 ## 큰길에서 x=19로 내려와 농부 집 현관(22, 12)까지 잇는 길 포함
 const PATH_RECTS: Array[Rect2i] = [Rect2i(13, 6, 10, 1), Rect2i(17, 5, 1, 4), Rect2i(22, 5, 1, 1), Rect2i(19, 7, 1, 6), Rect2i(20, 12, 3, 1)]

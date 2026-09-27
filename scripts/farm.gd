@@ -37,9 +37,8 @@ var _blockers: Array[Rect2] = []
 
 
 func _ready() -> void:
-	for x in Config.FIELD_RECT.size.x:
-		for y in Config.FIELD_RECT.size.y:
-			_cells[Config.FIELD_RECT.position + Vector2i(x, y)] = Cell.new()
+	for i in GameState.open_plots:
+		_add_plot_cells(Config.FIELD_PLOTS[i])
 	for r in Config.PATH_RECTS:
 		for x in r.size.x:
 			for y in r.size.y:
@@ -55,6 +54,30 @@ func _ready() -> void:
 		_fence.erase(gap)
 	for cell: Vector2i in _fence:
 		_add_fence_blockers(cell)
+
+
+## 잠긴 밭 구역은 칸이 없어서 갈거나 심을 수 없다. 여기서 연다.
+func _add_plot_cells(plot: Rect2i) -> void:
+	for x in range(plot.position.x, plot.end.x):
+		for y in range(plot.position.y, plot.end.y):
+			_cells[Vector2i(x, y)] = Cell.new()
+
+
+## 다음 잠긴 밭 구역 번호. 모두 열렸으면 -1.
+static func next_plot() -> int:
+	return GameState.open_plots if GameState.open_plots < Config.FIELD_PLOTS.size() else -1
+
+
+## 다음 구역을 연다 (돈은 부르는 쪽에서 치른다). 열렸으면 true.
+func open_next_plot() -> bool:
+	var i := next_plot()
+	if i < 0:
+		return false
+	_add_plot_cells(Config.FIELD_PLOTS[i])
+	GameState.open_plots += 1
+	queue_redraw()
+	GameState.touch()
+	return true
 
 
 static func cell_of(pos: Vector2) -> Vector2i:
@@ -243,6 +266,8 @@ func _draw() -> void:
 	# 밭을 갈 수 있는 영역 표시 (옅게)
 	var field := Rect2(Vector2(Config.FIELD_RECT.position * t), Vector2(Config.FIELD_RECT.size * t))
 	draw_rect(field.grow(1), Color(0.25, 0.35, 0.2, 0.25), false, 1.0)
+	for i in range(GameState.open_plots, Config.FIELD_PLOTS.size()):
+		_draw_locked_plot(i)
 	for cell: Vector2i in _cells:
 		var c: Cell = _cells[cell]
 		if c.tilled:
@@ -255,3 +280,26 @@ func _draw() -> void:
 	fence_cells.sort_custom(func(a: Vector2i, b: Vector2i) -> bool: return a.y < b.y)
 	for cell: Vector2i in fence_cells:
 		_tile(cell, FENCE, _mask(cell, _is_fence), 0)
+
+
+## 잠긴 밭 구역: 잡초와 돌이 덮인 풀밭 + 값 (임시 그림)
+func _draw_locked_plot(i: int) -> void:
+	var t := Config.TILE
+	var r := Config.FIELD_PLOTS[i]
+	var px := Rect2(Vector2(r.position * t), Vector2(r.size * t))
+	draw_rect(px, Color(0.30, 0.36, 0.22, 0.45))
+	var rng := RandomNumberGenerator.new()
+	rng.seed = r.position.x * 100 + r.position.y
+	for n in 22:
+		var p := px.position + Vector2(rng.randf_range(6, px.size.x - 6), rng.randf_range(8, px.size.y - 4))
+		if n % 3 == 0:
+			draw_circle(p, 3, Color(0.62, 0.6, 0.55))
+			draw_circle(p + Vector2(-1, -1), 1.5, Color(0.75, 0.73, 0.68))
+		else:
+			draw_line(p, p + Vector2(-2, -5), Color(0.25, 0.45, 0.18), 1.5)
+			draw_line(p, p + Vector2(2, -5), Color(0.25, 0.45, 0.18), 1.5)
+	draw_rect(px.grow(-1), Color(0.95, 0.9, 0.7, 0.8), false, 1.0)
+	var font := ThemeDB.fallback_font
+	var c := px.get_center()
+	draw_string(font, c + Vector2(-50, -2), "잠긴 밭", HORIZONTAL_ALIGNMENT_CENTER, 100, 10, Color(1, 0.98, 0.9))
+	draw_string(font, c + Vector2(-50, 12), "%d원" % Config.FIELD_PLOT_PRICES[i], HORIZONTAL_ALIGNMENT_CENTER, 100, 10, Color(1, 0.9, 0.5))

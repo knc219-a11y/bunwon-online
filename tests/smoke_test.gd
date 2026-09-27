@@ -36,6 +36,24 @@ func _ready() -> void:
 		main.next_day()
 	_check(c.planted and c.growth == 0, "물을 안 줘도 작물이 죽지 않고 그대로")
 
+	# 1-1) 밭 넓히기 (A): 처음엔 첫 구역만, 나머지는 공급함에서 돈으로 연다
+	var farm0: Farm = main.farm
+	_check(GameState.open_plots == 1 and farm0.get_cell(Vector2i(6, 5)) != null and farm0.get_cell(Vector2i(7, 2)) == null, "처음엔 첫 구역(6x4)만 밭")
+	_check(not farm0.do_work(Farm.Work.TILL, Vector2i(7, 2)), "잠긴 구역은 갈 수 없음")
+	_check(farm0.find_work(Farm.Work.TILL, Vector2i(7, 3), 1) == Vector2i(6, 3), "잠긴 구역은 크리처 일감에서도 빠짐")
+	farmer.position = main.supply_box.position
+	main.interact()
+	_check(main.supply_options().has(&"expand_field") and main.supply_option_text(&"expand_field").contains("300원"), "공급함에 밭 넓히기 (오른쪽 구역 300원)")
+	GameState.money = 299
+	_check(not main.supply_action(&"expand_field") and GameState.open_plots == 1 and GameState.money == 299, "돈이 모자라면 못 넓힘")
+	GameState.money = 300 + 500 + 800
+	for want in [Vector2i(7, 2), Vector2i(1, 6), Vector2i(7, 6)]:
+		_check(main.supply_action(&"expand_field") and farm0.do_work(Farm.Work.TILL, want), "구역을 사서 넓히고 갈기 %s" % want)
+		farm0.get_cell(want).tilled = false
+	_check(GameState.money == 0 and GameState.open_plots == 4, "300 → 500 → 800원으로 세 구역 열림")
+	_check(not main.supply_options().has(&"expand_field"), "다 넓히면 선택창에서 빠짐")
+	main.close_menu()
+
 	# 2) 시작 상태: 공급함에 알 1개, 사냥꾼은 잠김
 	_check(GameState.village_eggs.size() == Config.START_VILLAGE_EGGS and GameState.village_eggs[0] == CreatureCatalog.SLIME, "공급함에 슬라임 알 1개로 시작")
 	main.switch_character()
