@@ -62,6 +62,10 @@ var menu_index := 0
 var _menu_options: Array[StringName] = []
 var _menu: ColorRect
 var _menu_text: Label
+## 사냥터 (2026-09-27 결정 A). 사냥꾼이 들어가 있는 동안만 있다.
+var hunt: HuntGround
+## 사냥터에 있는 동안 숨기는 마을 쪽 노드
+var _village_nodes: Array[Node2D] = []
 
 var _rng := RandomNumberGenerator.new()
 var _status: Label
@@ -128,7 +132,8 @@ func _set_active(c: Character) -> void:
 
 
 func _process(_delta: float) -> void:
-	update_fading()
+	if hunt == null:
+		update_fading()
 
 
 ## 캐릭터·크리처가 집·나무 그림 뒤에 가려지면 그 그림을 반투명하게 한다.
@@ -151,6 +156,16 @@ func _unhandled_input(event: InputEvent) -> void:
 	if sleeping:
 		if event.is_action_pressed("interact"):
 			interact()
+		return
+	if hunt:
+		if event.is_action_pressed("attack"):
+			hunt.swing(get_global_mouse_position() - (hunter.feet() + Vector2(0, -12)))
+		elif event.is_action_pressed("use_tool"):
+			hunt.swing()
+		elif event.is_action_pressed("interact"):
+			interact()
+		elif event.is_action_pressed("switch_character"):
+			GameState.notify("사냥 중에는 캐릭터를 바꿀 수 없다. 아래 입구에서 F로 돌아가자.")
 		return
 	if menu_open:
 		if event.is_action_pressed("move_up"):
@@ -231,6 +246,12 @@ func interact() -> void:
 		if _morning_card.visible:
 			wake_up()
 		return
+	if hunt:
+		if hunt.near_exit():
+			leave_hunt()
+		else:
+			GameState.notify("아래 입구에서 F로 마을로 돌아간다.")
+		return
 	if near_door() and _carried_creature() == null:
 		go_to_sleep()
 		return
@@ -270,15 +291,7 @@ func _farmer_interact() -> void:
 
 func _hunter_interact() -> void:
 	if _near(hunt_gate):
-		if GameState.hunts_today >= Config.HUNTS_PER_DAY:
-			GameState.notify("오늘은 이미 사냥을 다녀왔다.")
-			return
-		# 전투 구현 전 대체 동작: 사냥을 다녀오면 알 1개를 얻는다.
-		GameState.hunts_today += 1
-		var table := CreatureCatalog.HUNT_TABLE
-		var egg := table[_rng.randi_range(0, table.size() - 1)]
-		GameState.hunter_eggs.append(egg)
-		GameState.notify("사냥을 다녀와 %s 알을 얻었다! 마을 공급함에 넣자." % egg.display_name)
+		enter_hunt()
 	elif _near(supply_box):
 		if GameState.hunter_eggs.is_empty():
 			GameState.notify("공급할 알이 없다. 사냥터 입구로 가자.")
@@ -288,6 +301,56 @@ func _hunter_interact() -> void:
 		GameState.notify("마을 공급함에 알을 넣었다. 농부가 받아 갈 수 있다.")
 	else:
 		GameState.notify("사냥터 입구나 마을 공급함 가까이에서 F.")
+
+
+# --- 사냥터 (2026-09-27 결정 A. 실시간 한 화면, 첫 조각) ------------------
+
+## 사냥터 입구에서 F. 하루 한 번 들어간다. 마을은 숨기고 사냥터 화면을 띄운다.
+func enter_hunt() -> bool:
+	if hunt:
+		return false
+	if GameState.hunts_today >= Config.HUNTS_PER_DAY:
+		GameState.notify("오늘은 이미 사냥을 다녀왔다. 자고 나면 다시 갈 수 있다.")
+		return false
+	var first_today := GameState.hunts_today == 0
+	GameState.hunts_today += 1
+	_village_nodes.clear()
+	for n in get_children():
+		if n is Node2D and n != hunter and (n as Node2D).visible:
+			_village_nodes.append(n)
+			(n as Node2D).visible = false
+	hunt = HuntGround.new()
+	add_child(hunt)
+	hunter.farm = null
+	hunt.start(hunter, first_today)
+	hunt.knocked_out.connect(leave_hunt)
+	GameState.notify("사냥터에 들어왔다. 클릭(또는 Space)으로 사냥칼을 휘두른다. 야생 슬라임을 쓰러뜨리자!")
+	return true
+
+
+## 마을로 돌아온다 (아래 입구 F, 또는 하트가 다 떨어져 쓰러졌을 때). 주운 알은 그대로 가진다.
+func leave_hunt() -> void:
+	if hunt == null:
+		return
+	var knocked := hunt.knocked
+	var eggs := hunt.collect_all()
+	GameState.hunter_eggs.append_array(eggs)
+	hunt.queue_free()
+	hunt = null
+	for n in _village_nodes:
+		n.visible = true
+	_village_nodes.clear()
+	hunter.farm = farm
+	hunter.walk_area = Rect2()
+	hunter.show_facing_cell = true
+	hunter.position = Farm.center_of(HUNT_GATE_RECT.position + Vector2i(1, HUNT_GATE_RECT.size.y))
+	hunter.facing = Vector2i.DOWN
+	if knocked:
+		GameState.notify("사냥꾼이 쓰러져 마을 입구로 돌아왔다. 알 %d개는 그대로 가지고 있다." % eggs.size())
+	elif eggs.is_empty():
+		GameState.notify("사냥터에서 돌아왔다.")
+	else:
+		GameState.notify("사냥터에서 알 %d개를 가지고 돌아왔다! 마을 공급함에 넣자." % eggs.size())
 
 
 # --- 마을 공급함 선택창 (2026-09-27 결정 C) --------------------------------
@@ -617,7 +680,7 @@ func _build_hud() -> void:
 	help.position = Vector2(6, 345)
 	help.add_theme_font_size_override("font_size", 9)
 	help.modulate = Color(1, 1, 1, 0.7)
-	help.text = "이동 WASD · 도구 Space · 도구 변경 Q/E · 상호작용 F (공급함: W/S 고르기) · 크리처 일 R · 캐릭터 전환 Tab · 잠자기 집 현관 F"
+	help.text = "이동 WASD · 도구 Space (사냥터: 클릭) · 도구 변경 Q/E · 상호작용 F (공급함: W/S 고르기) · 크리처 일 R · 캐릭터 전환 Tab · 잠자기 집 현관 F"
 	layer.add_child(help)
 	# 잠잘 때 화면 전체를 덮는 밤 색. 평소에는 투명.
 	_night = ColorRect.new()
@@ -655,7 +718,10 @@ func _build_hud() -> void:
 func _refresh_hud() -> void:
 	if _status == null:
 		return
-	var tool_text: String = tool_name(TOOLS[tool_index]) if active == farmer else ("튼튼한 사냥칼" if GameState.hunter_knife else "-")
+	var tool_text: String = tool_name(TOOLS[tool_index]) if active == farmer else ("튼튼한 사냥칼" if GameState.hunter_knife else "사냥칼")
+	if hunt:
+		_status.text = "%d일째 | 사냥터 | 도구: %s | 남은 야생 슬라임 %d | 주운 알 %d" % [GameState.day, tool_text, hunt.slimes.size(), hunt.picked.size()]
+		return
 	_status.text = "%d일째 | %s | 도구: %s | 돈 %d원 | 씨앗 %d  작물 %d | 알: 농부 %d · 사냥꾼 %d · 공급함 %d | 크리처 %d" % [
 		GameState.day, active.display_name, tool_text, GameState.money, GameState.seeds, GameState.crops,
 		GameState.farmer_eggs.size(), GameState.hunter_eggs.size(), GameState.village_eggs.size(), creatures.size(),

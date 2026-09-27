@@ -49,8 +49,26 @@ const EGG_HATCH_DAYS := 1
 ## 첫 크리처는 운과 상관없이 쓸 만하도록 최저 능력치를 보장한다
 const FIRST_CREATURE_MIN_WORK_SPEED := 1.0
 const FIRST_CREATURE_MIN_RADIUS := 2
-## 사냥꾼은 하루 한 번 사냥을 다녀온다 (전투 구현 전 대체 동작)
+## 사냥꾼은 하루 한 번 사냥터에 들어간다
 const HUNTS_PER_DAY := 1
+
+## 사냥터 첫 조각 (2026-09-27 결정 A. 실시간 한 화면). 값은 전부 임시.
+## 사냥꾼 하트 수, 야생 슬라임 수와 맞아야 쓰러지는 횟수
+const HUNTER_HEARTS := 5
+const WILD_SLIME_COUNT := 3
+const WILD_SLIME_HP := 2
+## 휘두르기: 발 앞 이 거리에 원을 그려 닿은 야생 슬라임을 때린다 (px)
+const SWING_REACH := 18.0
+const SWING_RADIUS := 18.0
+const SWING_COOLDOWN := 0.35
+## 부딪히면 하트 -1, 그 뒤 이 시간 동안은 다시 맞지 않는다 (초)
+const HURT_INVULNERABLE_TIME := 1.0
+const WILD_SLIME_TOUCH_DISTANCE := 14.0
+## 야생 슬라임 움직임: 쉬었다가 한 번 깡충 (초, px). 사냥꾼이 가까우면 그쪽으로 뛴다.
+const WILD_SLIME_REST_TIME := 1.2
+const WILD_SLIME_HOP_TIME := 0.35
+const WILD_SLIME_HOP_DISTANCE := 20.0
+const WILD_SLIME_CHASE_DISTANCE := 90.0
 
 ## 초당 약 3.4타일
 const CHARACTER_SPEED := 82.0

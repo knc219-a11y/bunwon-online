@@ -77,6 +77,7 @@ func _register_inputs() -> void:
 		"move_left": [KEY_A, KEY_LEFT],
 		"move_right": [KEY_D, KEY_RIGHT],
 		"use_tool": [KEY_SPACE, KEY_J],
+		"attack": [],
 		"interact": [KEY_F, KEY_K],
 		"tool_prev": [KEY_Q],
 		"tool_next": [KEY_E],
@@ -93,3 +94,8 @@ func _register_inputs() -> void:
 			var ev := InputEventKey.new()
 			ev.physical_keycode = key
 			InputMap.action_add_event(action, ev)
+	# 사냥터 공격은 마우스 왼쪽 클릭 (사용자 요청 2026-09-27). 누른 쪽을 향해 휘두른다.
+	if InputMap.action_get_events("attack").is_empty():
+		var click := InputEventMouseButton.new()
+		click.button_index = MOUSE_BUTTON_LEFT
+		InputMap.action_add_event("attack", click)
