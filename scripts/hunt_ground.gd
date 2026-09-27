@@ -34,6 +34,10 @@ var picked: Array[CreatureSpecies] = []
 ## 이번 사냥에서 알 보장을 이미 썼는지 (그날 첫 사냥에서 처음 쓰러뜨린 슬라임)
 var egg_guaranteed := true
 var knocked := false
+## 따라온 크리처 (없으면 혼자). 2026-09-27 결정 A. 따라오는 동료.
+var companion: HuntCompanion
+## false 면 동행 크리처가 스스로 움직이지 않는다 (공격 간격은 그대로 흐름). 테스트에서 끈다.
+var companion_ai := true
 
 var _cooldown := 0.0
 var _invulnerable := 0.0
@@ -83,8 +87,18 @@ func start(h: Character, first_today: bool) -> void:
 	egg_guaranteed = not first_today
 	hunter.walk_area = WALK_AREA
 	hunter.show_facing_cell = false
+	hunter.queue_redraw()
 	hunter.position = SPAWN_AT
 	hunter.facing = Vector2i.UP
+
+
+## 농장 크리처를 데려온다. 사냥꾼 뒤에 선다.
+func add_companion(from: Creature) -> HuntCompanion:
+	companion = HuntCompanion.new()
+	companion.setup(from)
+	companion.position = hunter.feet() + Vector2(0, Config.COMPANION_FOLLOW_DISTANCE)
+	add_child(companion)
+	return companion
 
 
 func set_ai(on: bool) -> void:
@@ -111,6 +125,8 @@ func tick(delta: float) -> void:
 		s.tick(delta, feet)
 		if _invulnerable <= 0.0 and s.position.distance_to(feet) <= Config.WILD_SLIME_TOUCH_DISTANCE:
 			_hurt(s.position)
+	if companion:
+		_tick_companion(delta)
 	for i in range(drops.size() - 1, -1, -1):
 		if drops[i].at.distance_to(feet) <= 14.0:
 			picked.append(drops[i].species)
@@ -140,6 +156,51 @@ func swing(dir := Vector2.ZERO) -> int:
 			if s.hit(hunter.feet()):
 				_defeat(s)
 	return hits
+
+
+var _companion_cooldown := 0.0
+
+
+## 동행 크리처: 사냥꾼 뒤를 따라가다가 닿는 야생 슬라임이 있으면 공격한다.
+func _tick_companion(delta: float) -> void:
+	_companion_cooldown = maxf(_companion_cooldown - delta, 0.0)
+	var target := _nearest_slime(companion.position)
+	if companion_ai:
+		var chase := companion.style == HuntCompanion.Style.BUMP and target != null \
+			and target.position.distance_to(hunter.feet()) <= Config.COMPANION_CHASE_DISTANCE
+		if chase:
+			companion.move_toward_point(target.position, delta)
+		else:
+			var behind := hunter.feet() - Vector2(hunter.facing) * Config.COMPANION_FOLLOW_DISTANCE
+			if companion.position.distance_to(hunter.feet()) > Config.COMPANION_FOLLOW_DISTANCE * 0.8:
+				companion.move_toward_point(behind, delta)
+			else:
+				companion.move_toward_point(companion.position, delta)
+	if target == null or _companion_cooldown > 0.0:
+		return
+	if companion.position.distance_to(target.position) > companion.reach():
+		return
+	companion_attack(target)
+
+
+## 동행 크리처가 한 번 공격한다 (1 피해). 쓰러뜨리면 사냥꾼이 쓰러뜨린 것과 똑같이 친다 (알 보장 포함).
+func companion_attack(target: WildSlime) -> void:
+	_companion_cooldown = companion.attack_interval()
+	companion.play_attack(target.position)
+	if target.hit(companion.position):
+		_defeat(target)
+	elif companion.style == HuntCompanion.Style.BUMP:
+		# 박치기는 더 멀리 밀쳐낸다
+		var away := (target.position - companion.position).normalized()
+		target.position = (target.position + away * 10.0).clamp(target.area.position, target.area.end)
+
+
+func _nearest_slime(from: Vector2) -> WildSlime:
+	var best: WildSlime = null
+	for s in slimes:
+		if best == null or s.position.distance_to(from) < best.position.distance_to(from):
+			best = s
+	return best
 
 
 func _defeat(s: WildSlime) -> void:

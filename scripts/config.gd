@@ -86,3 +86,15 @@ const CREATURE_WORK_ANIM_TIME := 0.5
 const SLEEP_FADE_TIME := 1.0
 const WAKE_FADE_TIME := 0.4
 const NIGHT_ALPHA := 0.85
+
+## 크리처 동행 (2026-09-27 결정 A. 따라오는 동료, 첫 조각). 값은 전부 임시.
+## 사냥꾼 뒤 이만큼 떨어져 따라온다 (px)
+const COMPANION_FOLLOW_DISTANCE := 22.0
+const COMPANION_SPEED := 90.0
+## 물 = 멀리서 물총, 땅 = 붙어서 박치기. 간격(초)은 개체 일 속도로 나눈다.
+const COMPANION_SHOT_RANGE := 110.0
+const COMPANION_SHOT_INTERVAL := 1.6
+const COMPANION_BUMP_RANGE := 16.0
+const COMPANION_BUMP_INTERVAL := 1.0
+## 박치기 크리처가 야생 슬라임을 쫓아가기 시작하는 거리 (사냥꾼에게서 너무 멀어지지 않게)
+const COMPANION_CHASE_DISTANCE := 90.0
