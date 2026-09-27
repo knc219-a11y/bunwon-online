@@ -24,6 +24,8 @@ var active := false:
 		queue_redraw()
 ## 막는 범위를 알려 주는 농장. null 이면 어디든 지나간다.
 var farm: Farm
+## 선택창이 열려 있는 동안처럼 조작 중이지만 걷지 않을 때 true
+var frozen := false
 var facing := Vector2i.DOWN
 var moving := false
 
@@ -78,7 +80,7 @@ func facing_cell() -> Vector2i:
 
 func _process(delta: float) -> void:
 	var dir := Vector2.ZERO
-	if active:
+	if active and not frozen:
 		dir = Input.get_vector("move_left", "move_right", "move_up", "move_down")
 	var was_moving := moving
 	moving = dir != Vector2.ZERO

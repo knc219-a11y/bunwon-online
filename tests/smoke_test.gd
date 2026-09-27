@@ -44,6 +44,9 @@ func _ready() -> void:
 	# 3) 농부: 공급함에서 받기 → 부화기 → 다음 날 부화 (첫 슬라임은 급수)
 	farmer.position = main.supply_box.position
 	main.interact()
+	_check(main.menu_open and main.supply_options()[0] == &"take_eggs", "공급함에서 F로 선택창, 알이 있으면 알 받기가 맨 위")
+	main.menu_confirm()
+	main.close_menu()
 	_check(GameState.farmer_eggs.size() == 1 and GameState.village_eggs.is_empty(), "농부가 공급함에서 알 수령")
 	farmer.position = main.incubator.position
 	main.interact()
@@ -98,6 +101,8 @@ func _ready() -> void:
 	main.switch_character()
 	farmer.position = main.supply_box.position
 	main.interact()
+	main.menu_confirm()
+	main.close_menu()
 	farmer.position = main.incubator.position
 	main.interact()
 	main.next_day()
@@ -265,6 +270,33 @@ func _ready() -> void:
 	await get_tree().create_timer(Config.WAKE_FADE_TIME + 0.2).timeout
 	_check(not main.sleeping and farmer.active and main._night.color.a < 0.01, "일어나면 다시 조작 가능")
 
+	# 15) 경제 첫 단계 (C): 공급함에 무 진열 → 밤사이 팔림 → 아침 정산, 씨앗은 공급함에서 바로 산다
+	GameState.crops = 3
+	GameState.money = 0
+	GameState.displayed_crops = 0
+	var seeds_before := GameState.seeds
+	farmer.position = main.supply_box.position
+	main.interact()
+	_check(main.menu_open and farmer.frozen, "선택창이 열리면 캐릭터는 멈춤")
+	_check(main.supply_options() == [&"display_crops", &"buy_seeds", &"close"], "알이 없으면 진열·씨앗·닫기만")
+	_check(not main.supply_action(&"buy_seeds") and GameState.seeds == seeds_before, "돈이 모자라면 씨앗을 못 삼")
+	main._unhandled_input(_action(&"move_down"))
+	_check(main.menu_index == 1, "W/S로 고르기")
+	main._unhandled_input(_action(&"move_up"))
+	main._unhandled_input(_action(&"interact"))
+	_check(GameState.crops == 0 and GameState.displayed_crops == 3, "F로 무 3개 진열")
+	_check(main.supply_box.badge.contains("무 3"), "공급함에 진열한 무 표시")
+	_check(main.menu_open and main.supply_options() == [&"buy_seeds", &"close"], "진열 뒤에도 선택창은 열려 있음")
+	main._unhandled_input(_action(&"menu_close"))
+	_check(not main.menu_open and not farmer.frozen, "Esc로 선택창 닫기")
+	var money_lines: Array[String] = main.next_day()
+	_check(GameState.money == 3 * Config.CROP_PRICE and GameState.displayed_crops == 0, "밤사이 무가 팔려 돈이 들어옴")
+	_check(money_lines[0].contains("무 3개가 팔렸다") and money_lines[0].contains("+%d원" % (3 * Config.CROP_PRICE)), "아침 카드 첫 줄에 판매 정산")
+	_check(main.supply_action(&"buy_seeds") and GameState.seeds == seeds_before + Config.SEED_PACK_SIZE and GameState.money == 3 * Config.CROP_PRICE - Config.SEED_PACK_PRICE, "씨앗 묶음 사기")
+	var quiet: Array[String] = main.next_day()
+	_check(not "\n".join(quiet).contains("팔렸다") and GameState.money == 3 * Config.CROP_PRICE - Config.SEED_PACK_PRICE, "진열한 게 없으면 정산 없음")
+	main.close_menu()
+
 	print("SMOKE TEST: %s (%d failures)" % ["PASS" if _failures == 0 else "FAIL", _failures])
 	get_tree().quit(1 if _failures > 0 else 0)
 
@@ -273,3 +305,10 @@ func _check(ok: bool, what: String) -> void:
 	print(("  ok   " if ok else "  FAIL ") + what)
 	if not ok:
 		_failures += 1
+
+
+func _action(action: StringName) -> InputEventAction:
+	var ev := InputEventAction.new()
+	ev.action = action
+	ev.pressed = true
+	return ev

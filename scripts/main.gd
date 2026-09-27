@@ -46,6 +46,12 @@ var sleeping := false
 var _night: ColorRect
 var _morning_card: Control
 var _morning_text: Label
+## 마을 공급함 선택창 (농부가 F로 연다). 열려 있는 동안 W/S로 고르고 F로 정한다.
+var menu_open := false
+var menu_index := 0
+var _menu_options: Array[StringName] = []
+var _menu: ColorRect
+var _menu_text: Label
 
 var _rng := RandomNumberGenerator.new()
 var _status: Label
@@ -135,6 +141,16 @@ func _unhandled_input(event: InputEvent) -> void:
 		if event.is_action_pressed("interact"):
 			interact()
 		return
+	if menu_open:
+		if event.is_action_pressed("move_up"):
+			menu_move(-1)
+		elif event.is_action_pressed("move_down"):
+			menu_move(1)
+		elif event.is_action_pressed("interact") or event.is_action_pressed("use_tool"):
+			menu_confirm()
+		elif event.is_action_pressed("menu_close") or event.is_action_pressed("switch_character"):
+			close_menu()
+		return
 	if event.is_action_pressed("switch_character"):
 		switch_character()
 	elif event.is_action_pressed("use_tool"):
@@ -209,12 +225,7 @@ func _farmer_interact() -> void:
 		s.pick_up(farmer)
 		GameState.notify("%s을(를) 들었다. 원하는 자리에서 다시 F." % s.data.species.display_name)
 	elif _near(supply_box):
-		if GameState.village_eggs.is_empty():
-			GameState.notify("마을 공급함이 비어 있다. 사냥꾼이 알을 가져와야 한다.")
-			return
-		GameState.farmer_eggs.append_array(GameState.village_eggs)
-		GameState.village_eggs.clear()
-		GameState.notify("마을 공급함에서 알을 받았다. 부화기에 넣어 보자.")
+		open_menu()
 	elif _near(incubator):
 		if incubating_days >= 0:
 			GameState.notify("알이 부화 중이다. %d일 남았다." % incubating_days)
@@ -246,6 +257,107 @@ func _hunter_interact() -> void:
 		GameState.notify("마을 공급함에 알을 넣었다. 농부가 받아 갈 수 있다.")
 	else:
 		GameState.notify("사냥터 입구나 마을 공급함 가까이에서 F.")
+
+
+# --- 마을 공급함 선택창 (2026-09-27 결정 C) --------------------------------
+
+## 지금 공급함에서 할 수 있는 일. 알 받기와 진열은 가진 게 있을 때만 보인다.
+func supply_options() -> Array[StringName]:
+	var options: Array[StringName] = []
+	if not GameState.village_eggs.is_empty():
+		options.append(&"take_eggs")
+	if GameState.crops > 0:
+		options.append(&"display_crops")
+	options.append(&"buy_seeds")
+	options.append(&"close")
+	return options
+
+
+func supply_option_text(id: StringName) -> String:
+	match id:
+		&"take_eggs":
+			return "알 받기 (%d개)" % GameState.village_eggs.size()
+		&"display_crops":
+			return "무 진열하기 (%d개, 밤사이 %d원)" % [GameState.crops, GameState.crops * Config.CROP_PRICE]
+		&"buy_seeds":
+			return "씨앗 %d개 사기 (%d원)" % [Config.SEED_PACK_SIZE, Config.SEED_PACK_PRICE]
+		_:
+			return "닫기"
+
+
+func open_menu() -> void:
+	menu_open = true
+	menu_index = 0
+	active.frozen = true
+	_rebuild_menu()
+
+
+func close_menu() -> void:
+	if not menu_open:
+		return
+	menu_open = false
+	_menu.visible = false
+	active.frozen = false
+	GameState.touch()
+
+
+func menu_move(step: int) -> void:
+	menu_index = wrapi(menu_index + step, 0, _menu_options.size())
+	_rebuild_menu()
+
+
+func menu_confirm() -> void:
+	var id := _menu_options[menu_index]
+	if id == &"close":
+		close_menu()
+		return
+	supply_action(id)
+	_rebuild_menu()
+	_refresh_props()
+
+
+## 공급함에서 한 가지 일을 한다. 선택창과 테스트가 함께 쓴다.
+func supply_action(id: StringName) -> bool:
+	match id:
+		&"take_eggs":
+			if GameState.village_eggs.is_empty():
+				GameState.notify("마을 공급함에 알이 없다. 사냥꾼이 알을 가져와야 한다.")
+				return false
+			GameState.farmer_eggs.append_array(GameState.village_eggs)
+			GameState.village_eggs.clear()
+			GameState.notify("마을 공급함에서 알을 받았다. 부화기에 넣어 보자.")
+		&"display_crops":
+			if GameState.crops <= 0:
+				GameState.notify("진열할 무가 없다.")
+				return false
+			var n := GameState.crops
+			GameState.displayed_crops += n
+			GameState.crops = 0
+			GameState.notify("무 %d개를 공급함에 진열했다. 밤사이 마을 사람들이 사 가고 돈통에 값을 넣어 둔다." % n)
+		&"buy_seeds":
+			if GameState.money < Config.SEED_PACK_PRICE:
+				GameState.notify("돈이 모자라다. 씨앗 %d개에 %d원 (가진 돈 %d원)." % [Config.SEED_PACK_SIZE, Config.SEED_PACK_PRICE, GameState.money])
+				return false
+			GameState.money -= Config.SEED_PACK_PRICE
+			GameState.seeds += Config.SEED_PACK_SIZE
+			GameState.notify("씨앗 %d개를 샀다. -%d원" % [Config.SEED_PACK_SIZE, Config.SEED_PACK_PRICE])
+		_:
+			return false
+	return true
+
+
+func _rebuild_menu() -> void:
+	_menu_options = supply_options()
+	menu_index = clampi(menu_index, 0, _menu_options.size() - 1)
+	var lines: Array[String] = ["마을 공급함   가진 돈 %d원" % GameState.money]
+	for i in _menu_options.size():
+		lines.append(("▶ " if i == menu_index else "   ") + supply_option_text(_menu_options[i]))
+	_menu_text.text = "\n".join(lines)
+	_menu.size = Vector2(190, 14 + lines.size() * 14)
+	# 공급함 오른쪽 위에 띄우되 화면 밖으로 나가지 않게
+	var at := supply_box.position + Vector2(36, -80)
+	_menu.position = at.clamp(Vector2(4, 32), Vector2(636, 324) - _menu.size)
+	_menu.visible = menu_open
 
 
 func change_creature_job() -> void:
@@ -292,6 +404,11 @@ func near_door() -> bool:
 func next_day() -> Array[String]:
 	GameState.day += 1
 	var lines: Array[String] = []
+	if GameState.displayed_crops > 0:
+		var earned := GameState.displayed_crops * Config.CROP_PRICE
+		GameState.money += earned
+		lines.append("공급함의 무 %d개가 팔렸다. 돈통에 +%d원" % [GameState.displayed_crops, earned])
+		GameState.displayed_crops = 0
 	var grown := farm.advance_day()
 	if grown > 0:
 		lines.append("밤사이 작물 %d개가 자랐다." % grown)
@@ -359,7 +476,12 @@ func _carried_creature() -> Creature:
 
 func _refresh_props() -> void:
 	incubator.set_badge("부화 중 (%d일)" % incubating_days if incubating_days >= 0 else "")
-	supply_box.set_badge("알 %d" % GameState.village_eggs.size() if not GameState.village_eggs.is_empty() else "")
+	var shelf: Array[String] = []
+	if not GameState.village_eggs.is_empty():
+		shelf.append("알 %d" % GameState.village_eggs.size())
+	if GameState.displayed_crops > 0:
+		shelf.append("무 %d 진열" % GameState.displayed_crops)
+	supply_box.set_badge(" · ".join(shelf))
 
 
 func _build_hud() -> void:
@@ -386,7 +508,7 @@ func _build_hud() -> void:
 	help.position = Vector2(6, 345)
 	help.add_theme_font_size_override("font_size", 9)
 	help.modulate = Color(1, 1, 1, 0.7)
-	help.text = "이동 WASD · 도구 Space · 도구 변경 Q/E · 상호작용 F · 크리처 일 R · 캐릭터 전환 Tab · 잠자기 집 현관 F"
+	help.text = "이동 WASD · 도구 Space · 도구 변경 Q/E · 상호작용 F (공급함: W/S 고르기) · 크리처 일 R · 캐릭터 전환 Tab · 잠자기 집 현관 F"
 	layer.add_child(help)
 	# 잠잘 때 화면 전체를 덮는 밤 색. 평소에는 투명.
 	_night = ColorRect.new()
@@ -409,6 +531,15 @@ func _build_hud() -> void:
 	_morning_text.add_theme_font_size_override("font_size", 10)
 	_morning_text.add_theme_color_override("font_color", Color(0.3, 0.2, 0.15))
 	_morning_card.add_child(_morning_text)
+	_menu = ColorRect.new()
+	_menu.color = Color(0.99, 0.95, 0.85)
+	_menu.visible = false
+	layer.add_child(_menu)
+	_menu_text = Label.new()
+	_menu_text.position = Vector2(8, 5)
+	_menu_text.add_theme_font_size_override("font_size", 10)
+	_menu_text.add_theme_color_override("font_color", Color(0.3, 0.2, 0.15))
+	_menu.add_child(_menu_text)
 	_refresh_hud()
 
 
@@ -416,7 +547,7 @@ func _refresh_hud() -> void:
 	if _status == null:
 		return
 	var tool_text: String = TOOL_NAMES[TOOLS[tool_index]] if active == farmer else "-"
-	_status.text = "%d일째 | %s | 도구: %s | 씨앗 %d  작물 %d | 알: 농부 %d · 사냥꾼 %d · 공급함 %d | 크리처 %d" % [
-		GameState.day, active.display_name, tool_text, GameState.seeds, GameState.crops,
+	_status.text = "%d일째 | %s | 도구: %s | 돈 %d원 | 씨앗 %d  작물 %d | 알: 농부 %d · 사냥꾼 %d · 공급함 %d | 크리처 %d" % [
+		GameState.day, active.display_name, tool_text, GameState.money, GameState.seeds, GameState.crops,
 		GameState.farmer_eggs.size(), GameState.hunter_eggs.size(), GameState.village_eggs.size(), creatures.size(),
 	]

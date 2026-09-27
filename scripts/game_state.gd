@@ -7,6 +7,9 @@ signal message(text: String)
 var day := 1
 var seeds := Config.START_SEEDS
 var crops := 0
+var money := Config.START_MONEY
+## 마을 공급함에 진열한 작물. 밤사이 팔리고 아침에 돈이 들어온다.
+var displayed_crops := 0
 ## 알은 종 정보만 가진다. 능력치와 Trait은 부화할 때 정해진다.
 ## 농부가 들고 있는 알
 var farmer_eggs: Array[CreatureSpecies] = []
@@ -36,6 +39,8 @@ func reset() -> void:
 	day = 1
 	seeds = Config.START_SEEDS
 	crops = 0
+	money = Config.START_MONEY
+	displayed_crops = 0
 	farmer_eggs = []
 	hunter_eggs = []
 	village_eggs = []
@@ -60,6 +65,7 @@ func _register_inputs() -> void:
 		"creature_job": [KEY_R],
 		"switch_character": [KEY_TAB],
 		"next_day": [KEY_N],
+		"menu_close": [KEY_ESCAPE],
 	}
 	for action: String in map:
 		if InputMap.has_action(action):
