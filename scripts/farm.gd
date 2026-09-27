@@ -1,8 +1,19 @@
 class_name Farm
 extends Node2D
-## 농장 타일 상태와 농사 동작. 그래픽은 임시로 도형을 그린다.
+## 농장 타일 상태와 농사 동작. 바닥은 assets/tiles 의 타일셋으로 그린다 (docs/sprites.md "농장 바닥 타일").
 
 enum Work { TILL, SOW, WATER, HARVEST }
+
+const TILES := preload("res://assets/tiles/farm_tiles.png")
+const CROPS := preload("res://assets/tiles/crops.png")
+## 타일셋 행: 0 풀·흙길 속 채움, 1 갈아 둔 밭, 2 물 준 밭, 3 흙길 가장자리 (열 = 이웃 연결 비트)
+const ROW_TILLED := 1
+const ROW_WATERED := 2
+const ROW_PATH := 3
+## 풀 변형 0-3이 나올 누적 확률(%)
+const GRASS_WEIGHTS: Array[int] = [60, 80, 92, 100]
+## 이웃 연결 비트: 위 1, 오른쪽 2, 아래 4, 왼쪽 8
+const NEIGHBORS := {1: Vector2i.UP, 2: Vector2i.RIGHT, 4: Vector2i.DOWN, 8: Vector2i.LEFT}
 
 
 class Cell:
@@ -17,12 +28,17 @@ class Cell:
 
 
 var _cells: Dictionary[Vector2i, Cell] = {}
+var _path: Dictionary[Vector2i, bool] = {}
 
 
 func _ready() -> void:
 	for x in Config.FIELD_RECT.size.x:
 		for y in Config.FIELD_RECT.size.y:
 			_cells[Config.FIELD_RECT.position + Vector2i(x, y)] = Cell.new()
+	for r in Config.PATH_RECTS:
+		for x in r.size.x:
+			for y in r.size.y:
+				_path[r.position + Vector2i(x, y)] = true
 
 
 static func cell_of(pos: Vector2) -> Vector2i:
@@ -103,22 +119,56 @@ func find_work(work: Work, center: Vector2i, radius: int, exclude: Array[Vector2
 	return best
 
 
+## 이웃 중 같은 바닥인 쪽의 비트를 모은다. 타일셋 열 번호가 된다.
+func _mask(cell: Vector2i, same: Callable) -> int:
+	var m := 0
+	for bit: int in NEIGHBORS:
+		if same.call(cell + NEIGHBORS[bit]):
+			m |= bit
+	return m
+
+
+func _is_tilled(cell: Vector2i) -> bool:
+	var c := get_cell(cell)
+	return c != null and c.tilled
+
+
+func _is_path(cell: Vector2i) -> bool:
+	return _path.has(cell)
+
+
+## 성장 단계 0 씨앗, 1 싹, 2 자람, 3 다 자람
+static func crop_stage(c: Cell) -> int:
+	if c.is_ripe():
+		return 3
+	if c.growth == 0:
+		return 0
+	return mini(2, 1 + (c.growth - 1) * 2 / maxi(1, Config.CROP_GROW_DAYS - 1))
+
+
+func _tile(cell: Vector2i, texture: Texture2D, col: int, row: int) -> void:
+	var t := Config.TILE
+	draw_texture_rect_region(texture, Rect2(Vector2(cell * t), Vector2(t, t)), Rect2(col * t, row * t, t, t))
+
+
 func _draw() -> void:
 	var t := Config.TILE
 	# 맵(624px)이 화면(640px)보다 조금 좁아서 남는 오른쪽도 풀밭으로 채운다
-	draw_rect(get_viewport_rect().merge(Rect2(Vector2.ZERO, Vector2(Config.MAP_SIZE * t))), Color("7fb069"))
+	var cols := ceili(get_viewport_rect().size.x / t)
+	for x in maxi(cols, Config.MAP_SIZE.x):
+		for y in Config.MAP_SIZE.y:
+			var h := absi((x * 73856093) ^ (y * 19349663)) % 100
+			var v := GRASS_WEIGHTS.find_custom(func(w: int) -> bool: return h < w)
+			_tile(Vector2i(x, y), TILES, v, 0)
+	for cell: Vector2i in _path:
+		_tile(cell, TILES, _mask(cell, _is_path), ROW_PATH)
+	# 밭을 갈 수 있는 영역 표시 (옅게)
 	var field := Rect2(Vector2(Config.FIELD_RECT.position * t), Vector2(Config.FIELD_RECT.size * t))
-	draw_rect(field.grow(2), Color("5d7f45"), false, 2.0)
+	draw_rect(field.grow(1), Color(0.25, 0.35, 0.2, 0.25), false, 1.0)
 	for cell: Vector2i in _cells:
 		var c: Cell = _cells[cell]
-		var r := Rect2(Vector2(cell * t), Vector2(t, t)).grow(-1)
 		if c.tilled:
-			draw_rect(r, Color("6b4a2f") if c.watered else Color("9c7148"))
+			# 마른 밭과 젖은 밭은 서로 이어진다 (물 주기로 밭 모양이 바뀌지 않게)
+			_tile(cell, TILES, _mask(cell, _is_tilled), ROW_WATERED if c.watered else ROW_TILLED)
 		if c.planted:
-			var p := center_of(cell)
-			if c.is_ripe():
-				draw_circle(p, 7.0, Color("f2a541"))
-				draw_circle(p + Vector2(0, -5), 3.0, Color("3f8f3a"))
-			else:
-				var size := 2.0 + 2.0 * c.growth
-				draw_circle(p, size, Color("3f8f3a"))
+			_tile(cell, CROPS, crop_stage(c), 0)
