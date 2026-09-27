@@ -37,13 +37,17 @@ func _process(delta: float) -> void:
 
 func _draw() -> void:
 	var alpha := 1.0 if active else 0.55
-	# 그림자, 몸통, 머리 (머리가 약간 큰 비율)
-	draw_circle(Vector2(0, 12), 8.0, Color(0, 0, 0, 0.2 * alpha))
-	draw_rect(Rect2(-7, -6, 14, 18), Color(body_color, alpha))
-	draw_circle(Vector2(0, -12), 8.0, Color(Color("f1c7a0"), alpha))
-	draw_rect(Rect2(-8, -21, 16, 6), Color(Color("2b2b2b"), alpha))
+	# 키 48px(타일 2칸). 발이 칸 아래쪽(y=+10), 머리가 약간 큰 비율.
+	draw_circle(Vector2(0, 10), 9.0, Color(0, 0, 0, 0.2 * alpha))
+	draw_rect(Rect2(-6, -2, 12, 10), Color(Color("4c6896"), alpha))
+	draw_rect(Rect2(-7, 8, 14, 2), Color(Color("2c2c34"), alpha))
+	draw_rect(Rect2(-8, -18, 16, 17), Color(body_color, alpha))
+	draw_circle(Vector2(0, -27), 10.0, Color(Color("f2cca9"), alpha))
+	draw_rect(Rect2(-10, -38, 20, 8), Color(Color("2b2b2b"), alpha))
+	draw_circle(Vector2(-4, -26), 2.5, Color(Color("1e1e28"), alpha))
+	draw_circle(Vector2(4, -26), 2.5, Color(Color("1e1e28"), alpha))
 	if active:
 		# 바라보는 칸 표시
 		var target := Farm.center_of(facing_cell()) - position
-		draw_rect(Rect2(target - Vector2(15, 15), Vector2(30, 30)), Color(1, 1, 1, 0.6), false, 1.5)
-		draw_string(ThemeDB.fallback_font, Vector2(-30, -26), display_name, HORIZONTAL_ALIGNMENT_CENTER, 60, 10)
+		draw_rect(Rect2(target - Vector2(11, 11), Vector2(22, 22)), Color(1, 1, 1, 0.6), false, 1.5)
+		draw_string(ThemeDB.fallback_font, Vector2(-30, -42), display_name, HORIZONTAL_ALIGNMENT_CENTER, 60, 10)

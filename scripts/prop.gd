@@ -4,7 +4,7 @@ extends Node2D
 
 @export var label := ""
 @export var color := Color.WHITE
-@export var size := Vector2(28, 28)
+@export var size := Vector2(22, 22)
 
 var badge := ""
 

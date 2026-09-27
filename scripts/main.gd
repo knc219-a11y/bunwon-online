@@ -9,9 +9,9 @@ const TOOL_NAMES := {
 	Farm.Work.WATER: "물뿌리개",
 	Farm.Work.HARVEST: "수확",
 }
-const INCUBATOR_CELL := Vector2i(15, 3)
-const SUPPLY_CELL := Vector2i(15, 7)
-const HUNT_GATE_CELL := Vector2i(18, 5)
+const INCUBATOR_CELL := Vector2i(17, 4)
+const SUPPLY_CELL := Vector2i(17, 9)
+const HUNT_GATE_CELL := Vector2i(22, 6)
 
 var farm: Farm
 var farmer: Character
@@ -38,10 +38,10 @@ func _ready() -> void:
 
 	incubator = _add_prop("부화기", Color("e9d8a6"), INCUBATOR_CELL)
 	supply_box = _add_prop("마을 공급함", Color("c08552"), SUPPLY_CELL)
-	hunt_gate = _add_prop("사냥터 입구", Color("5c4d7d"), HUNT_GATE_CELL, Vector2(20, 48))
+	hunt_gate = _add_prop("사냥터 입구", Color("5c4d7d"), HUNT_GATE_CELL, Vector2(16, 40))
 
-	farmer = _add_character("농부", Color("8d99ae"), Vector2i(7, 1))
-	hunter = _add_character("사냥꾼", Color("6a994e"), Vector2i(16, 5))
+	farmer = _add_character("농부", Color("8d99ae"), Vector2i(14, 6))
+	hunter = _add_character("사냥꾼", Color("6a994e"), Vector2i(20, 6))
 	_set_active(farmer)
 
 	_build_hud()
@@ -51,7 +51,7 @@ func _ready() -> void:
 	GameState.notify("농부로 밭을 가꿔 보자. 마을 공급함에 알이 하나 있다.")
 
 
-func _add_prop(label: String, color: Color, cell: Vector2i, size := Vector2(28, 28)) -> Prop:
+func _add_prop(label: String, color: Color, cell: Vector2i, size := Vector2(22, 22)) -> Prop:
 	var p := Prop.new()
 	p.label = label
 	p.color = color

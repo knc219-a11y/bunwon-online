@@ -76,7 +76,7 @@ func _reset_timer() -> void:
 func _process(delta: float) -> void:
 	_bob += delta * (2.0 if job == CreatureJobs.REST else 6.0)
 	if carried_by != null:
-		position = carried_by.position + Vector2(0, -34)
+		position = carried_by.position + Vector2(0, -48)
 	else:
 		_timer -= delta
 		if _timer <= 0.0:
@@ -89,13 +89,14 @@ func _draw() -> void:
 	var squash := 1.0 + 0.08 * sin(_bob)
 	draw_set_transform(Vector2(0, 4), 0.0, Vector2(squash, 2.0 - squash))
 	var body := data.elements[0].color if not data.elements.is_empty() else data.species.color
-	draw_circle(Vector2.ZERO, 9.0, body)
+	# 슬라임 가로 약 22px (2026-09-27 결정)
+	draw_circle(Vector2.ZERO, 11.0, body)
 	draw_set_transform(Vector2.ZERO)
-	draw_circle(Vector2(-3, 2), 1.5, Color.BLACK)
-	draw_circle(Vector2(3, 2), 1.5, Color.BLACK)
+	draw_circle(Vector2(-4, 2), 1.5, Color.BLACK)
+	draw_circle(Vector2(4, 2), 1.5, Color.BLACK)
 	if job == CreatureJobs.REST:
 		return
-	draw_string(ThemeDB.fallback_font, Vector2(-20, -10), CreatureJobs.display_name(job), HORIZONTAL_ALIGNMENT_CENTER, 40, 9)
+	draw_string(ThemeDB.fallback_font, Vector2(-20, -12), CreatureJobs.display_name(job), HORIZONTAL_ALIGNMENT_CENTER, 40, 9)
 	if carried_by == null:
 		# 작업 범위 표시
 		var radius := data.work_radius()
