@@ -32,6 +32,8 @@ class Cell:
 var _cells: Dictionary[Vector2i, Cell] = {}
 var _path: Dictionary[Vector2i, bool] = {}
 var _fence: Dictionary[Vector2i, bool] = {}
+## 캐릭터·크리처가 지나갈 수 없는 영역 (월드 좌표 px). 울타리 칸과 집·나무·마을 오브젝트의 막는 범위.
+var _blockers: Array[Rect2] = []
 
 
 func _ready() -> void:
@@ -51,6 +53,8 @@ func _ready() -> void:
 		_fence[Vector2i(f.end.x - 1, y)] = true
 	for gap in Config.FENCE_GAPS:
 		_fence.erase(gap)
+	for cell: Vector2i in _fence:
+		_add_fence_blockers(cell)
 
 
 static func cell_of(pos: Vector2) -> Vector2i:
@@ -116,7 +120,8 @@ func advance_day() -> void:
 
 
 ## center 기준 반경 안에서 해당 작업이 가능한 가장 가까운 칸. 없으면 null.
-func find_work(work: Work, center: Vector2i, radius: int, exclude: Array[Vector2i] = []) -> Variant:
+## from 을 주면 거기서 곧게 갈 수 없는 칸(울타리·집 너머)은 뺀다.
+func find_work(work: Work, center: Vector2i, radius: int, exclude: Array[Vector2i] = [], from: Variant = null) -> Variant:
 	var best: Variant = null
 	var best_dist := INF
 	for dx in range(-radius, radius + 1):
@@ -124,11 +129,56 @@ func find_work(work: Work, center: Vector2i, radius: int, exclude: Array[Vector2
 			var cell := center + Vector2i(dx, dy)
 			if cell in exclude or not can_do(work, cell):
 				continue
+			if from != null and not line_clear(from, center_of(cell)):
+				continue
 			var d := Vector2(dx, dy).length()
 			if d < best_dist:
 				best_dist = d
 				best = cell
 	return best
+
+
+## 울타리 한 칸이 막는 범위: 그림처럼 가운데 기둥 발(y=18 근처)과 이웃 쪽으로 뻗은 가로대만 막는다.
+## 칸 전체를 막으면 흙길 입구가 너무 좁아진다.
+func _add_fence_blockers(cell: Vector2i) -> void:
+	var o := Vector2(cell * Config.TILE)
+	var m := _mask(cell, _is_fence)
+	add_blocker(Rect2(o + Vector2(8, 12), Vector2(8, 10)))
+	if m & 1:
+		add_blocker(Rect2(o + Vector2(9, 0), Vector2(6, 12)))
+	if m & 4:
+		add_blocker(Rect2(o + Vector2(9, 22), Vector2(6, 2)))
+	if m & 8:
+		add_blocker(Rect2(o + Vector2(0, 12), Vector2(8, 10)))
+	if m & 2:
+		add_blocker(Rect2(o + Vector2(16, 12), Vector2(8, 10)))
+
+
+func add_blocker(rect: Rect2) -> void:
+	_blockers.append(rect)
+
+
+func blockers() -> Array[Rect2]:
+	return _blockers
+
+
+## 영역이 막는 범위와 겹치지 않으면 true.
+func is_free(rect: Rect2) -> bool:
+	for b in _blockers:
+		if b.intersects(rect):
+			return false
+	return true
+
+
+## a 에서 b 까지 곧게 가는 길에 막는 범위가 없으면 true. 크리처가 울타리·집을 넘어 깡충 뛰지 않게 한다.
+func line_clear(a: Vector2, b: Vector2) -> bool:
+	var steps := ceili(a.distance_to(b) / 4.0)
+	for i in steps + 1:
+		var p := a.lerp(b, float(i) / maxi(steps, 1))
+		for r in _blockers:
+			if r.has_point(p):
+				return false
+	return true
 
 
 ## 이웃 중 같은 바닥인 쪽의 비트를 모은다. 타일셋 열 번호가 된다.

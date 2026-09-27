@@ -193,6 +193,51 @@ func _ready() -> void:
 	var house_front := Vector2i(main.HOUSE_RECT.position.x + 2, main.HOUSE_RECT.end.y)
 	_check(farm._is_path(house_front) and farm._mask(house_front, farm._is_path) == 8, "농부 집 현관 앞까지 흙길이 이어짐")
 
+	# 13) 충돌과 앞뒤 가림: 집·나무는 밑동만 막고, 뒤로 가면 반투명. 울타리는 입구만 열림
+	var house: Prop = main.house
+	farmer.position = Farm.center_of(Vector2i(22, 13))
+	for i in 30:
+		farmer.step(Vector2(0, -2))
+	_check(farmer.feet().y >= house.sort_y(), "집 벽으로는 못 들어감")
+	farmer.position = Farm.center_of(Vector2i(19, 9)) + Vector2(0, -4)
+	for i in 40:
+		farmer.step(Vector2(1.5, 0))
+	await get_tree().process_frame
+	_check(farmer.position.x > Farm.center_of(Vector2i(21, 9)).x, "집 지붕 뒤로는 지나감")
+	_check(farmer.z_index < house.z_index, "집 뒤에 있으면 집보다 먼저 그림")
+	main.update_fading()
+	_check(house.faded, "집에 가려지면 집이 반투명")
+	farmer.position = Farm.center_of(Vector2i(22, 13))
+	await get_tree().process_frame
+	main.update_fading()
+	_check(farmer.z_index > house.z_index and not house.faded, "집 앞에 있으면 캐릭터가 앞, 집은 그대로")
+	farmer.position = Farm.center_of(Vector2i(25, 8))
+	for i in 40:
+		farmer.step(Vector2(0, -1.5))
+	_check(farmer.feet().y > Farm.center_of(Vector2i(25, 6)).y, "감나무 밑동은 막힘")
+	farmer.position = Farm.center_of(Vector2i(6, 3))
+	for i in 40:
+		farmer.step(Vector2(0, -2))
+	_check(farmer.cell().y >= Config.FENCE_RECT.position.y + 1, "밭 울타리는 못 넘음")
+	farmer.position = Farm.center_of(Vector2i(15, 6))
+	for i in 60:
+		farmer.step(Vector2(-2, 0))
+	_check(farmer.cell().x <= Config.FIELD_RECT.end.x - 1, "흙길 입구로는 밭에 들어감")
+	# 슬라임은 울타리 너머 칸으로 깡충 뛰지 않는다
+	var outside := Vector2i(Config.FENCE_RECT.end.x, 4)
+	var inside := Vector2i(Config.FIELD_RECT.end.x - 1, 4)
+	farm.do_work(Farm.Work.TILL, inside)
+	farm.do_work(Farm.Work.SOW, inside)
+	_check(farm.find_work(Farm.Work.WATER, outside, 2) == inside, "울타리 밖에서도 범위 안에는 밭이 있음")
+	_check(farm.find_work(Farm.Work.WATER, outside, 2, [], Farm.center_of(outside)) == null, "슬라임은 울타리를 넘어 일하러 가지 않음")
+	_check(farm.find_work(Farm.Work.WATER, inside + Vector2i.LEFT, 2, [], Farm.center_of(inside + Vector2i.LEFT)) == inside, "울타리 안에서는 그대로 일함")
+	# 들고 있는 슬라임은 든 캐릭터 앞에 그림
+	var carried: Creature = main.creatures[1]
+	carried.pick_up(farmer)
+	await get_tree().process_frame
+	_check(carried.z_index > farmer.z_index, "들고 있는 슬라임은 캐릭터 앞에 그림")
+	carried.place(Vector2i(6, 6))
+
 	print("SMOKE TEST: %s (%d failures)" % ["PASS" if _failures == 0 else "FAIL", _failures])
 	get_tree().quit(1 if _failures > 0 else 0)
 

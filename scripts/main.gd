@@ -13,10 +13,15 @@ const TOOL_NAMES := {
 const INCUBATOR_RECT := Rect2i(17, 3, 2, 2)
 const SUPPLY_RECT := Rect2i(17, 9, 2, 1)
 const HUNT_GATE_RECT := Rect2i(21, 3, 3, 2)
-## 배경 오브젝트 (2026-09-27 결정: 집 B 양옥, 나무 감나무 + 당산나무 하나). 자리는 임시 배치. 아직 충돌 없음.
+## 배경 오브젝트 (2026-09-27 결정: 집 B 양옥, 나무 감나무 + 당산나무 하나). 자리는 임시 배치.
 const HOUSE_RECT := Rect2i(20, 8, 5, 4)
 const DANGSAN_RECT := Rect2i(13, 11, 2, 2)
 const PERSIMMON_CELLS: Array[Vector2i] = [Vector2i(2, 12), Vector2i(7, 12), Vector2i(11, 12), Vector2i(15, 3), Vector2i(25, 6)]
+## 막는 범위 (그림 아래쪽 가운데 기준, px). 2026-09-27 결정 C: 집은 벽 두 줄, 나무는 밑동만 막고
+## 지붕·나뭇잎 뒤로는 지나간다. 뒤로 가면 가리는 그림이 반투명해진다.
+const HOUSE_BLOCK := Rect2(-60, -48, 120, 48)
+const PERSIMMON_BLOCK := Rect2(-8, -12, 16, 12)
+const DANGSAN_BLOCK := Rect2(-20, -18, 40, 18)
 ## 알이 부화하면 크리처가 나타나는 칸 (부화기 왼쪽 아래)
 const HATCH_CELL := Vector2i(16, 5)
 
@@ -26,6 +31,8 @@ var hunter: Character
 var incubator: Prop
 var supply_box: Prop
 var hunt_gate: Prop
+var house: Prop
+var props: Array[Prop] = []
 var creatures: Array[Creature] = []
 var active: Character
 var tool_index := 0
@@ -41,12 +48,15 @@ var _message: Label
 func _ready() -> void:
 	GameState.reset()
 	farm = Farm.new()
+	# 바닥은 앞뒤 가림(z_index = 발 y)보다 항상 뒤
+	farm.z_index = -1000
 	add_child(farm)
 
-	_add_prop("", preload("res://assets/props/house.png"), HOUSE_RECT)
-	_add_prop("", preload("res://assets/props/tree_dangsan.png"), DANGSAN_RECT)
+	house = _add_prop("", preload("res://assets/props/house.png"), HOUSE_RECT, HOUSE_BLOCK, true)
+	_add_prop("", preload("res://assets/props/tree_dangsan.png"), DANGSAN_RECT, DANGSAN_BLOCK, true)
 	for cell in PERSIMMON_CELLS:
-		_add_prop("", preload("res://assets/props/tree_persimmon.png"), Rect2i(cell, Vector2i.ONE))
+		_add_prop("", preload("res://assets/props/tree_persimmon.png"), Rect2i(cell, Vector2i.ONE), PERSIMMON_BLOCK, true)
+	# 부화기·공급함·사냥터 입구는 키가 낮아 차지하는 칸 전체를 막는다
 	incubator = _add_prop("부화기", preload("res://assets/props/incubator.png"), INCUBATOR_RECT)
 	supply_box = _add_prop("마을 공급함", preload("res://assets/props/supply_box.png"), SUPPLY_RECT)
 	hunt_gate = _add_prop("사냥터 입구", preload("res://assets/props/hunt_gate.png"), HUNT_GATE_RECT)
@@ -62,12 +72,16 @@ func _ready() -> void:
 	GameState.notify("농부로 밭을 가꿔 보자. 마을 공급함에 알이 하나 있다.")
 
 
-func _add_prop(label: String, texture: Texture2D, rect: Rect2i) -> Prop:
+func _add_prop(label: String, texture: Texture2D, rect: Rect2i, block := Rect2(), fade := false) -> Prop:
 	var p := Prop.new()
 	p.label = label
 	p.texture = texture
 	p.place(rect.position, rect.size)
+	p.blocker = block if block.has_area() else p.footprint_rect()
+	p.fade_behind = fade
 	add_child(p)
+	props.append(p)
+	farm.add_blocker(p.blocker_world())
 	return p
 
 
@@ -76,6 +90,7 @@ func _add_character(display_name: String, sheet: Texture2D, cell: Vector2i) -> C
 	c.display_name = display_name
 	c.sheet = sheet
 	c.position = Farm.center_of(cell)
+	c.farm = farm
 	add_child(c)
 	return c
 
@@ -86,6 +101,24 @@ func _set_active(c: Character) -> void:
 	active = c
 	active.active = true
 	GameState.touch()
+
+
+func _process(_delta: float) -> void:
+	update_fading()
+
+
+## 캐릭터·크리처가 집·나무 그림 뒤에 가려지면 그 그림을 반투명하게 한다.
+func update_fading() -> void:
+	for p in props:
+		if not p.fade_behind:
+			continue
+		var pic := Rect2(p.picture_rect().position + p.position, p.picture_rect().size)
+		var hidden := false
+		for c: Character in [farmer, hunter]:
+			hidden = hidden or (c.sort_y() < p.sort_y() and pic.intersects(Rect2(c.position + Vector2(-8, -30), Vector2(16, 40))))
+		for s in creatures:
+			hidden = hidden or (s.carried_by == null and s.sort_y() < p.sort_y() and pic.intersects(Rect2(s.position + Vector2(-8, -10), Vector2(16, 18))))
+		p.set_faded(hidden)
 
 
 func _unhandled_input(event: InputEvent) -> void:

@@ -11,6 +11,8 @@ const IDLE_FPS := 2.0
 const WALK_FPS := 8.0
 ## 발바닥이 캐릭터 위치보다 이만큼 아래 (칸 아래쪽)
 const FEET_Y := 10
+## 막는 범위와 부딪히는 발밑 상자 크기 (발바닥 가운데 기준)
+const FEET_BOX := Vector2(12, 6)
 
 @export var display_name := ""
 @export var sheet: Texture2D
@@ -20,6 +22,8 @@ var active := false:
 		active = v
 		_update_sprite()
 		queue_redraw()
+## 막는 범위를 알려 주는 농장. null 이면 어디든 지나간다.
+var farm: Farm
 var facing := Vector2i.DOWN
 var moving := false
 
@@ -38,8 +42,34 @@ func _ready() -> void:
 	_update_sprite()
 
 
+## 발이 딛고 있는 칸
 func cell() -> Vector2i:
-	return Farm.cell_of(position)
+	return Farm.cell_of(feet())
+
+
+func feet() -> Vector2:
+	return position + Vector2(0, FEET_Y)
+
+
+## 앞뒤 가림 기준 y (발바닥). 이 값이 작을수록 뒤에 그린다.
+func sort_y() -> float:
+	return feet().y
+
+
+## at 에 서 있을 때 발밑 상자
+func feet_rect(at: Vector2) -> Rect2:
+	return Rect2(at + Vector2(-FEET_BOX.x / 2, FEET_Y - FEET_BOX.y / 2), FEET_BOX)
+
+
+## 한 걸음 움직인다. 가로·세로를 따로 막아 벽을 따라 미끄러지게 한다.
+func step(motion: Vector2) -> void:
+	var bounds := Vector2(Config.MAP_SIZE * Config.TILE)
+	for axis: Vector2 in [Vector2(motion.x, 0), Vector2(0, motion.y)]:
+		if axis == Vector2.ZERO:
+			continue
+		var to := (position + axis).clamp(Vector2(8, 8), bounds - Vector2(8, 8))
+		if farm == null or farm.is_free(feet_rect(to)):
+			position = to
 
 
 func facing_cell() -> Vector2i:
@@ -56,14 +86,14 @@ func _process(delta: float) -> void:
 		_anim_time = 0.0
 	_anim_time += delta
 	_update_sprite()
+	z_index = int(sort_y())
 	if not moving:
 		return
 	if absf(dir.x) > absf(dir.y):
 		facing = Vector2i(int(signf(dir.x)), 0)
 	else:
 		facing = Vector2i(0, int(signf(dir.y)))
-	var bounds := Vector2(Config.MAP_SIZE * Config.TILE)
-	position = (position + dir * Config.CHARACTER_SPEED * delta).clamp(Vector2(8, 8), bounds - Vector2(8, 8))
+	step(dir * Config.CHARACTER_SPEED * delta)
 	queue_redraw()
 
 
