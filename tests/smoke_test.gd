@@ -54,6 +54,37 @@ func _ready() -> void:
 	_check(not main.supply_options().has(&"expand_field"), "다 넓히면 선택창에서 빠짐")
 	main.close_menu()
 
+	# 1-2) 도구 강화 (A 첫 조각): 괭이·물뿌리개를 공급함에서 사면 앞 3칸 일자에 한 번에 쓴다
+	_check(main.supply_options().has(&"upgrade_hoe") and main.supply_option_text(&"upgrade_can").contains("큰 물뿌리개"), "공급함에 도구 손보기")
+	_check(not main.supply_action(&"upgrade_hoe") and GameState.tool_level(Farm.Work.TILL) == 0, "돈이 모자라면 도구를 못 바꿈")
+	var row := Vector2i(8, 3)
+	farmer.position = Farm.center_of(row + Vector2i.LEFT)
+	farmer.facing = Vector2i.RIGHT
+	main.tool_index = 0
+	main.use_tool()
+	_check(farm0.get_cell(row).tilled and not farm0.get_cell(row + Vector2i.RIGHT).tilled, "처음 괭이는 한 칸만")
+	GameState.money = Config.HOE_UPGRADE_PRICE + Config.CAN_UPGRADE_PRICE + Config.HUNTER_KNIFE_PRICE
+	_check(main.supply_action(&"upgrade_hoe") and main.supply_action(&"upgrade_can") and main.supply_action(&"buy_knife") and GameState.money == 0, "넓은 괭이 · 큰 물뿌리개 · 사냥칼 사기")
+	_check(not main.supply_action(&"upgrade_hoe") and not main.supply_options().has(&"upgrade_can") and not main.supply_options().has(&"buy_knife"), "산 도구는 선택창에서 빠짐")
+	main._refresh_hud()
+	_check(main._status.text.contains("넓은 괭이"), "HUD에 바뀐 도구 이름")
+	main.use_tool()
+	_check(farm0.get_cell(row + Vector2i(1, 0)).tilled and farm0.get_cell(row + Vector2i(2, 0)).tilled and not farm0.get_cell(row + Vector2i(3, 0)).tilled, "넓은 괭이는 앞 3칸 일자")
+	main.tool_index = 1
+	for i in 3:
+		farmer.position = Farm.center_of(row + Vector2i(i - 1, 0))
+		main.use_tool()
+	main.tool_index = 2
+	farmer.position = Farm.center_of(row + Vector2i.LEFT)
+	main.use_tool()
+	_check(farm0.get_cell(row).watered and farm0.get_cell(row + Vector2i(2, 0)).watered, "큰 물뿌리개는 심은 3칸에 한 번에 물")
+	for i in 3:
+		var rc: Farm.Cell = farm0.get_cell(row + Vector2i(i, 0))
+		rc.tilled = false
+		rc.planted = false
+		rc.watered = false
+	main.close_menu()
+
 	# 2) 시작 상태: 공급함에 알 1개, 사냥꾼은 잠김
 	_check(GameState.village_eggs.size() == Config.START_VILLAGE_EGGS and GameState.village_eggs[0] == CreatureCatalog.SLIME, "공급함에 슬라임 알 1개로 시작")
 	main.switch_character()
@@ -314,6 +345,17 @@ func _ready() -> void:
 	var quiet: Array[String] = main.next_day()
 	_check(not "\n".join(quiet).contains("팔렸다") and GameState.money == 3 * Config.CROP_PRICE - Config.SEED_PACK_PRICE, "진열한 게 없으면 정산 없음")
 	main.close_menu()
+
+	# 16) 튼튼한 사냥칼: 이후 태어나는 크리처는 능력치 바닥 보장 (첫 크리처와 같은 값)
+	var weakest := 99.0
+	var smallest := 99
+	for i in 30:
+		var k: Creature = main._hatch(CreatureCatalog.SLIME, Vector2i(3, 12))
+		weakest = minf(weakest, k.data.base_work_speed)
+		smallest = mini(smallest, k.data.base_radius)
+		main.creatures.erase(k)
+		k.queue_free()
+	_check(weakest >= Config.FIRST_CREATURE_MIN_WORK_SPEED and smallest >= Config.FIRST_CREATURE_MIN_RADIUS, "사냥칼이 있으면 능력치 바닥 보장")
 
 	print("SMOKE TEST: %s (%d failures)" % ["PASS" if _failures == 0 else "FAIL", _failures])
 	get_tree().quit(1 if _failures > 0 else 0)
