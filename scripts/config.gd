@@ -14,12 +14,12 @@ const CROP_GROW_DAYS := 3
 ## 수확하면 돌려받는 씨앗 수
 const SEEDS_PER_HARVEST := 1
 
-## 시작할 때 마을 공급함에 들어 있는 알 (첫 알 획득 이벤트는 미정이라 임시로 채워 둠)
+## 시작할 때 마을 공급함에 들어 있는 알 수 (첫 알 획득 이벤트는 미정이라 임시로 채워 둠)
 const START_VILLAGE_EGGS := 1
 const EGG_HATCH_DAYS := 1
-## 첫 슬라임은 운과 상관없이 쓸 만하도록 최저 능력치를 보장한다
-const FIRST_SLIME_MIN_SPEED := 1.0
-const FIRST_SLIME_MIN_RADIUS := 2
+## 첫 크리처는 운과 상관없이 쓸 만하도록 최저 능력치를 보장한다
+const FIRST_CREATURE_MIN_WORK_SPEED := 1.0
+const FIRST_CREATURE_MIN_RADIUS := 2
 ## 사냥꾼은 하루 한 번 사냥을 다녀온다 (전투 구현 전 대체 동작)
 const HUNTS_PER_DAY := 1
 
@@ -27,5 +27,5 @@ const CHARACTER_SPEED := 110.0
 const INTERACT_DISTANCE := 40.0
 
 ## 크리처 작업 간격(초). 개체 속도로 나눈다.
-const SLIME_WORK_INTERVAL := 1.6
-const SLIME_HOP_TIME := 0.35
+const CREATURE_WORK_INTERVAL := 1.6
+const CREATURE_HOP_TIME := 0.35

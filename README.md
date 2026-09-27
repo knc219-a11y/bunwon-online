@@ -30,7 +30,7 @@
 | Space | 도구 사용 (농부) |
 | Q / E | 도구 변경 |
 | F | 상호작용 (공급함, 부화기, 사냥터 입구, 슬라임 들기/내려놓기) |
-| R | 가까운 슬라임 역할 바꾸기 |
+| R | 가까운 크리처가 맡을 일 바꾸기 |
 | Tab | 농부 ↔ 사냥꾼 전환 |
 | N | 다음 날 (강제 취침 없음) |
 
@@ -40,7 +40,8 @@
 - `scripts/game_state.gd` 전역 상태와 입력 등록 (autoload)
 - `scripts/farm.gd` 밭 타일 상태와 농사 동작
 - `scripts/character.gd` 농부·사냥꾼
-- `scripts/slime.gd` 슬라임 능력치, 역할, 자동 작업
+- `scripts/creatures/` 크리처 시스템 (종, 속성, Trait, 개체, 일). 자세한 내용은 [docs/creatures.md](docs/creatures.md)
+- `data/creatures/` 종·속성·Trait 데이터 파일
 - `scripts/main.gd` 화면 구성과 상호작용
 - `tests/smoke_test.tscn` 핵심 순환 자동 테스트
 
@@ -61,3 +62,4 @@ godot --headless --path . res://tests/smoke_test.tscn
 - 첫 슬라임 최저 능력치 보장: 속도 1.0 이상, 범위 2 이상
 - 알은 1일 뒤 부화
 - Trait 3종(평범함, 부지런함, 넓은 시야)과 능력치 범위
+- 속성 예시 2종: 물(급수 재능 1.5배), 비행(이동 1.6배). 슬라임은 아직 무속성

@@ -1,0 +1,9 @@
+[gd_resource type="Resource" script_class="CreatureTrait" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/creatures/creature_trait.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"keen_eye"
+display_name = "넓은 시야"
+radius_bonus = 1

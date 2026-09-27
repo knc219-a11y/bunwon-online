@@ -1,0 +1,50 @@
+# 크리처 시스템
+
+여러 몬스터를 데이터 파일만 추가해서 늘릴 수 있게 만든 구조다.
+지금 게임에 나오는 종은 슬라임 하나지만, 새 종·속성·Trait·일은 코드 수정 없이(또는 최소한으로) 추가한다.
+
+## 구성
+
+| 개념 | 파일 | 역할 |
+|---|---|---|
+| 일 (Job) | `scripts/creatures/creature_jobs.gd` | 크리처가 맡는 일의 id. 지금은 쉬기, 파종, 급수, 수확 |
+| 속성 (Element) | `data/creatures/elements/*.tres` | 물, 비행 등. 일별 재능 배율과 이동 속도 배율 |
+| Trait | `data/creatures/traits/*.tres` | 개체 특성. 작업 속도, 이동 속도, 범위, 일별 재능 |
+| 종 (Species) | `data/creatures/species/*.tres` | 몬스터 종류. 속성 목록, 고유 재능, 부화 시 능력치 범위, Trait 후보 |
+| 개체 (CreatureData) | `scripts/creatures/creature_data.gd` | 부화로 태어난 한 마리. 능력치와 Trait은 부화할 때 정해짐 |
+| 목록 (Catalog) | `scripts/creatures/creature_catalog.gd` | 시작 알, 사냥에서 나오는 알 후보, 첫 크리처의 일 |
+| 농장 위 크리처 | `scripts/creatures/creature.gd` | 움직임과 그리기. 데이터는 CreatureData 에 있음 |
+
+알은 종 정보만 가진다. 능력치와 Trait은 부화할 때 굴려서 정한다 (부화 전 선별 방지 원칙).
+
+## 능력치 계산
+
+```
+일 재능   = 종 재능[일] × 각 속성 재능[일] × Trait 재능[일]      (없으면 1.0)
+작업 속도 = 부화 때 굴린 기본 작업 속도 × 일 재능 × Trait 작업 속도 배율
+이동 속도 = 종 이동 속도 × 각 속성 이동 배율 × Trait 이동 배율
+작업 범위 = 부화 때 굴린 기본 범위 + Trait 범위 보너스
+```
+
+예: 물속성(`water.tres`)은 급수 재능 1.5배라서, 같은 개체라도 급수를 맡기면 1.5배 빠르다.
+비행(`flying.tres`)은 이동 속도 1.6배라서 밭 사이를 더 빨리 오간다.
+
+## 새 몬스터 추가하기
+
+1. Godot 파일시스템에서 `data/creatures/species/` 에 새 리소스 → `CreatureSpecies` 선택
+2. 이름, 속성, 고유 재능, 능력치 범위, Trait 후보, 임시 색을 채운다
+3. `creature_catalog.gd` 의 `HUNT_TABLE` (또는 다른 획득 경로)에 넣는다
+
+새 속성이나 Trait도 같은 방식으로 `data/creatures/elements/`, `data/creatures/traits/` 에 리소스를 만들면 된다.
+
+## 새 직업의 일 추가하기 (전투, 대장장이, 연금술 등)
+
+1. `creature_jobs.gd` 에 일 id와 이름을 추가
+2. 종·속성·Trait 의 `job_aptitude` 에 그 id로 재능 배율을 적는다
+3. 그 일을 실제로 수행하는 쪽(전투 시스템, 대장간 등)에서 `data.work_speed(id)` 나 `data.aptitude(id)` 를 읽어 쓴다
+
+## 아직 정하지 않은 것
+
+- 슬라임의 속성 (지금은 무속성으로 둠)
+- 어떤 속성과 종을 첫 출시에 넣을지
+- 재능 배율, Trait 종류와 수치 (전부 임시값)

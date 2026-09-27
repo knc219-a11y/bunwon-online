@@ -7,12 +7,13 @@ signal message(text: String)
 var day := 1
 var seeds := Config.START_SEEDS
 var crops := 0
+## 알은 종 정보만 가진다. 능력치와 Trait은 부화할 때 정해진다.
 ## 농부가 들고 있는 알
-var farmer_eggs := 0
+var farmer_eggs: Array[CreatureSpecies] = []
 ## 사냥꾼이 들고 있는 알 (마을 공급함에 넣기 전)
-var hunter_eggs := 0
+var hunter_eggs: Array[CreatureSpecies] = []
 ## 마을 공급함에 있는 알
-var village_eggs := 0
+var village_eggs: Array[CreatureSpecies] = []
 var hunts_today := 0
 ## 사냥꾼 조작 해금 여부. 첫 슬라임을 밭에 배치하면 열린다 (임시 조건).
 var hunter_unlocked := false
@@ -35,9 +36,11 @@ func reset() -> void:
 	day = 1
 	seeds = Config.START_SEEDS
 	crops = 0
-	farmer_eggs = 0
-	hunter_eggs = 0
-	village_eggs = Config.START_VILLAGE_EGGS
+	farmer_eggs = []
+	hunter_eggs = []
+	village_eggs = []
+	for i in Config.START_VILLAGE_EGGS:
+		village_eggs.append(CreatureCatalog.STARTER_EGG)
 	hunts_today = 0
 	hunter_unlocked = false
 	changed.emit()
@@ -54,7 +57,7 @@ func _register_inputs() -> void:
 		"interact": [KEY_F, KEY_K],
 		"tool_prev": [KEY_Q],
 		"tool_next": [KEY_E],
-		"slime_role": [KEY_R],
+		"creature_job": [KEY_R],
 		"switch_character": [KEY_TAB],
 		"next_day": [KEY_N],
 	}
