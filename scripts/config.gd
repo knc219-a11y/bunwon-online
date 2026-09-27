@@ -9,6 +9,8 @@ const TILE := 24
 const MAP_SIZE := Vector2i(26, 15)
 ## 밭으로 쓸 수 있는 영역 (타일 좌표)
 const FIELD_RECT := Rect2i(1, 2, 12, 8)
+## 흙길 (타일 좌표). 밭 → 부화기·공급함 → 사냥터 입구를 잇는 임시 배치
+const PATH_RECTS: Array[Rect2i] = [Rect2i(13, 6, 9, 1), Rect2i(17, 5, 1, 4)]
 
 const START_SEEDS := 20
 ## 물을 준 날이 이만큼 쌓이면 수확 가능

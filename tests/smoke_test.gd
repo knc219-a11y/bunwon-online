@@ -150,6 +150,23 @@ func _ready() -> void:
 		_check(tex != null and tex.get_width() == 32 * 10 and tex.get_height() == 32, "%s 슬라임 시트 320x32" % id)
 	_check(slime.frame_column() in Creature.IDLE_COLUMNS, "일이 끝나면 대기 동작")
 
+	# 10) 농장 바닥 타일: 타일셋 규격, 작물 성장 단계, 이웃 연결
+	_check(Farm.TILES.get_width() == 24 * 16 and Farm.TILES.get_height() == 24 * 4, "농장 타일셋 384x96")
+	_check(Farm.CROPS.get_width() == 24 * 4 and Farm.CROPS.get_height() == 24, "작물 시트 96x24")
+	var crop := Farm.Cell.new()
+	crop.planted = true
+	var stages: Array[int] = []
+	for g in Config.CROP_GROW_DAYS + 1:
+		crop.growth = g
+		stages.append(Farm.crop_stage(crop))
+	_check(stages.front() == 0 and stages.back() == 3 and stages.has(1) and stages.has(2), "작물 성장 4단계 %s" % [stages])
+	var fx := Config.FIELD_RECT.position + Vector2i(4, 4)
+	for d in [Vector2i.ZERO, Vector2i.RIGHT, Vector2i.DOWN, Vector2i.UP, Vector2i.LEFT]:
+		main.farm.get_cell(fx + d).tilled = d in [Vector2i.ZERO, Vector2i.RIGHT, Vector2i.DOWN]
+	main.farm.get_cell(fx + Vector2i.DOWN).watered = true
+	_check(main.farm._mask(fx, main.farm._is_tilled) == 2 | 4, "갈아 둔 밭은 오른쪽·아래 이웃과 연결 (젖은 밭 포함)")
+	_check(main.farm._mask(Vector2i(17, 6), main.farm._is_path) == 1 | 2 | 4 | 8, "흙길 교차점은 네 방향 연결")
+
 	print("SMOKE TEST: %s (%d failures)" % ["PASS" if _failures == 0 else "FAIL", _failures])
 	get_tree().quit(1 if _failures > 0 else 0)
 
