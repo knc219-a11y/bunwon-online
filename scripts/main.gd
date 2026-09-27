@@ -9,9 +9,12 @@ const TOOL_NAMES := {
 	Farm.Work.WATER: "물뿌리개",
 	Farm.Work.HARVEST: "수확",
 }
-const INCUBATOR_CELL := Vector2i(17, 4)
-const SUPPLY_CELL := Vector2i(17, 9)
-const HUNT_GATE_CELL := Vector2i(22, 6)
+## 마을 오브젝트가 차지하는 칸 (왼쪽 위 칸, 크기). 크기는 2026-09-27 결정, 자리는 임시 배치.
+const INCUBATOR_RECT := Rect2i(17, 3, 2, 2)
+const SUPPLY_RECT := Rect2i(17, 9, 2, 1)
+const HUNT_GATE_RECT := Rect2i(21, 3, 3, 2)
+## 알이 부화하면 크리처가 나타나는 칸 (부화기 왼쪽 아래)
+const HATCH_CELL := Vector2i(16, 5)
 
 var farm: Farm
 var farmer: Character
@@ -36,9 +39,9 @@ func _ready() -> void:
 	farm = Farm.new()
 	add_child(farm)
 
-	incubator = _add_prop("부화기", Color("e9d8a6"), INCUBATOR_CELL)
-	supply_box = _add_prop("마을 공급함", Color("c08552"), SUPPLY_CELL)
-	hunt_gate = _add_prop("사냥터 입구", Color("5c4d7d"), HUNT_GATE_CELL, Vector2(16, 40))
+	incubator = _add_prop("부화기", preload("res://assets/props/incubator.png"), INCUBATOR_RECT)
+	supply_box = _add_prop("마을 공급함", preload("res://assets/props/supply_box.png"), SUPPLY_RECT)
+	hunt_gate = _add_prop("사냥터 입구", preload("res://assets/props/hunt_gate.png"), HUNT_GATE_RECT)
 
 	farmer = _add_character("농부", preload("res://assets/characters/player.png"), Vector2i(14, 6))
 	hunter = _add_character("사냥꾼", preload("res://assets/characters/hunter.png"), Vector2i(20, 6))
@@ -51,12 +54,11 @@ func _ready() -> void:
 	GameState.notify("농부로 밭을 가꿔 보자. 마을 공급함에 알이 하나 있다.")
 
 
-func _add_prop(label: String, color: Color, cell: Vector2i, size := Vector2(22, 22)) -> Prop:
+func _add_prop(label: String, texture: Texture2D, rect: Rect2i) -> Prop:
 	var p := Prop.new()
 	p.label = label
-	p.color = color
-	p.size = size
-	p.position = Farm.center_of(cell)
+	p.texture = texture
+	p.place(rect.position, rect.size)
 	add_child(p)
 	return p
 
@@ -205,7 +207,7 @@ func next_day() -> void:
 	var text := "%d일째 아침." % GameState.day
 	if incubating_days == 0:
 		incubating_days = -1
-		var s := _hatch(incubating_species, INCUBATOR_CELL + Vector2i(-1, 1))
+		var s := _hatch(incubating_species, HATCH_CELL)
 		incubating_species = null
 		text += " 알이 부화했다! " + s.describe() + " F로 들어서 밭 옆에 놓아 주자."
 	_refresh_props()
@@ -228,8 +230,8 @@ func _hatch(species: CreatureSpecies, at_cell: Vector2i) -> Creature:
 
 # --- 보조 ------------------------------------------------------------------
 
-func _near(node: Node2D) -> bool:
-	return active.position.distance_to(node.position) <= Config.INTERACT_DISTANCE
+func _near(prop: Prop) -> bool:
+	return prop.is_near(active.position, Config.PROP_INTERACT_DISTANCE)
 
 
 func _nearest_creature() -> Creature:

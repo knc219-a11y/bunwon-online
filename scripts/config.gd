@@ -9,8 +9,8 @@ const TILE := 24
 const MAP_SIZE := Vector2i(26, 15)
 ## 밭으로 쓸 수 있는 영역 (타일 좌표)
 const FIELD_RECT := Rect2i(1, 2, 12, 8)
-## 흙길 (타일 좌표). 밭 → 부화기·공급함 → 사냥터 입구를 잇는 임시 배치
-const PATH_RECTS: Array[Rect2i] = [Rect2i(13, 6, 9, 1), Rect2i(17, 5, 1, 4)]
+## 흙길 (타일 좌표). 밭 → 부화기·공급함 → 사냥터 입구(오른쪽 위, 정면)를 잇는 임시 배치
+const PATH_RECTS: Array[Rect2i] = [Rect2i(13, 6, 10, 1), Rect2i(17, 5, 1, 4), Rect2i(22, 5, 1, 1)]
 
 const START_SEEDS := 20
 ## 물을 준 날이 이만큼 쌓이면 수확 가능
@@ -30,6 +30,8 @@ const HUNTS_PER_DAY := 1
 ## 초당 약 3.4타일
 const CHARACTER_SPEED := 82.0
 const INTERACT_DISTANCE := 30.0
+## 마을 오브젝트는 차지하는 칸 가장자리에서 이 거리 안이면 상호작용
+const PROP_INTERACT_DISTANCE := 16.0
 
 ## 크리처 작업 간격(초). 개체 속도로 나눈다.
 const CREATURE_WORK_INTERVAL := 1.6
