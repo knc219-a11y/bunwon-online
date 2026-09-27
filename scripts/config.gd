@@ -10,7 +10,11 @@ const MAP_SIZE := Vector2i(26, 15)
 ## 밭으로 쓸 수 있는 영역 (타일 좌표)
 const FIELD_RECT := Rect2i(1, 2, 12, 8)
 ## 흙길 (타일 좌표). 밭 → 부화기·공급함 → 사냥터 입구(오른쪽 위, 정면)를 잇는 임시 배치
-const PATH_RECTS: Array[Rect2i] = [Rect2i(13, 6, 10, 1), Rect2i(17, 5, 1, 4), Rect2i(22, 5, 1, 1)]
+## 큰길에서 x=19로 내려와 농부 집 현관(22, 12)까지 잇는 길 포함
+const PATH_RECTS: Array[Rect2i] = [Rect2i(13, 6, 10, 1), Rect2i(17, 5, 1, 4), Rect2i(22, 5, 1, 1), Rect2i(19, 7, 1, 6), Rect2i(20, 12, 3, 1)]
+## 밭 울타리: 밭 한 칸 바깥 둘레 (타일 좌표). 흙길이 들어오는 칸은 비운다.
+const FENCE_RECT := Rect2i(0, 1, 14, 10)
+const FENCE_GAPS: Array[Vector2i] = [Vector2i(13, 6)]
 
 const START_SEEDS := 20
 ## 물을 준 날이 이만큼 쌓이면 수확 가능

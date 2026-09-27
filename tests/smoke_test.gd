@@ -181,6 +181,18 @@ func _ready() -> void:
 		_check(not p.is_near(Farm.center_of(spec[2] + Vector2i(-3, 0)), Config.PROP_INTERACT_DISTANCE),
 			"%s 세 칸 떨어지면 상호작용 안 됨" % p.label)
 
+	# 12) 배경 오브젝트: 밭 울타리와 농부 집 앞 흙길
+	var farm: Farm = main.farm
+	_check(Farm.FENCE.get_size() == Vector2(384, 24), "울타리 시트 384x24")
+	_check(farm._mask(Vector2i(0, 1), farm._is_fence) == 2 | 4, "울타리 왼쪽 위 모서리는 오른쪽·아래 연결")
+	_check(not farm._is_fence(Vector2i(13, 6)) and farm._is_path(Vector2i(13, 6)), "흙길이 들어오는 칸은 울타리를 비움")
+	for x in Config.FIELD_RECT.size.x:
+		for y in Config.FIELD_RECT.size.y:
+			if farm._is_fence(Config.FIELD_RECT.position + Vector2i(x, y)):
+				_check(false, "밭 칸에 울타리가 있으면 안 됨")
+	var house_front := Vector2i(main.HOUSE_RECT.position.x + 2, main.HOUSE_RECT.end.y)
+	_check(farm._is_path(house_front) and farm._mask(house_front, farm._is_path) == 8, "농부 집 현관 앞까지 흙길이 이어짐")
+
 	print("SMOKE TEST: %s (%d failures)" % ["PASS" if _failures == 0 else "FAIL", _failures])
 	get_tree().quit(1 if _failures > 0 else 0)
 

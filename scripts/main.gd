@@ -13,6 +13,10 @@ const TOOL_NAMES := {
 const INCUBATOR_RECT := Rect2i(17, 3, 2, 2)
 const SUPPLY_RECT := Rect2i(17, 9, 2, 1)
 const HUNT_GATE_RECT := Rect2i(21, 3, 3, 2)
+## 배경 오브젝트 (2026-09-27 결정: 집 B 양옥, 나무 감나무 + 당산나무 하나). 자리는 임시 배치. 아직 충돌 없음.
+const HOUSE_RECT := Rect2i(20, 8, 5, 4)
+const DANGSAN_RECT := Rect2i(13, 11, 2, 2)
+const PERSIMMON_CELLS: Array[Vector2i] = [Vector2i(2, 12), Vector2i(7, 12), Vector2i(11, 12), Vector2i(15, 3), Vector2i(25, 6)]
 ## 알이 부화하면 크리처가 나타나는 칸 (부화기 왼쪽 아래)
 const HATCH_CELL := Vector2i(16, 5)
 
@@ -39,6 +43,10 @@ func _ready() -> void:
 	farm = Farm.new()
 	add_child(farm)
 
+	_add_prop("", preload("res://assets/props/house.png"), HOUSE_RECT)
+	_add_prop("", preload("res://assets/props/tree_dangsan.png"), DANGSAN_RECT)
+	for cell in PERSIMMON_CELLS:
+		_add_prop("", preload("res://assets/props/tree_persimmon.png"), Rect2i(cell, Vector2i.ONE))
 	incubator = _add_prop("부화기", preload("res://assets/props/incubator.png"), INCUBATOR_RECT)
 	supply_box = _add_prop("마을 공급함", preload("res://assets/props/supply_box.png"), SUPPLY_RECT)
 	hunt_gate = _add_prop("사냥터 입구", preload("res://assets/props/hunt_gate.png"), HUNT_GATE_RECT)
