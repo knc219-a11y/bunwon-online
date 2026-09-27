@@ -22,6 +22,13 @@ const CROP_GROW_DAYS := 3
 ## 수확하면 돌려받는 씨앗 수
 const SEEDS_PER_HARVEST := 1
 
+## 경제 첫 단계 (2026-09-27 결정 C): 공급함에 무를 진열하면 밤사이 팔리고 아침 카드에서 정산.
+## 씨앗은 공급함에서 바로 산다. 값은 전부 임시.
+const START_MONEY := 0
+const CROP_PRICE := 50
+const SEED_PACK_SIZE := 5
+const SEED_PACK_PRICE := 100
+
 ## 시작할 때 마을 공급함에 들어 있는 알 수 (첫 알 획득 이벤트는 미정이라 임시로 채워 둠)
 const START_VILLAGE_EGGS := 1
 const EGG_HATCH_DAYS := 1
