@@ -105,7 +105,8 @@ func find_work(work: Work, center: Vector2i, radius: int, exclude: Array[Vector2
 
 func _draw() -> void:
 	var t := Config.TILE
-	draw_rect(Rect2(Vector2.ZERO, Vector2(Config.MAP_SIZE * t)), Color("7fb069"))
+	# 맵(624px)이 화면(640px)보다 조금 좁아서 남는 오른쪽도 풀밭으로 채운다
+	draw_rect(get_viewport_rect().merge(Rect2(Vector2.ZERO, Vector2(Config.MAP_SIZE * t))), Color("7fb069"))
 	var field := Rect2(Vector2(Config.FIELD_RECT.position * t), Vector2(Config.FIELD_RECT.size * t))
 	draw_rect(field.grow(2), Color("5d7f45"), false, 2.0)
 	for cell: Vector2i in _cells:
@@ -116,8 +117,8 @@ func _draw() -> void:
 		if c.planted:
 			var p := center_of(cell)
 			if c.is_ripe():
-				draw_circle(p, 9.0, Color("f2a541"))
-				draw_circle(p + Vector2(0, -7), 4.0, Color("3f8f3a"))
+				draw_circle(p, 7.0, Color("f2a541"))
+				draw_circle(p + Vector2(0, -5), 3.0, Color("3f8f3a"))
 			else:
-				var size := 3.0 + 2.0 * c.growth
+				var size := 2.0 + 2.0 * c.growth
 				draw_circle(p, size, Color("3f8f3a"))

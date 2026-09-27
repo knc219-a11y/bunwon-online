@@ -76,7 +76,7 @@ func _reset_timer() -> void:
 func _process(delta: float) -> void:
 	_bob += delta * (2.0 if job == CreatureJobs.REST else 6.0)
 	if carried_by != null:
-		position = carried_by.position + Vector2(0, -34)
+		position = carried_by.position + Vector2(0, -48)
 	else:
 		_timer -= delta
 		if _timer <= 0.0:

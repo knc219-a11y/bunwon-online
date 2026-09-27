@@ -3,8 +3,10 @@ extends RefCounted
 ## 프로토타입 수치 모음.
 ## 여기 있는 값은 전부 "임시값"이다. 기획에서 확정된 수치가 아니다.
 
-const TILE := 32
-const MAP_SIZE := Vector2i(20, 11)
+## 아트 기준 (2026-09-27 결정): 기준 해상도 640x360, 타일 24px, 캐릭터 키 48px(타일 2칸)
+const TILE := 24
+## 640x360 화면에 들어가는 크기 (26 x 24 = 624px, 15 x 24 = 360px)
+const MAP_SIZE := Vector2i(26, 15)
 ## 밭으로 쓸 수 있는 영역 (타일 좌표)
 const FIELD_RECT := Rect2i(1, 2, 12, 8)
 
@@ -23,8 +25,9 @@ const FIRST_CREATURE_MIN_RADIUS := 2
 ## 사냥꾼은 하루 한 번 사냥을 다녀온다 (전투 구현 전 대체 동작)
 const HUNTS_PER_DAY := 1
 
-const CHARACTER_SPEED := 110.0
-const INTERACT_DISTANCE := 40.0
+## 초당 약 3.4타일
+const CHARACTER_SPEED := 82.0
+const INTERACT_DISTANCE := 30.0
 
 ## 크리처 작업 간격(초). 개체 속도로 나눈다.
 const CREATURE_WORK_INTERVAL := 1.6
