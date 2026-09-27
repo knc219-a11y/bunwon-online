@@ -36,7 +36,7 @@
 ## 새 몬스터 추가하기
 
 1. Godot 파일시스템에서 `data/creatures/species/` 에 새 리소스 → `CreatureSpecies` 선택
-2. 이름, 가질 수 있는 속성 후보, 고유 재능, 능력치 범위, Trait 후보, 임시 색을 채운다
+2. 이름, 가질 수 있는 속성 후보, 고유 재능, 능력치 범위, Trait 후보, 임시 색을 채운다. 속성별 스프라이트 시트가 있으면 `sprite_sheets`에 속성 id로 연결한다 (규격은 `docs/sprites.md`)
 3. `creature_catalog.gd` 의 `HUNT_TABLE` (또는 다른 획득 경로)에 넣는다
 
 새 속성이나 Trait도 같은 방식으로 `data/creatures/elements/`, `data/creatures/traits/` 에 리소스를 만들면 된다.

@@ -32,3 +32,5 @@ const INTERACT_DISTANCE := 30.0
 ## 크리처 작업 간격(초). 개체 속도로 나눈다.
 const CREATURE_WORK_INTERVAL := 1.6
 const CREATURE_HOP_TIME := 0.35
+## 도착한 칸에서 일하는 동작 시간(초). 급수 4프레임 x 8fps
+const CREATURE_WORK_ANIM_TIME := 0.5
