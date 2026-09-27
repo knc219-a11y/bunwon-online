@@ -14,6 +14,8 @@ const CROP_GROW_DAYS := 3
 ## 수확하면 돌려받는 씨앗 수
 const SEEDS_PER_HARVEST := 1
 
+## 시작할 때 마을 공급함에 들어 있는 알 (첫 알 획득 이벤트는 미정이라 임시로 채워 둠)
+const START_VILLAGE_EGGS := 1
 const EGG_HATCH_DAYS := 1
 ## 사냥꾼은 하루 한 번 사냥을 다녀온다 (전투 구현 전 대체 동작)
 const HUNTS_PER_DAY := 1

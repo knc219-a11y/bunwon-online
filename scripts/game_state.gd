@@ -14,6 +14,8 @@ var hunter_eggs := 0
 ## 마을 공급함에 있는 알
 var village_eggs := 0
 var hunts_today := 0
+## 사냥꾼 조작 해금 여부. 첫 슬라임을 밭에 배치하면 열린다 (임시 조건).
+var hunter_unlocked := false
 
 
 func _ready() -> void:
@@ -35,8 +37,9 @@ func reset() -> void:
 	crops = 0
 	farmer_eggs = 0
 	hunter_eggs = 0
-	village_eggs = 0
+	village_eggs = Config.START_VILLAGE_EGGS
 	hunts_today = 0
+	hunter_unlocked = false
 	changed.emit()
 
 

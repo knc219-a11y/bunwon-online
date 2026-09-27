@@ -47,7 +47,7 @@ func _ready() -> void:
 	GameState.changed.connect(_refresh_hud)
 	GameState.message.connect(func(t: String) -> void: _message.text = t)
 	_refresh_props()
-	GameState.notify("농부로 밭을 가꿔 보자. 사냥꾼은 사냥터 입구에서 알을 구해 온다.")
+	GameState.notify("농부로 밭을 가꿔 보자. 마을 공급함에 알이 하나 있다.")
 
 
 func _add_prop(label: String, color: Color, cell: Vector2i, size := Vector2(28, 28)) -> Prop:
@@ -99,6 +99,9 @@ func _unhandled_input(event: InputEvent) -> void:
 # --- 플레이어 동작 ---------------------------------------------------------
 
 func switch_character() -> void:
+	if not GameState.hunter_unlocked:
+		GameState.notify("아직 사냥꾼을 조작할 수 없다. 첫 슬라임을 밭에 배치해 보자.")
+		return
 	_set_active(hunter if active == farmer else farmer)
 	GameState.notify("%s(으)로 전환했다." % active.display_name)
 
@@ -132,7 +135,11 @@ func _farmer_interact() -> void:
 	var carried := _carried_slime()
 	if carried:
 		carried.place(farmer.cell())
-		GameState.notify("슬라임을 내려놓았다. R 키로 맡길 일을 고른다.")
+		if not GameState.hunter_unlocked:
+			GameState.hunter_unlocked = true
+			GameState.notify("슬라임이 주변 밭에 물을 주기 시작했다! 이제 Tab으로 사냥꾼을 조작할 수 있다.")
+		else:
+			GameState.notify("슬라임을 내려놓았다. R 키로 맡길 일을 고른다.")
 		return
 	var s := _nearest_slime()
 	if s:
@@ -196,7 +203,7 @@ func next_day() -> void:
 	if incubating_days == 0:
 		incubating_days = -1
 		var s := _hatch(INCUBATOR_CELL + Vector2i(-1, 1))
-		text += " 알이 부화했다! " + s.describe()
+		text += " 알이 부화했다! " + s.describe() + " F로 들어서 밭 옆에 놓아 주자."
 	_refresh_props()
 	GameState.notify(text)
 
@@ -205,6 +212,9 @@ func _hatch(at_cell: Vector2i) -> Slime:
 	var s := Slime.new()
 	add_child(s)
 	s.setup(farm, at_cell, _rng)
+	if slimes.is_empty():
+		# 첫 슬라임은 급수 담당으로 태어난다 (2026-09-27 결정)
+		s.role = Slime.Role.WATER
 	slimes.append(s)
 	return s
 
