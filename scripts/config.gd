@@ -35,6 +35,14 @@ const CROP_PRICE := 50
 const SEED_PACK_SIZE := 5
 const SEED_PACK_PRICE := 100
 
+## 도구 강화 (2026-09-27 후보 A 첫 조각): 마을 공급함에서 돈으로 한 번 사면 끝. 값은 전부 임시.
+## 괭이·물뿌리개 1단계 = 바라보는 방향으로 앞 3칸 일자에 한 번에 쓴다.
+const TOOL_UPGRADE_REACH := 3
+const HOE_UPGRADE_PRICE := 200
+const CAN_UPGRADE_PRICE := 250
+## 사냥꾼 튼튼한 사냥칼: 이후 태어나는 크리처 능력치 바닥을 첫 크리처만큼 보장한다
+const HUNTER_KNIFE_PRICE := 400
+
 ## 시작할 때 마을 공급함에 들어 있는 알 수 (첫 알 획득 이벤트는 미정이라 임시로 채워 둠)
 const START_VILLAGE_EGGS := 1
 const EGG_HATCH_DAYS := 1

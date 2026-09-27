@@ -20,6 +20,10 @@ var hunter_eggs: Array[CreatureSpecies] = []
 ## 마을 공급함에 있는 알
 var village_eggs: Array[CreatureSpecies] = []
 var hunts_today := 0
+## 강화한 농사 도구 (Farm.Work 값 → 단계). 0이면 처음 도구.
+var tool_levels := {}
+## 사냥꾼 튼튼한 사냥칼을 샀는지
+var hunter_knife := false
 ## 사냥꾼 조작 해금 여부. 첫 슬라임을 밭에 배치하면 열린다 (임시 조건).
 var hunter_unlocked := false
 
@@ -31,6 +35,10 @@ func _ready() -> void:
 func notify(text: String) -> void:
 	message.emit(text)
 	changed.emit()
+
+
+func tool_level(work: int) -> int:
+	return tool_levels.get(work, 0)
 
 
 func touch() -> void:
@@ -50,6 +58,8 @@ func reset() -> void:
 	for i in Config.START_VILLAGE_EGGS:
 		village_eggs.append(CreatureCatalog.STARTER_EGG)
 	hunts_today = 0
+	tool_levels = {}
+	hunter_knife = false
 	hunter_unlocked = false
 	changed.emit()
 

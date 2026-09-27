@@ -9,6 +9,16 @@ const TOOL_NAMES := {
 	Farm.Work.WATER: "물뿌리개",
 	Farm.Work.HARVEST: "수확",
 }
+## 도구 강화 (2026-09-27 후보 A 첫 조각): 강화하면 이름이 바뀌고 앞 3칸 일자에 한 번에 쓴다.
+const UPGRADED_TOOL_NAMES := {
+	Farm.Work.TILL: "넓은 괭이",
+	Farm.Work.WATER: "큰 물뿌리개",
+}
+## 공급함 선택창 id → 강화할 도구와 값
+const TOOL_UPGRADES := {
+	&"upgrade_hoe": [Farm.Work.TILL, Config.HOE_UPGRADE_PRICE],
+	&"upgrade_can": [Farm.Work.WATER, Config.CAN_UPGRADE_PRICE],
+}
 ## 마을 오브젝트가 차지하는 칸 (왼쪽 위 칸, 크기). 크기는 2026-09-27 결정, 자리는 임시 배치.
 const INCUBATOR_RECT := Rect2i(17, 3, 2, 2)
 const SUPPLY_RECT := Rect2i(17, 9, 2, 1)
@@ -188,11 +198,29 @@ func use_tool() -> void:
 		GameState.notify("농사 도구는 농부만 쓸 수 있다.")
 		return
 	var work := TOOLS[tool_index]
-	if not farm.do_work(work, farmer.facing_cell()):
+	var done := 0
+	for cell in tool_cells(work):
+		if farm.do_work(work, cell):
+			done += 1
+	if done == 0:
 		if work == Farm.Work.SOW and GameState.seeds <= 0:
 			GameState.notify("씨앗이 없다.")
 		else:
-			GameState.notify("여기서는 %s을(를) 쓸 수 없다." % TOOL_NAMES[work])
+			GameState.notify("여기서는 %s을(를) 쓸 수 없다." % tool_name(work))
+
+
+## 도구가 닿는 칸. 강화한 도구는 바라보는 방향으로 앞 3칸 일자.
+func tool_cells(work: Farm.Work) -> Array[Vector2i]:
+	var first := farmer.facing_cell()
+	var reach := Config.TOOL_UPGRADE_REACH if GameState.tool_level(work) > 0 else 1
+	var cells: Array[Vector2i] = []
+	for i in reach:
+		cells.append(first + farmer.facing * i)
+	return cells
+
+
+func tool_name(work: Farm.Work) -> String:
+	return UPGRADED_TOOL_NAMES[work] if GameState.tool_level(work) > 0 else TOOL_NAMES[work]
 
 
 func interact() -> void:
@@ -271,6 +299,11 @@ func supply_options() -> Array[StringName]:
 	options.append(&"buy_seeds")
 	if Farm.next_plot() >= 0:
 		options.append(&"expand_field")
+	for id: StringName in TOOL_UPGRADES:
+		if GameState.tool_level(TOOL_UPGRADES[id][0]) == 0:
+			options.append(id)
+	if not GameState.hunter_knife:
+		options.append(&"buy_knife")
 	options.append(&"close")
 	return options
 
@@ -286,6 +319,11 @@ func supply_option_text(id: StringName) -> String:
 		&"expand_field":
 			var i := Farm.next_plot()
 			return "밭 넓히기: %s (%d원)" % [Config.FIELD_PLOT_NAMES[i], Config.FIELD_PLOT_PRICES[i]]
+		&"upgrade_hoe", &"upgrade_can":
+			var work: Farm.Work = TOOL_UPGRADES[id][0]
+			return "도구 손보기: %s → %s (앞 %d칸, %d원)" % [TOOL_NAMES[work], UPGRADED_TOOL_NAMES[work], Config.TOOL_UPGRADE_REACH, TOOL_UPGRADES[id][1]]
+		&"buy_knife":
+			return "사냥꾼 튼튼한 사냥칼 (%d원)" % Config.HUNTER_KNIFE_PRICE
 		_:
 			return "닫기"
 
@@ -358,6 +396,28 @@ func supply_action(id: StringName) -> bool:
 			GameState.money -= price
 			farm.open_next_plot()
 			GameState.notify("밭을 넓혔다: %s -%d원. 잡초와 돌을 걷어 냈으니 괭이로 갈 수 있다." % [Config.FIELD_PLOT_NAMES[i], price])
+		&"upgrade_hoe", &"upgrade_can":
+			var work: Farm.Work = TOOL_UPGRADES[id][0]
+			var price: int = TOOL_UPGRADES[id][1]
+			if GameState.tool_level(work) > 0:
+				GameState.notify("이미 %s이(가) 있다." % UPGRADED_TOOL_NAMES[work])
+				return false
+			if GameState.money < price:
+				GameState.notify("돈이 모자라다. %s %d원 (가진 돈 %d원)." % [UPGRADED_TOOL_NAMES[work], price, GameState.money])
+				return false
+			GameState.money -= price
+			GameState.tool_levels[work] = 1
+			GameState.notify("%s을(를) %s(으)로 바꿨다! -%d원. 이제 바라보는 방향 앞 %d칸에 한 번에 쓴다." % [TOOL_NAMES[work], UPGRADED_TOOL_NAMES[work], price, Config.TOOL_UPGRADE_REACH])
+		&"buy_knife":
+			if GameState.hunter_knife:
+				GameState.notify("사냥꾼은 이미 튼튼한 사냥칼이 있다.")
+				return false
+			if GameState.money < Config.HUNTER_KNIFE_PRICE:
+				GameState.notify("돈이 모자라다. 튼튼한 사냥칼 %d원 (가진 돈 %d원)." % [Config.HUNTER_KNIFE_PRICE, GameState.money])
+				return false
+			GameState.money -= Config.HUNTER_KNIFE_PRICE
+			GameState.hunter_knife = true
+			GameState.notify("사냥꾼에게 튼튼한 사냥칼을 사 줬다! -%d원. 이제 태어나는 크리처는 능력치가 너무 낮게 나오지 않는다." % Config.HUNTER_KNIFE_PRICE)
 		_:
 			return false
 	return true
@@ -370,7 +430,7 @@ func _rebuild_menu() -> void:
 	for i in _menu_options.size():
 		lines.append(("▶ " if i == menu_index else "   ") + supply_option_text(_menu_options[i]))
 	_menu_text.text = "\n".join(lines)
-	_menu.size = Vector2(210, 14 + lines.size() * 14)
+	_menu.size = _menu_text.get_minimum_size() + Vector2(16, 10)
 	# 공급함 오른쪽 위에 띄우되 화면 밖으로 나가지 않게
 	var at := supply_box.position + Vector2(36, -80)
 	_menu.position = at.clamp(Vector2(4, 32), Vector2(636, 324) - _menu.size)
@@ -461,6 +521,9 @@ func _hatch(species: CreatureSpecies, at_cell: Vector2i) -> Creature:
 		data.guarantee_minimum(Config.FIRST_CREATURE_MIN_WORK_SPEED, Config.FIRST_CREATURE_MIN_RADIUS)
 		s.job = CreatureCatalog.FIRST_JOB
 		data.set_element(CreatureCatalog.FIRST_ELEMENT)
+	elif GameState.hunter_knife:
+		# 튼튼한 사냥칼 (2026-09-27 후보 A 첫 조각): 좋은 알을 골라 오므로 첫 크리처만큼 바닥 보장
+		data.guarantee_minimum(Config.FIRST_CREATURE_MIN_WORK_SPEED, Config.FIRST_CREATURE_MIN_RADIUS)
 	add_child(s)
 	s.setup(farm, data, at_cell)
 	creatures.append(s)
@@ -563,7 +626,7 @@ func _build_hud() -> void:
 func _refresh_hud() -> void:
 	if _status == null:
 		return
-	var tool_text: String = TOOL_NAMES[TOOLS[tool_index]] if active == farmer else "-"
+	var tool_text: String = tool_name(TOOLS[tool_index]) if active == farmer else ("튼튼한 사냥칼" if GameState.hunter_knife else "-")
 	_status.text = "%d일째 | %s | 도구: %s | 돈 %d원 | 씨앗 %d  작물 %d | 알: 농부 %d · 사냥꾼 %d · 공급함 %d | 크리처 %d" % [
 		GameState.day, active.display_name, tool_text, GameState.money, GameState.seeds, GameState.crops,
 		GameState.farmer_eggs.size(), GameState.hunter_eggs.size(), GameState.village_eggs.size(), creatures.size(),
