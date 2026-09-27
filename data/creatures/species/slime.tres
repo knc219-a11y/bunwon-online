@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="CreatureSpecies" load_steps=7 format=3]
+[gd_resource type="Resource" script_class="CreatureSpecies" load_steps=9 format=3]
 
 [ext_resource type="Script" path="res://scripts/creatures/creature_species.gd" id="1"]
 [ext_resource type="Resource" path="res://data/creatures/traits/ordinary.tres" id="2"]
@@ -6,6 +6,8 @@
 [ext_resource type="Resource" path="res://data/creatures/traits/keen_eye.tres" id="4"]
 [ext_resource type="Resource" path="res://data/creatures/elements/water.tres" id="5"]
 [ext_resource type="Resource" path="res://data/creatures/elements/earth.tres" id="6"]
+[ext_resource type="Texture2D" path="res://assets/creatures/slime_water.png" id="7"]
+[ext_resource type="Texture2D" path="res://assets/creatures/slime_earth.png" id="8"]
 
 [resource]
 script = ExtResource("1")
@@ -15,4 +17,8 @@ possible_elements = Array[Resource]([ExtResource("5"), ExtResource("6")])
 work_speed_range = Vector2(0.8, 1.2)
 radius_range = Vector2i(1, 2)
 traits = Array[Resource]([ExtResource("2"), ExtResource("3"), ExtResource("4")])
+sprite_sheets = {
+&"water": ExtResource("7"),
+&"earth": ExtResource("8")
+}
 color = Color(0.435, 0.827, 0.78, 1)

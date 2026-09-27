@@ -279,7 +279,7 @@ def draw_cell(img, col, row, pose, hd, kind):
         head_side(c, b)
 
 
-def outline(img):
+def outline(img, cell=CELL):
     """투명 칸에 닿은 테두리를 이웃 색보다 어둡고 보랏빛으로 칠한다 (부드러운 외곽선)."""
     src = img.copy()
     w, h = img.size
@@ -288,10 +288,10 @@ def outline(img):
         for x in range(w):
             if p[x, y][3]:
                 continue
-            if (x % CELL) in (0, CELL - 1):
+            if (x % cell) in (0, cell - 1):
                 continue
             ns = [p[x + dx, y + dy] for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))
-                  if 0 <= x + dx < w and 0 <= y + dy < h and (x + dx) // CELL == x // CELL and (y + dy) // CELL == y // CELL]
+                  if 0 <= x + dx < w and 0 <= y + dy < h and (x + dx) // cell == x // cell and (y + dy) // cell == y // cell]
             ns = [n for n in ns if n[3]]
             if not ns:
                 continue

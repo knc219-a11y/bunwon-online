@@ -18,5 +18,8 @@ extends Resource
 @export var move_speed := 1.0
 @export var traits: Array[CreatureTrait] = []
 
-@export_group("임시 그래픽")
+@export_group("그래픽")
+## 속성 id → 스프라이트 시트 (규격은 docs/sprites.md). 시트가 없으면 color 로 도형을 그린다.
+@export var sprite_sheets: Dictionary = {}
+## 임시 도형 색 (시트가 없을 때)
 @export var color := Color.WHITE

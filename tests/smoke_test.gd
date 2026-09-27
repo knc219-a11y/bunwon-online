@@ -70,7 +70,10 @@ func _ready() -> void:
 		main.farm.do_work(Farm.Work.SOW, target)
 	for i in 2:
 		_check(slime.work_once(), "슬라임이 일감 찾음 %d" % i)
-		await get_tree().create_timer(Config.CREATURE_HOP_TIME + 0.1).timeout
+		await get_tree().create_timer(slime.hop_time() + 0.1).timeout
+		if i == 0:
+			_check(slime.frame_column() in Creature.WATER_COLUMNS, "도착한 칸에서 급수 동작")
+		await get_tree().create_timer(Config.CREATURE_WORK_ANIM_TIME).timeout
 	var watered := 0
 	for target in [home + Vector2i.RIGHT, home + Vector2i.LEFT]:
 		if main.farm.get_cell(target).watered:
@@ -138,6 +141,12 @@ func _ready() -> void:
 	var f := farmer.frame_coords()
 	_check(f.y == 2 and f.z == 1 and f.x in Character.WALK_COLUMNS, "왼쪽 걷기는 옆모습 반전")
 	_check(farmer.sheet != null and farmer.sheet.get_width() == 48 * 6 and farmer.sheet.get_height() == 48 * 3, "시트 크기 288x144")
+
+	# 9) 슬라임 스프라이트 시트: 속성별 시트, 대기2 · 깡충4 · 급수4
+	for id in [&"water", &"earth"]:
+		var tex: Texture2D = CreatureCatalog.SLIME.sprite_sheets.get(id)
+		_check(tex != null and tex.get_width() == 32 * 10 and tex.get_height() == 32, "%s 슬라임 시트 320x32" % id)
+	_check(slime.frame_column() in Creature.IDLE_COLUMNS, "일이 끝나면 대기 동작")
 
 	print("SMOKE TEST: %s (%d failures)" % ["PASS" if _failures == 0 else "FAIL", _failures])
 	get_tree().quit(1 if _failures > 0 else 0)
