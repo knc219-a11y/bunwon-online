@@ -172,8 +172,47 @@ func _ready() -> void:
 	var hunter: Character = main.hunter
 	hunter.position = main.hunt_gate.position
 	main.interact()
+	var hunt: HuntGround = main.hunt
+	_check(hunt != null and not main.farm.visible and not farmer.visible and hunt.slimes.size() == Config.WILD_SLIME_COUNT, "사냥터 입구 F → 사냥터 화면, 야생 슬라임 3마리")
+	hunt.set_ai(false)
+	_check(hunt.hearts == Config.HUNTER_HEARTS, "하트 5개로 시작")
+	# Space(바라보는 쪽)로 두 번 휘두르면 쓰러진다
+	var wild: WildSlime = hunt.slimes[0]
+	hunter.facing = Vector2i.UP
+	wild.position = hunter.feet() + Vector2(0, -8 - Config.SWING_REACH)
+	_check(hunt.swing() == 1 and wild.hp == 1, "휘두르기 한 번 맞히면 체력 -1")
+	_check(hunt.swing() == 0, "휘두른 직후에는 다시 못 휘두름")
+	hunt.tick(Config.SWING_COOLDOWN)
+	wild.position = hunter.feet() + Vector2(0, -8 - Config.SWING_REACH)
+	hunt.swing()
+	_check(hunt.slimes.size() == 2 and hunt.drops.size() == 1, "두 번 맞으면 쓰러지고 그날 첫 슬라임은 알을 떨어뜨림")
+	# 마우스 클릭: 누른 쪽을 향해 휘두른다
+	hunt.tick(Config.SWING_COOLDOWN)
+	var wild2: WildSlime = hunt.slimes[0]
+	wild2.position = hunter.feet() + Vector2(-Config.SWING_REACH, -8)
+	_check(hunt.swing(Vector2(-30, 2)) == 1 and hunter.facing == Vector2i.LEFT, "클릭한 쪽(왼쪽)을 바라보고 휘두름")
+	hunt.tick(Config.SWING_COOLDOWN)
+	wild2.position = hunter.feet() + Vector2(-Config.SWING_REACH, -8)
+	hunt.swing(Vector2(-30, 2))
+	_check(hunt.slimes.size() == 1 and hunt.drops.size() == 1, "알 보장은 첫 슬라임 한 번뿐")
+	# 부딪히면 하트 -1, 잠깐 무적
+	var wild3: WildSlime = hunt.slimes[0]
+	wild3.position = hunter.feet()
+	hunt.tick(0.01)
+	wild3.position = hunter.feet()
+	hunt.tick(0.01)
+	_check(hunt.hearts == Config.HUNTER_HEARTS - 1, "부딪히면 하트 -1, 바로 다시 맞지는 않음")
+	wild3.position = Vector2(20 * Config.TILE, 5 * Config.TILE)
+	# 떨어진 알 줍기
+	hunter.position = hunt.drops[0].at - Vector2(0, Character.FEET_Y)
+	hunt.tick(0.01)
+	_check(hunt.picked.size() == 1 and hunt.drops.is_empty(), "떨어진 알 줍기")
+	hunter.position = hunt.SPAWN_AT
 	main.interact()
-	_check(GameState.hunter_eggs.size() == 1, "사냥은 하루 한 번, 알 1개")
+	_check(main.hunt == null and main.farm.visible and GameState.hunter_eggs.size() == 1, "아래 입구 F로 마을에 돌아오면 알 1개")
+	_check(main._near(main.hunt_gate) and hunter.walk_area == Rect2(), "마을 사냥터 입구 앞으로 돌아옴")
+	main.interact()
+	_check(main.hunt == null and GameState.hunter_eggs.size() == 1, "사냥터는 하루 한 번")
 	hunter.position = main.supply_box.position
 	main.interact()
 	_check(GameState.village_eggs.size() == 1 and GameState.hunter_eggs.is_empty(), "마을 공급함에 알 공급")
@@ -388,6 +427,29 @@ func _ready() -> void:
 		main.creatures.erase(k)
 		k.queue_free()
 	_check(weakest >= Config.FIRST_CREATURE_MIN_WORK_SPEED and smallest >= Config.FIRST_CREATURE_MIN_RADIUS, "사냥칼이 있으면 능력치 바닥 보장")
+
+	# 17) 사냥터에서 쓰러져도 주운 것(떨어진 알 포함)은 그대로, 다음 날 다시 들어갈 수 있다
+	main.next_day()
+	var eggs_before := GameState.hunter_eggs.size()
+	main._set_active(main.hunter)
+	main.hunter.position = main.hunt_gate.position
+	main.interact()
+	var h2: HuntGround = main.hunt
+	_check(h2 != null, "자고 나면 다시 사냥터에 들어감")
+	h2.set_ai(false)
+	var w: WildSlime = h2.slimes[0]
+	w.hp = 1
+	main.hunter.facing = Vector2i.UP
+	w.position = main.hunter.feet() + Vector2(0, -8 - Config.SWING_REACH)
+	h2.swing()
+	_check(h2.drops.size() == 1, "새 날 첫 슬라임도 알 보장")
+	h2.hearts = 1
+	var w2: WildSlime = h2.slimes[0]
+	w2.position = main.hunter.feet()
+	h2.tick(0.01)
+	_check(main.hunt == null and main.farm.visible, "하트가 0이 되면 쓰러져 마을로 돌아옴")
+	_check(GameState.hunter_eggs.size() == eggs_before + 1, "쓰러져도 떨어진 알은 챙겨 옴")
+	_check(main._near(main.hunt_gate), "쓰러지면 사냥터 입구 앞으로")
 
 	print("SMOKE TEST: %s (%d failures)" % ["PASS" if _failures == 0 else "FAIL", _failures])
 	get_tree().quit(1 if _failures > 0 else 0)

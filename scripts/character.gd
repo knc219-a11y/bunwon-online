@@ -26,6 +26,10 @@ var active := false:
 		queue_redraw()
 ## 막는 범위를 알려 주는 농장. null 이면 어디든 지나간다.
 var farm: Farm
+## 비어 있지 않으면 이 영역 안에서만 걷는다 (사냥터).
+var walk_area := Rect2()
+## 바라보는 칸 표시 (농사용). 사냥터에서는 끈다.
+var show_facing_cell := true
 ## 선택창이 열려 있는 동안처럼 조작 중이지만 걷지 않을 때 true
 var frozen := false
 var facing := Vector2i.DOWN
@@ -86,11 +90,11 @@ func feet_rect(at: Vector2) -> Rect2:
 
 ## 한 걸음 움직인다. 가로·세로를 따로 막아 벽을 따라 미끄러지게 한다.
 func step(motion: Vector2) -> void:
-	var bounds := Vector2(Config.MAP_SIZE * Config.TILE)
+	var area := walk_area if walk_area.has_area() else Rect2(Vector2(8, 8), Vector2(Config.MAP_SIZE * Config.TILE) - Vector2(16, 16))
 	for axis: Vector2 in [Vector2(motion.x, 0), Vector2(0, motion.y)]:
 		if axis == Vector2.ZERO:
 			continue
-		var to := (position + axis).clamp(Vector2(8, 8), bounds - Vector2(8, 8))
+		var to := (position + axis).clamp(area.position, area.end)
 		if farm == null or farm.is_free(feet_rect(to)):
 			position = to
 
@@ -149,8 +153,9 @@ func _draw() -> void:
 	draw_set_transform(Vector2(0, FEET_Y - 1), 0.0, Vector2(1.0, 0.4))
 	draw_circle(Vector2.ZERO, 11.0, Color(0.27, 0.16, 0.33, 0.25 * alpha))
 	draw_set_transform(Vector2.ZERO)
-	if active:
+	if active and show_facing_cell:
 		# 바라보는 칸 표시
 		var target := Farm.center_of(facing_cell()) - position
 		draw_rect(Rect2(target - Vector2(11, 11), Vector2(22, 22)), Color(1, 1, 1, 0.6), false, 1.5)
+	if active:
 		draw_string(ThemeDB.fallback_font, Vector2(-30, -42), display_name, HORIZONTAL_ALIGNMENT_CENTER, 60, 10)
