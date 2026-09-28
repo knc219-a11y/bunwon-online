@@ -5,6 +5,7 @@
   incubator.png  48 x 48  짚 깐 나무 상자 + 빨간 보온등, 2x2칸
   supply_box.png 48 x 44  무인 판매대 모양 공동 선반, 2x1칸
   hunt_gate.png  72 x 56  철망 울타리 문 + 경고판, 뒤로 숲, 3x2칸
+  stash.png      24 x 28  공용 창고 (나무 궤짝, 쇠 띠), 1x1칸. 2026-09-28 임시 그림
 그림 맨 아래 줄이 차지하는 칸의 아래 끝(땅). 발밑 그림자는 넣지 않는다 (게임이 그림).
 
 실행: python3 tools/make_village_props.py  (Pillow 필요)
@@ -193,10 +194,35 @@ def gate_b():
     return c.img
 
 
+def stash():
+    """공용 창고: 뚜껑 달린 나무 궤짝 (1x1칸). 농부·사냥꾼이 함께 쓴다."""
+    c = C(24, 28)
+    # 뚜껑 (윗면이 조금 보임)
+    c.rect(1, 6, 22, 11, WOOD_L)
+    c.hline(1, 22, 6, CREAM_L)
+    c.rect(1, 12, 22, 13, WOOD_D)
+    # 몸통 널빤지
+    c.rect(2, 14, 21, 27, WOOD)
+    for y in (18, 23):
+        c.hline(2, 21, y, WOOD_D)
+    c.vline(21, 14, 27, WOOD_DD)
+    c.vline(2, 14, 27, WOOD_L)
+    # 쇠 띠와 자물쇠
+    for x in (5, 18):
+        c.rect(x, 6, x + 1, 27, METAL_D)
+        c.vline(x, 6, 27, METAL)
+    c.rect(10, 12, 13, 17, YELLOW)
+    c.hline(10, 13, 12, (252, 226, 130))
+    c.px(11, 15, WOOD_DD)
+    c.px(12, 15, WOOD_DD)
+    return c.img
+
+
 PROPS = {
     "incubator": incubator_b,
     "supply_box": supply_b,
     "hunt_gate": gate_b,
+    "stash": stash,
 }
 
 

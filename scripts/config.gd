@@ -76,6 +76,12 @@ const INTERACT_DISTANCE := 30.0
 ## 마을 오브젝트는 차지하는 칸 가장자리에서 이 거리 안이면 상호작용
 const PROP_INTERACT_DISTANCE := 16.0
 
+## 디아블로식 가방과 마을 공용 창고 칸 수 (2026-09-28, 임시). 장비 하나가 한 칸.
+const BAG_COLUMNS := 4
+const BAG_SIZE := 12
+const STASH_COLUMNS := 5
+const STASH_SIZE := 20
+
 ## 크리처 작업 간격(초). 개체 속도로 나눈다.
 const CREATURE_WORK_INTERVAL := 1.6
 const CREATURE_HOP_TIME := 0.35

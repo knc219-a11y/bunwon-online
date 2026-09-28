@@ -27,6 +27,10 @@ var hunter_knife := false
 ## 입는 장비 (Wearables). 산 장비 id, 캐릭터별 입은 장비 (칸 → id)
 var owned_wear: Array[StringName] = []
 var worn := {&"farmer": {}, &"hunter": {}}
+## 디아블로식 가방 (2026-09-28 사용자 요청): 캐릭터마다 입지 않은 장비를 들고 다닌다 (Config.BAG_SIZE 칸)
+var bag := {&"farmer": [] as Array[StringName], &"hunter": [] as Array[StringName]}
+## 마을 공용 창고 (농부·사냥꾼이 함께 쓴다, Config.STASH_SIZE 칸)
+var stash: Array[StringName] = []
 ## 사냥터 드롭 (2026-09-27 결정 A + 드롭표): 빨간 물약, 잡템(슬라임 젤리)
 var potions := 0
 var junk := 0
@@ -68,6 +72,8 @@ func reset() -> void:
 	hunter_knife = false
 	owned_wear = []
 	worn = {&"farmer": {}, &"hunter": {}}
+	bag = {&"farmer": [] as Array[StringName], &"hunter": [] as Array[StringName]}
+	stash = []
 	potions = 0
 	junk = 0
 	hunter_unlocked = false
@@ -91,6 +97,7 @@ func _register_inputs() -> void:
 		"next_day": [KEY_N],
 		"menu_close": [KEY_ESCAPE],
 		"use_potion": [KEY_1],
+		"inventory": [KEY_I],
 	}
 	for action: String in map:
 		if InputMap.has_action(action):

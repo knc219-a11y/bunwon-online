@@ -1,7 +1,8 @@
 class_name Wearables
 extends RefCounted
 ## 입는 장비 (2026-09-27 결정: A 도구 강화 + B 입는 장비, 겉모습은 덧그림).
-## 칸은 모자 · 옷 · 신발. 마을 공급함에서 사면 바로 입는다 (옷장은 다음 단계).
+## 칸은 모자 · 옷 · 신발. 사거나 주우면 바로 입고, 벗은 것은 가방(I 키)으로 간다.
+## 가방이 차면 마을 공용 창고로 보낸다 (잃어버리는 일 없음, 2026-09-28 사용자 요청 디아블로식 가방 + 창고).
 ## 마을에서 사는 물건은 현대풍. 사냥터에서 떨어지는 완제품(from: hunt)은 판타지풍 (사용자 방향).
 ## 그림은 캐릭터 시트와 같은 규격의 덧그림 (assets/wear, tools/make_wear_sheets.py). 값과 효과는 전부 임시.
 
@@ -114,9 +115,93 @@ static func swing_radius(who: StringName) -> float:
 	return r
 
 
-## 장비를 얻어 입는다 (그 칸에 입던 것은 가진 채로 벗는다). 캐릭터 덧그림은 부른 쪽이 새로 그린다.
+## 장비를 얻어 입는다 (그 칸에 입던 것은 가방으로). 캐릭터 덧그림은 부른 쪽이 새로 그린다.
 static func gain_and_wear(id: StringName) -> void:
 	if not is_owned(id):
 		GameState.owned_wear.append(id)
 	var item: Dictionary = ITEMS[id]
+	var old: StringName = GameState.worn[item.who].get(item.slot, &"")
 	GameState.worn[item.who][item.slot] = id
+	if old != &"" and old != id:
+		store(item.who, old)
+
+
+## 입지 않은 장비를 who 의 가방에 넣는다. 가방이 차면 창고로. 어디로 갔는지 돌려준다 (&"bag" / &"stash" / &"").
+static func store(who: StringName, id: StringName) -> StringName:
+	var b: Array[StringName] = GameState.bag[who]
+	if b.size() < Config.BAG_SIZE:
+		b.append(id)
+		return &"bag"
+	if GameState.stash.size() < Config.STASH_SIZE:
+		GameState.stash.append(id)
+		return &"stash"
+	return &""
+
+
+## 가방 i 번째 장비를 입는다. 그 칸에 입던 것은 같은 가방 자리로 바꿔 넣는다.
+static func wear_from_bag(who: StringName, i: int) -> bool:
+	var b: Array[StringName] = GameState.bag[who]
+	if i < 0 or i >= b.size():
+		return false
+	var id := b[i]
+	var item: Dictionary = ITEMS[id]
+	if item.who != who:
+		return false
+	var old: StringName = GameState.worn[who].get(item.slot, &"")
+	GameState.worn[who][item.slot] = id
+	if old != &"":
+		b[i] = old
+	else:
+		b.remove_at(i)
+	return true
+
+
+## 입은 장비를 벗어 가방에 넣는다 (가방이 차면 창고로). 둘 다 차 있으면 못 벗는다.
+static func take_off(who: StringName, slot: StringName) -> bool:
+	var id: StringName = GameState.worn[who].get(slot, &"")
+	if id == &"":
+		return false
+	if store(who, id) == &"":
+		return false
+	GameState.worn[who].erase(slot)
+	return true
+
+
+## 가방 i 번째를 창고로
+static func bag_to_stash(who: StringName, i: int) -> bool:
+	var b: Array[StringName] = GameState.bag[who]
+	if i < 0 or i >= b.size() or GameState.stash.size() >= Config.STASH_SIZE:
+		return false
+	GameState.stash.append(b[i])
+	b.remove_at(i)
+	return true
+
+
+## 창고 i 번째를 who 의 가방으로 (다른 캐릭터 장비도 들 수는 있다. 입는 건 주인만)
+static func stash_to_bag(who: StringName, i: int) -> bool:
+	var b: Array[StringName] = GameState.bag[who]
+	if i < 0 or i >= GameState.stash.size() or b.size() >= Config.BAG_SIZE:
+		return false
+	b.append(GameState.stash[i])
+	GameState.stash.remove_at(i)
+	return true
+
+
+## 세트를 몇 조각 입었는지
+static func set_worn_count(set_id: StringName, who: StringName) -> int:
+	var worn := worn_by(who)
+	var n := 0
+	for id: StringName in SETS[set_id].pieces:
+		if id in worn:
+			n += 1
+	return n
+
+
+## 장비 설명 한 줄 (가방 창 아래에 보여 준다)
+static func describe(id: StringName) -> String:
+	var item: Dictionary = ITEMS[id]
+	var text := "%s (%s %s) · %s" % [item.name, "농부" if item.who == &"farmer" else "사냥꾼", SLOT_NAMES[item.slot], item.effect]
+	var set_id: StringName = item.get("set", &"")
+	if set_id != &"":
+		text += " · %s" % SETS[set_id].name
+	return text
