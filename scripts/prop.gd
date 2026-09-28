@@ -59,9 +59,14 @@ func footprint_rect() -> Rect2:
 
 ## 차지하는 칸 가장자리에서 dist 안에 있으면 true.
 func is_near(pos: Vector2, dist: float) -> bool:
+	return distance_to(pos) <= dist
+
+
+## 차지하는 칸 가장자리까지 거리
+func distance_to(pos: Vector2) -> float:
 	var r := footprint_rect()
 	var local := pos - position
-	return local.clamp(r.position, r.end).distance_to(local) <= dist
+	return local.clamp(r.position, r.end).distance_to(local)
 
 
 func set_badge(text: String) -> void:

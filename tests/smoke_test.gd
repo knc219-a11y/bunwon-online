@@ -618,6 +618,58 @@ func _ready() -> void:
 	main.interact()
 	_check(GameState.junk == 0 and GameState.money == money_before_sell + junk_to_sell * Config.JUNK_PRICE, "사냥꾼이 공급함에서 F로 젤리를 팜")
 
+	# 20) 디아블로식 가방 + 공용 창고 (2026-09-28 사용자 요청)
+	# 지금 사냥꾼: 숲 공터 세트 다 입음, 가방에 캡모자·등산화 (주운 세트가 밀어냄)
+	var hb: Array[StringName] = GameState.bag[&"hunter"]
+	_check(&"ball_cap" in hb and &"hiking_shoes" in hb, "세트를 주워 입으면 입던 캡모자·등산화는 가방으로")
+	main.hunter.position = Farm.center_of(Vector2i(20, 6))
+	main._unhandled_input(_action(&"inventory"))
+	var inv: InventoryUI = main.inventory
+	_check(inv.visible and inv.character == main.hunter and main.hunter.frozen and not inv.with_stash, "I 키로 어디서나 가방 창")
+	var cap_i := hb.find(&"ball_cap")
+	_check(inv.primary(&"bag", cap_i) and GameState.worn[&"hunter"][&"hat"] == &"ball_cap" and &"acorn_helm" in hb, "가방 캡모자 클릭 = 입기, 도토리 투구는 가방으로 바꿔 들어감")
+	_check(main.hunter._wear.size() == 3 and Wearables.set_worn_count(&"forest", &"hunter") == 2 and Wearables.bonus_hearts(&"hunter") == 0, "덧그림 바뀜 · 세트 2/3 이면 보너스 없음")
+	_check(inv.primary(&"equip", 0) and not GameState.worn[&"hunter"].has(&"hat") and &"ball_cap" in hb, "입은 칸 클릭 = 벗어서 가방으로 (안 입음)")
+	_check(inv.secondary(&"bag", hb.find(&"acorn_helm")) and Wearables.set_complete(&"forest", &"hunter"), "오른쪽 클릭으로도 입기, 세트 다시 완성")
+	main._unhandled_input(_action(&"inventory"))
+	_check(not inv.visible and not main.hunter.frozen, "I 키로 닫기")
+	# 농부 장비는 사냥꾼이 입지 못함 (창고로 넘기면 농부가 꺼내 입음)
+	GameState.stash.append(&"straw_hat")
+	GameState.owned_wear.append(&"straw_hat")
+	main.hunter.position = main.stash_box.position + Vector2(-Config.TILE + 4, 0)
+	main.interact()
+	_check(inv.visible and inv.with_stash, "창고 궤짝에서 F = 가방 + 창고 창")
+	_check(inv.primary(&"stash", 0) and hb.back() == &"straw_hat" and GameState.stash.is_empty(), "창고 칸 클릭 = 가방으로 꺼내기")
+	var before_hat: StringName = GameState.worn[&"hunter"].get(&"hat", &"")
+	_check(not inv.secondary(&"bag", hb.size() - 1) and GameState.worn[&"hunter"].get(&"hat", &"") == before_hat, "농부 밀짚모자는 사냥꾼이 입지 못함")
+	_check(inv.primary(&"bag", hb.size() - 1) and GameState.stash.size() == 1 and GameState.stash[0] == &"straw_hat", "창고가 열려 있으면 가방 칸 클릭 = 창고로 넣기")
+	main.close_inventory()
+	main._set_active(main.farmer)
+	main.farmer.position = main.stash_box.position + Vector2(-Config.TILE + 4, 0)
+	main.interact()
+	_check(inv.visible and inv.character == main.farmer and inv.primary(&"stash", 0) and inv.secondary(&"bag", 0) and GameState.worn[&"farmer"][&"hat"] == &"straw_hat", "농부가 창고에서 꺼내 입음 (공용 창고)")
+	main.close_inventory()
+	# 가방이 차면 창고로, 잃어버리지 않음
+	var fb: Array[StringName] = GameState.bag[&"farmer"]
+	fb.clear()
+	for i in Config.BAG_SIZE:
+		fb.append(&"rain_boots")
+	var stash_before := GameState.stash.size()
+	_check(Wearables.take_off(&"farmer", &"hat") and GameState.stash.size() == stash_before + 1 and GameState.stash.back() == &"straw_hat", "가방이 차면 벗은 장비는 창고로")
+	fb.clear()
+	# 사냥터에서도 I, 여는 동안 사냥터는 멈춤
+	GameState.hunts_today = 0
+	main._set_active(main.hunter)
+	main.hunter.position = main.hunt_gate.position
+	main.enter_hunt()
+	var h6: HuntGround = main.hunt
+	main._unhandled_input(_action(&"inventory"))
+	_check(inv.visible and not h6.is_processing(), "사냥터에서도 I 키 가방, 여는 동안 사냥터 멈춤")
+	inv.primary(&"equip", 0)
+	_check(h6.hearts <= h6.max_hearts() and h6.max_hearts() == Config.HUNTER_HEARTS, "사냥터에서 도토리 투구를 벗으면 하트 칸이 줄어듦")
+	main._unhandled_input(_action(&"menu_close"))
+	_check(not inv.visible and h6.is_processing(), "Esc로 닫으면 사냥터 다시 움직임")
+
 	print("SMOKE TEST: %s (%d failures)" % ["PASS" if _failures == 0 else "FAIL", _failures])
 	get_tree().quit(1 if _failures > 0 else 0)
 

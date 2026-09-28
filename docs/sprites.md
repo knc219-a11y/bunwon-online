@@ -106,6 +106,7 @@
 | `assets/props/incubator.png` | 48 x 48 | 2 x 2 | 짚 깐 나무 상자에 알, 빨간 보온등 |
 | `assets/props/supply_box.png` | 48 x 44 | 2 x 1 | 무인 판매대 모양 공동 선반, 파란 양철 지붕, 알·무 상자 |
 | `assets/props/hunt_gate.png` | 72 x 56 | 3 x 2 | 콘크리트 기둥 철망 울타리 문, 노란 경고판, 뒤로 숲 |
+| `assets/props/stash.png` | 24 x 28 | 1 x 1 | 공용 창고: 쇠 띠 두른 나무 궤짝 (2026-09-28 임시, 후보 비교 없이 넣음) |
 
 지금 그림은 `tools/make_village_props.py`가 코드로 그린 **임시 그림**이다. 같은 크기 PNG로 파일만 덮어쓰면 된다.
 

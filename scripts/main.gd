@@ -23,6 +23,8 @@ const TOOL_UPGRADES := {
 const INCUBATOR_RECT := Rect2i(17, 3, 2, 2)
 const SUPPLY_RECT := Rect2i(17, 9, 2, 1)
 const HUNT_GATE_RECT := Rect2i(21, 3, 3, 2)
+## 마을 공용 창고 궤짝 (2026-09-28 사용자 요청 "창고 기능"). 자리는 임시 배치 (공급함 왼쪽).
+const STASH_RECT := Rect2i(16, 9, 1, 1)
 ## 배경 오브젝트 (2026-09-27 결정: 집 B 양옥, 나무 감나무 + 당산나무 하나). 자리는 임시 배치.
 const HOUSE_RECT := Rect2i(20, 8, 5, 4)
 const DANGSAN_RECT := Rect2i(13, 11, 2, 2)
@@ -43,6 +45,7 @@ var hunter: Character
 var incubator: Prop
 var supply_box: Prop
 var hunt_gate: Prop
+var stash_box: Prop
 var house: Prop
 var props: Array[Prop] = []
 var creatures: Array[Creature] = []
@@ -64,6 +67,8 @@ var menu_index := 0
 var _menu_options: Array[StringName] = []
 var _menu: ColorRect
 var _menu_text: Label
+## 디아블로식 가방 창 (I 키, 창고 궤짝 F). 열려 있는 동안 캐릭터는 멈추고 사냥터도 멈춘다.
+var inventory: InventoryUI
 ## 사냥터 (2026-09-27 결정 A). 사냥꾼이 들어가 있는 동안만 있다.
 var hunt: HuntGround
 ## 사냥터에 있는 동안 숨기는 마을 쪽 노드
@@ -91,6 +96,7 @@ func _ready() -> void:
 	incubator = _add_prop("부화기", preload("res://assets/props/incubator.png"), INCUBATOR_RECT)
 	supply_box = _add_prop("마을 공급함", preload("res://assets/props/supply_box.png"), SUPPLY_RECT)
 	hunt_gate = _add_prop("사냥터 입구", preload("res://assets/props/hunt_gate.png"), HUNT_GATE_RECT)
+	stash_box = _add_prop("창고", preload("res://assets/props/stash.png"), STASH_RECT)
 
 	farmer = _add_character("농부", preload("res://assets/characters/player.png"), Vector2i(14, 6), &"farmer")
 	hunter = _add_character("사냥꾼", preload("res://assets/characters/hunter.png"), Vector2i(20, 6), &"hunter")
@@ -160,6 +166,15 @@ func _unhandled_input(event: InputEvent) -> void:
 	if sleeping:
 		if event.is_action_pressed("interact"):
 			interact()
+		return
+	if inventory.visible:
+		if event.is_action_pressed("inventory") or event.is_action_pressed("menu_close") or event.is_action_pressed("switch_character"):
+			close_inventory()
+		else:
+			inventory.handle_key(event)
+		return
+	if event.is_action_pressed("inventory") and not menu_open:
+		open_inventory()
 		return
 	if hunt:
 		if event.is_action_pressed("attack"):
@@ -282,6 +297,8 @@ func _farmer_interact() -> void:
 	if s:
 		s.pick_up(farmer)
 		GameState.notify("%s을(를) 들었다. 원하는 자리에서 다시 F." % s.data.species.display_name)
+	elif _near_stash():
+		open_inventory(true)
 	elif _near(supply_box):
 		open_menu()
 	elif _near(incubator):
@@ -302,6 +319,8 @@ func _hunter_interact() -> void:
 			open_menu(&"companion")
 		else:
 			enter_hunt()
+	elif _near_stash():
+		open_inventory(true)
 	elif _near(supply_box):
 		if GameState.hunter_eggs.is_empty() and GameState.junk <= 0:
 			GameState.notify("공급할 알이 없다. 사냥터 입구로 가자.")
@@ -542,7 +561,7 @@ func supply_action(id: StringName) -> bool:
 	return true
 
 
-## 입는 장비를 사서 바로 입힌다 (옷장은 다음 단계).
+## 입는 장비를 사서 바로 입힌다 (입던 것은 가방으로).
 func buy_wear(id: StringName) -> bool:
 	var item: Dictionary = Wearables.ITEMS[id]
 	if Wearables.is_owned(id):
@@ -552,12 +571,41 @@ func buy_wear(id: StringName) -> bool:
 		GameState.notify("돈이 모자라다. %s %d원 (가진 돈 %d원)." % [item.name, item.price, GameState.money])
 		return false
 	GameState.money -= item.price
-	GameState.owned_wear.append(id)
-	GameState.worn[item.who][item.slot] = id
+	Wearables.gain_and_wear(id)
 	var c := farmer if item.who == &"farmer" else hunter
 	c.refresh_wear()
 	GameState.notify("%s이(가) %s을(를) 입었다! -%d원. %s" % [c.display_name, item.name, item.price, item.effect])
 	return true
+
+
+# --- 디아블로식 가방 · 공용 창고 (2026-09-28 사용자 요청) ----------------
+
+## 가방 창을 연다. stash 면 창고 칸도 옆에 붙인다 (마을 창고 궤짝에서 F).
+func open_inventory(stash := false) -> void:
+	close_menu()
+	active.frozen = true
+	if hunt:
+		hunt.set_process(false)
+	inventory.open(active, stash)
+
+
+func close_inventory() -> void:
+	if not inventory.visible:
+		return
+	inventory.close()
+	active.frozen = false
+	if hunt:
+		hunt.set_process(true)
+	GameState.touch()
+
+
+func _on_wear_changed() -> void:
+	farmer.refresh_wear()
+	hunter.refresh_wear()
+	if hunt:
+		# 하트를 늘리는 장비를 벗으면 하트 칸이 줄어든다 (다시 입는다고 하트가 차지는 않음)
+		hunt.hearts = clampi(hunt.hearts, 1, hunt.max_hearts())
+	GameState.touch()
 
 
 # --- 사냥터 입구 동행 고르기 (2026-09-27 결정 A. 따라오는 동료) -----------
@@ -704,6 +752,11 @@ func _near(prop: Prop) -> bool:
 	return prop.is_near(active.position, Config.PROP_INTERACT_DISTANCE)
 
 
+## 창고 궤짝은 공급함 바로 옆이라 둘 다 닿으면 더 가까운 쪽을 쓴다
+func _near_stash() -> bool:
+	return _near(stash_box) and stash_box.distance_to(active.position) < supply_box.distance_to(active.position)
+
+
 func _nearest_creature() -> Creature:
 	var best: Creature = null
 	var best_d := Config.INTERACT_DISTANCE
@@ -756,7 +809,7 @@ func _build_hud() -> void:
 	help.position = Vector2(6, 345)
 	help.add_theme_font_size_override("font_size", 9)
 	help.modulate = Color(1, 1, 1, 0.7)
-	help.text = "이동 WASD · 도구 Space (사냥터: 클릭) · 도구 변경 Q/E · 상호작용 F (공급함: W/S 고르기) · 크리처 일 R · 캐릭터 전환 Tab · 잠자기 집 현관 F"
+	help.text = "이동 WASD · 도구 Space (사냥터: 클릭) · 도구 변경 Q/E · 상호작용 F (공급함: W/S 고르기) · 크리처 일 R · 가방 I · 캐릭터 전환 Tab · 잠자기 집 현관 F"
 	layer.add_child(help)
 	# 잠잘 때 화면 전체를 덮는 밤 색. 평소에는 투명.
 	_night = ColorRect.new()
@@ -788,6 +841,9 @@ func _build_hud() -> void:
 	_menu_text.add_theme_font_size_override("font_size", 10)
 	_menu_text.add_theme_color_override("font_color", Color(0.3, 0.2, 0.15))
 	_menu.add_child(_menu_text)
+	inventory = InventoryUI.new()
+	inventory.wear_changed.connect(_on_wear_changed)
+	layer.add_child(inventory)
 	_refresh_hud()
 
 
