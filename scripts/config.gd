@@ -167,16 +167,21 @@ const HUNT_ZONES: Array[Dictionary] = [
 	},
 	{
 		name = "금사리", monster = "모래게", boss_monster = "금두꺼비", waypoint = true,
+		## 화면보다 넓은 맵 (2026-09-28 사용자 선택 C): data/hunt_maps/geumsa.txt, 카메라가 사냥꾼을 따라간다
+		map = "geumsa",
 		sheet = "res://assets/creatures/wild_sand_crab.png", boss_sheet = "res://assets/creatures/wild_gold_toad.png", burrow = true,
 		sign = "금사리(구터)",
 		## 대장을 쓰러뜨리면 반드시 떨어지는 알 (그날 첫 처치 알과는 따로)
 		boss_egg = "res://data/creatures/species/gold_toad.tres",
-		count = 3, hp = 3, speed = 1.25, boss_hp = 6,
+		## 넓은 맵이라 모래톱마다 한 마리씩 (임시)
+		count = 6, hp = 3, speed = 1.25, boss_hp = 6,
 		loot = {&"money": 38, &"potion": 25, &"junk": 19, &"gear": 18},
 		rarity = {&"normal": 50, &"magic": 38, &"rare": 12}, boss_rarity = {&"normal": 20, &"magic": 55, &"rare": 25},
 		money = [20, 45], boss_money = [45, 80],
 		monster_tint = Color.WHITE, boss_tint = Color.WHITE, ground_tint = Color(0.9, 0.86, 0.72), tree_tint = Color(0.72, 0.86, 0.7),
 	},
 ]
+## 넓은 맵의 여울(얕은 물)에서 걷기 빠르기 배율 (임시)
+const HUNT_FORD_SPEED := 0.6
 ## 숨은 몬스터가 튀어나오는 거리 (px)
 const WILD_BURROW_POP_DISTANCE := 60.0

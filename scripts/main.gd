@@ -390,7 +390,7 @@ func enter_hunt(companion: Creature = null, zone := 0) -> bool:
 	GameState.hunts_today += 1
 	_village_nodes.clear()
 	for n in get_children():
-		if n is Node2D and n != hunter and (n as Node2D).visible:
+		if n is Node2D and n != hunter and (n as Node2D).visible and not n.is_queued_for_deletion():
 			_village_nodes.append(n)
 			(n as Node2D).visible = false
 	hunt = HuntGround.new()
@@ -430,6 +430,7 @@ func leave_hunt() -> void:
 		_companion_source = null
 	hunter.farm = farm
 	hunter.walk_area = Rect2()
+	hunter.terrain = null
 	hunter.show_facing_cell = true
 	hunter.position = Farm.center_of(HUNT_GATE_RECT.position + Vector2i(1, HUNT_GATE_RECT.size.y))
 	hunter.facing = Vector2i.DOWN
