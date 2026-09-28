@@ -28,6 +28,8 @@ var active := false:
 var farm: Farm
 ## 비어 있지 않으면 이 영역 안에서만 걷는다 (사냥터).
 var walk_area := Rect2()
+## 넓은 사냥터의 칸 지도. 있으면 깊은 물·바위·나무에 막히고 여울에서 느려진다.
+var terrain: HuntMap
 ## 바라보는 칸 표시 (농사용). 사냥터에서는 끈다.
 var show_facing_cell := true
 ## 선택창이 열려 있는 동안처럼 조작 중이지만 걷지 않을 때 true
@@ -95,7 +97,7 @@ func step(motion: Vector2) -> void:
 		if axis == Vector2.ZERO:
 			continue
 		var to := (position + axis).clamp(area.position, area.end)
-		if farm == null or farm.is_free(feet_rect(to)):
+		if (farm == null or farm.is_free(feet_rect(to))) and (terrain == null or terrain.is_free(feet_rect(to))):
 			position = to
 
 
@@ -120,7 +122,8 @@ func _process(delta: float) -> void:
 		facing = Vector2i(int(signf(dir.x)), 0)
 	else:
 		facing = Vector2i(0, int(signf(dir.y)))
-	step(dir * Config.CHARACTER_SPEED * Wearables.speed_mult(who) * delta)
+	var ground_mult := terrain.speed_at(feet()) if terrain else 1.0
+	step(dir * Config.CHARACTER_SPEED * Wearables.speed_mult(who) * ground_mult * delta)
 	queue_redraw()
 
 

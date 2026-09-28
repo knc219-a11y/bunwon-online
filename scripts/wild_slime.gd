@@ -28,6 +28,8 @@ var buried := false
 var _tint := TINT
 ## 움직일 수 있는 영역 (사냥터 공터)
 var area := Rect2()
+## 넓은 사냥터의 칸 지도. 있으면 깊은 물·징검다리·바위·나무로는 가지 않는다.
+var terrain: HuntMap
 ## false 면 스스로 움직이지 않는다 (테스트에서 끈다)
 var ai_enabled := true
 
@@ -98,7 +100,7 @@ func hit(from: Vector2) -> bool:
 	var away := (position - from).normalized()
 	if away == Vector2.ZERO:
 		away = Vector2.UP
-	position = (position + away * 14.0).clamp(area.position, area.end)
+	position = _stand(position + away * 14.0)
 	_hop_t = -1.0
 	_rest = Config.WILD_SLIME_REST_TIME
 	return hp <= 0
@@ -156,14 +158,28 @@ func tick(delta: float, target: Vector2) -> void:
 	queue_redraw()
 
 
+## to 로 옮길 수 있으면 to, 못 서는 곳(물 등)이면 지금 자리. 영역 밖은 안으로 당긴다.
+func _stand(to: Vector2) -> Vector2:
+	to = to.clamp(area.position, area.end)
+	# 이미 못 서는 곳에 있으면 (혀에 끌려 물가에 떨어졌을 때) 어디로든 빠져나오게 둔다
+	var feet := Vector2(0, BOTTOM_Y - 2)
+	if terrain and not terrain.monster_ok(to + feet) and terrain.monster_ok(position + feet):
+		return position
+	return to
+
+
 func _start_hop(target: Vector2) -> void:
 	var dir: Vector2
 	if position.distance_to(target) <= Config.WILD_SLIME_CHASE_DISTANCE:
 		dir = (target - position).normalized()
 	else:
 		dir = Vector2.RIGHT.rotated(randf() * TAU)
+	var to := _stand(position + dir * Config.WILD_SLIME_HOP_DISTANCE)
+	if to == position:
+		# 물가에 막히면 옆으로 비껴 뛴다
+		to = _stand(position + dir.rotated(PI / 2 * (1 if randf() < 0.5 else -1)) * Config.WILD_SLIME_HOP_DISTANCE)
 	_hop_from = position
-	_hop_to = (position + dir * Config.WILD_SLIME_HOP_DISTANCE).clamp(area.position, area.end)
+	_hop_to = to
 	_hop_t = 0.0
 
 

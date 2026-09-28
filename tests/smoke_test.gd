@@ -893,9 +893,9 @@ func _ready() -> void:
 	_check(sh.slimes.is_empty() and not sh.path_open, "마지막 구역 대장 뒤엔 길이 열리지 않음 (다음 구역은 아직)")
 	var toad_eggs := sh.drops.filter(func(d: Dictionary) -> bool: return d.species == CreatureCatalog.GOLD_TOAD)
 	_check(toad_eggs.size() == 1, "대장 금두꺼비는 금두꺼비 알을 반드시 남김")
-	main.hunter.position = HuntGround.NEXT_AREA.get_center()
+	main.hunter.position = sh.next_area().get_center()
 	_check(not sh.advance() and sh.zone == 1, "더 깊이 갈 수 없음")
-	main.hunter.position = HuntGround.EXIT_AREA.get_center()
+	main.hunter.position = sh.exit_area().get_center()
 	main.interact()
 	_check(main.hunt == null, "아래 입구 F로 마을로")
 	# 다음 날: 사냥터 입구에서 웨이포인트를 고른다
@@ -983,6 +983,81 @@ func _ready() -> void:
 	pulled.tick(Config.COMPANION_PULL_STUN, main.hunter.feet())
 	_check(not pulled.stunned(), "%.0f초 뒤 다시 움직임" % Config.COMPANION_PULL_STUN)
 	main.leave_hunt()
+
+	# 25. 넓은 맵 (2026-09-28 사용자 선택 C): 금사리는 화면보다 넓은 칸 지도 + 카메라
+	main.next_day()
+	_check(main.enter_hunt(null, 1), "금사리 웨이포인트로 입장")
+	var wh: HuntGround = main.hunt
+	wh.set_ai(false)
+	var wm := wh.map
+	_check(wm != null and wm.size == Vector2i(52, 30) and wm.pixel_size() == Vector2(1248, 720), "금사리는 52x30칸 (화면 2x2) 넓은 맵")
+	_check(wh.camera.is_current() and wh.camera.limit_right == 1248 and wh.camera.limit_bottom == 720, "카메라가 맵 끝까지 따라감")
+	_check(main.hunter.position == wm.spot("S") and wh.near_exit(), "아래 입구 앞에서 시작")
+	_check(wh.slimes.size() == z2.count and wh.slimes.all(func(s: WildSlime) -> bool: return s.buried and wm.at_point(s.position) == "c"), "모래게 %d마리가 모래톱마다 숨어 있음" % z2.count)
+	var hunter_w: Character = main.hunter
+	hunter_w.position = Vector2(46, 26) * HuntGround.T
+	wh.tick(0.01)
+	await get_tree().process_frame
+	var screen_center := wh.camera.get_screen_center_position()
+	_check(screen_center.distance_to(Vector2(1248 - 320, 720 - 180)) < 1.0 and get_viewport().canvas_transform.origin.x < -500, "사냥꾼을 따라 화면이 움직이고 맵 끝에서 멈춤 %s %s" % [screen_center, get_viewport().canvas_transform.origin])
+	# 깊은 물: 물 아래쪽 풀·모래에서 위로 걸어도 물에 못 들어감
+	var shore := Vector2i(-1, -1)
+	for x in range(2, 50):
+		for y in range(1, 29):
+			if shore.x < 0 and wm.at(Vector2i(x, y)) == "~" and wm.at(Vector2i(x - 1, y)) == "~" and wm.at(Vector2i(x + 1, y)) == "~" and wm.at(Vector2i(x, y + 1)) in [".", ","]:
+				shore = Vector2i(x, y)
+	hunter_w.position = Vector2(shore.x * 24 + 12, (shore.y + 1) * 24 + 12)
+	for i in 30:
+		hunter_w.step(Vector2(0, -2))
+	_check(wm.at_point(hunter_w.feet()) != "~" and wm.is_free(hunter_w.feet_rect(hunter_w.position)), "깊은 물에는 못 들어감")
+	# 징검다리: 사냥꾼은 건너고 몬스터는 못 섬
+	var stones := wm.find("o")
+	hunter_w.position = stones[stones.size() - 1] + Vector2(0, 24 - Character.FEET_Y)
+	for i in 60:
+		hunter_w.step(Vector2(0, -2))
+	_check(not stones.is_empty() and hunter_w.feet().y < stones[0].y, "징검다리로 냇물을 건넘")
+	_check(not wm.monster_ok(stones[0]) and wm.monster_ok(wm.spot("K")), "몬스터는 징검다리에 못 섬")
+	# 여울: 걸을 수 있지만 느려짐
+	var ford: Vector2 = wm.find("=")[0]
+	hunter_w.active = true
+	hunter_w.frozen = false
+	hunter_w.position = ford - Vector2(0, Character.FEET_Y)
+	Input.action_press(&"move_down")
+	var y0 := hunter_w.position.y
+	hunter_w._process(0.1)
+	var ford_step := hunter_w.position.y - y0
+	hunter_w.position = wm.spot("K")
+	y0 = hunter_w.position.y
+	hunter_w._process(0.1)
+	var sand_step := hunter_w.position.y - y0
+	Input.action_release(&"move_down")
+	_check(ford_step > 0.0 and absf(ford_step / sand_step - Config.HUNT_FORD_SPEED) < 0.01, "여울에서는 걷기 %d%% (%.1f / %.1f px)" % [roundi(Config.HUNT_FORD_SPEED * 100), ford_step, sand_step])
+	# 몬스터는 물을 건너 쫓아오지 않음 (여울 말고는)
+	var chaser: WildSlime = wh.slimes[0]
+	chaser.buried = false
+	chaser.ai_enabled = true
+	chaser.position = Vector2(shore.x * 24 + 12, (shore.y + 1) * 24 + 16)
+	var far_bank := Vector2(chaser.position.x, shore.y * 24 - 60)
+	var dry := true
+	for i in 300:
+		chaser.tick(0.05, far_bank)
+		dry = dry and wm.monster_ok(chaser.position + Vector2(0, WildSlime.BOTTOM_Y - 2))
+	_check(dry, "몬스터는 깊은 물로 뛰어들지 않음")
+	chaser.ai_enabled = false
+	# 대장은 대장 모래밭에 나옴
+	for s in wh.slimes.duplicate():
+		s.hp = 1
+		s.buried = false
+		hunter_w.position = s.position - Vector2(0, -8 - Config.SWING_REACH) - Vector2(0, Character.FEET_Y)
+		wh.tick(Config.SWING_COOLDOWN)
+		wh.swing(Vector2.UP)
+	_check(wh.boss_spawned and wh.slimes.size() == 1 and wh.slimes[0].position == wm.spot("K"), "다 잡으면 대장 %s이(가) 대장 모래밭에 나타남" % z2.boss_monster)
+	hunter_w.position = wm.spot("S")
+	wh.tick(0.01)
+	_check(wh.near_exit(), "입구로 돌아오면 F로 나갈 수 있음")
+	main.interact()
+	await get_tree().process_frame
+	_check(main.hunt == null and hunter_w.terrain == null and get_viewport().canvas_transform == Transform2D.IDENTITY, "마을로 돌아오면 화면이 원래대로")
 
 	print("SMOKE TEST: %s (%d failures)" % ["PASS" if _failures == 0 else "FAIL", _failures])
 	get_tree().quit(1 if _failures > 0 else 0)

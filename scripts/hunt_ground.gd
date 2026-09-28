@@ -7,6 +7,9 @@ extends Node2D
 ## 스테이지 (2026-09-28 사용자 선택 B + 웨이포인트): 구역(Config.HUNT_ZONES)을 앞으로 걸어간다.
 ## 대장을 쓰러뜨리면 위쪽 길이 열리고, 그 길에서 F로 같은 날 다음 구역으로 이어서 간다 (하트는 그대로).
 ## 웨이포인트가 있는 구역에 처음 도착하면 웨이포인트가 켜지고, 다음 날부터 사냥터 입구에서 거기서 시작할 수 있다.
+## 넓은 맵 (2026-09-28 사용자 선택 C): 구역 데이터에 map 이 있으면 칸 지도(HuntMap)로 화면보다 넓은 사냥터를 만들고
+## 카메라가 사냥꾼을 따라간다. 입구·위쪽 길·웨이포인트·표지·대장·몬스터 자리는 지도의 표식에서 온다.
+## map 이 없는 구역(분원농협)은 예전 한 화면 공터 그대로.
 
 signal knocked_out
 
@@ -71,6 +74,12 @@ var _ground: Node2D
 var _trees: Array[Sprite2D] = []
 ## 지금 구역의 마을 표지 (없으면 null)
 var sign_node: Sprite2D
+## 지금 구역의 넓은 맵 칸 지도 (한 화면 구역이면 null)
+var map: HuntMap
+var camera: Camera2D
+var _gate: Sprite2D
+## 넓은 맵에 세운 나무 (구역이 바뀌면 치운다)
+var _map_trees: Array[Sprite2D] = []
 
 
 func _ready() -> void:
@@ -95,6 +104,10 @@ func _ready() -> void:
 	gate.position = EXIT_AT
 	gate.z_index = int(EXIT_AT.y)
 	add_child(gate)
+	_gate = gate
+	camera = Camera2D.new()
+	add_child(camera)
+	camera.make_current()
 	var layer := CanvasLayer.new()
 	layer.layer = 2
 	add_child(layer)
@@ -110,16 +123,41 @@ func _fill_zone() -> void:
 		s.queue_free()
 	slimes.clear()
 	var z: Dictionary = Config.HUNT_ZONES[zone]
+	map = HuntMap.load_map(z.map) if z.has("map") else null
+	for t in _map_trees:
+		t.queue_free()
+	_map_trees.clear()
+	if map:
+		for p in map.find("T"):
+			var tree := Sprite2D.new()
+			tree.texture = preload("res://assets/props/tree_persimmon.png")
+			tree.centered = false
+			tree.offset = Vector2(-24, -72)
+			tree.position = p + Vector2(0, 10)
+			tree.z_index = int(tree.position.y)
+			add_child(tree)
+			_map_trees.append(tree)
+	var spots: Array[Vector2] = []
+	if map:
+		spots = map.find("c")
 	for i in z.count:
 		var s := WildSlime.new()
 		s.setup_zone(zone)
-		s.area = Rect2(Vector2(CLEARING.position * T) + Vector2(12, 12), Vector2(CLEARING.size * T) - Vector2(24, 24))
-		s.position = Farm.center_of(SLIME_CELLS[i % SLIME_CELLS.size()])
+		s.area = monster_area()
+		s.terrain = map
+		s.position = spots[i % spots.size()] if map else Farm.center_of(SLIME_CELLS[i % SLIME_CELLS.size()])
 		s.ai_enabled = _ai_on
 		add_child(s)
 		slimes.append(s)
-	for tree in _trees:
+	for tree in _trees + _map_trees:
 		tree.modulate = z.tree_tint
+	for tree in _trees:
+		tree.visible = map == null
+	_gate.position = Vector2(map.spot("E").x, map.pixel_size().y) if map else EXIT_AT
+	_gate.z_index = int(_gate.position.y)
+	var world := map.pixel_size() if map else Vector2(640, 360)
+	camera.limit_right = int(world.x)
+	camera.limit_bottom = int(world.y)
 	if sign_node:
 		sign_node.queue_free()
 		sign_node = null
@@ -128,8 +166,8 @@ func _fill_zone() -> void:
 		sign_node.texture = preload("res://assets/props/geumsa_jar.png")
 		sign_node.centered = false
 		sign_node.offset = Vector2(-24, -64)
-		sign_node.position = SIGN_AT
-		sign_node.z_index = int(SIGN_AT.y)
+		sign_node.position = map.spot("J") + Vector2(0, 10) if map else SIGN_AT
+		sign_node.z_index = int(sign_node.position.y)
 		sign_node.draw.connect(_draw_sign.bind(z.sign))
 		add_child(sign_node)
 	_ground.queue_redraw()
@@ -145,11 +183,66 @@ func start(h: Character, first_today: bool, start_zone := 0) -> void:
 		_fill_zone()
 	loot_rng.randomize()
 	hearts = max_hearts()
-	hunter.walk_area = WALK_AREA
 	hunter.show_facing_cell = false
 	hunter.queue_redraw()
-	hunter.position = SPAWN_AT
+	_place_hunter()
+
+
+## 사냥꾼을 지금 구역 들어오는 자리에 세우고, 걸을 곳과 카메라를 맞춘다.
+func _place_hunter() -> void:
+	hunter.walk_area = Rect2(Vector2(8, 8), map.pixel_size() - Vector2(16, 16)) if map else WALK_AREA
+	hunter.terrain = map
+	hunter.position = spawn_at()
 	hunter.facing = Vector2i.UP
+	_follow_camera()
+
+
+func _follow_camera() -> void:
+	if hunter:
+		camera.position = hunter.position
+		camera.reset_smoothing()
+
+
+func _exit_tree() -> void:
+	# 카메라가 사라져도 마을 화면이 밀린 채로 남지 않게 되돌린다 (다른 사냥터 카메라가 이미 켜졌으면 그대로)
+	if camera.is_current():
+		get_viewport().canvas_transform = Transform2D.IDENTITY
+
+
+## 사냥꾼이 들어오는 자리 (px)
+func spawn_at() -> Vector2:
+	return map.spot("S") if map else SPAWN_AT
+
+
+## 아래 입구 (마을로) F가 닿는 범위 (px)
+func exit_area() -> Rect2:
+	if map:
+		var e := map.spot("E")
+		return Rect2(e.x - 3 * T, e.y - 2 * T - 12, 6 * T, 2 * T + 24)
+	return EXIT_AREA
+
+
+## 위쪽 길 (다음 구역) F가 닿는 범위 (px)
+func next_area() -> Rect2:
+	if map:
+		var n := map.spot("N")
+		return Rect2(n.x - 2.5 * T, n.y - T, 5 * T, 3 * T)
+	return NEXT_AREA
+
+
+func waypoint_at() -> Vector2:
+	return map.spot("W") if map else WAYPOINT_AT
+
+
+func boss_at() -> Vector2:
+	return map.spot("K") if map else BOSS_AT
+
+
+## 몬스터가 다닐 수 있는 영역 (px). 넓은 맵은 맵 전체 (물·바위는 칸 지도로 막음).
+func monster_area() -> Rect2:
+	if map:
+		return Rect2(Vector2(T, T), map.pixel_size() - Vector2(2 * T, 2 * T))
+	return Rect2(Vector2(CLEARING.position * T) + Vector2(12, 12), Vector2(CLEARING.size * T) - Vector2(24, 24))
 
 
 ## 농장 크리처를 데려온다. 사냥꾼 뒤에 선다.
@@ -192,12 +285,12 @@ func set_ai(on: bool) -> void:
 
 
 func near_exit() -> bool:
-	return EXIT_AREA.has_point(hunter.position)
+	return exit_area().has_point(hunter.position)
 
 
 ## 열린 위쪽 길 가까이인지
 func near_next() -> bool:
-	return path_open and NEXT_AREA.has_point(hunter.position)
+	return path_open and next_area().has_point(hunter.position)
 
 
 ## 위쪽 길로 다음 구역에 들어간다 (같은 날, 하트 그대로). 땅에 남은 것은 챙겨 간다.
@@ -215,8 +308,7 @@ func advance() -> bool:
 	path_open = false
 	boss_spawned = false
 	_fill_zone()
-	hunter.position = SPAWN_AT
-	hunter.facing = Vector2i.UP
+	_place_hunter()
 	if companion:
 		companion.position = hunter.feet() + Vector2(0, Config.COMPANION_FOLLOW_DISTANCE)
 	var z: Dictionary = Config.HUNT_ZONES[zone]
@@ -238,6 +330,7 @@ func tick(delta: float) -> void:
 	_cooldown = maxf(_cooldown - delta, 0.0)
 	_invulnerable = maxf(_invulnerable - delta, 0.0)
 	_swing_time = maxf(_swing_time - delta, 0.0)
+	_follow_camera()
 	var feet := hunter.feet()
 	for s in slimes:
 		s.tick(delta, feet)
@@ -378,8 +471,9 @@ func spawn_boss() -> WildSlime:
 	boss_spawned = true
 	var b := WildSlime.new()
 	b.make_boss(zone)
-	b.area = Rect2(Vector2(CLEARING.position * T) + Vector2(12, 12), Vector2(CLEARING.size * T) - Vector2(24, 24))
-	b.position = BOSS_AT
+	b.area = monster_area()
+	b.terrain = map
+	b.position = boss_at()
 	b.ai_enabled = _ai_on
 	add_child(b)
 	slimes.append(b)
@@ -489,6 +583,10 @@ func _draw_sign(text: String) -> void:
 
 
 func _draw_ground(n: Node2D) -> void:
+	if map:
+		n.draw_texture(map.ground, Vector2.ZERO)
+		_draw_waypoint(n)
+		return
 	var tiles: Texture2D = preload("res://assets/tiles/farm_tiles.png")
 	for x in Config.MAP_SIZE.x + 1:
 		for y in Config.MAP_SIZE.y:
@@ -499,9 +597,13 @@ func _draw_ground(n: Node2D) -> void:
 		var top := 0 if path_open and x >= 12 and x <= 14 else CLEARING.position.y
 		for y in range(top, CLEARING.end.y + 3 if x >= 11 and x <= 13 else CLEARING.end.y):
 			n.draw_texture_rect_region(tiles, Rect2(x * T, y * T, T, T), Rect2(4 * T, 0, T, T))
+	_draw_waypoint(n)
+
+
+func _draw_waypoint(n: Node2D) -> void:
 	if Config.HUNT_ZONES[zone].waypoint:
 		# 웨이포인트 돌: 납작한 돌판에 푸른 빛
-		var p := WAYPOINT_AT
+		var p := waypoint_at()
 		n.draw_set_transform(p, 0.0, Vector2(1.0, 0.5))
 		n.draw_circle(Vector2.ZERO, 16, Color(0.45, 0.45, 0.5))
 		n.draw_circle(Vector2.ZERO, 12, Color(0.6, 0.62, 0.68))
@@ -527,8 +629,40 @@ func _draw_hud() -> void:
 	var zw := font.get_string_size(zt, HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x
 	_hud.draw_rect(Rect2(632 - zw - 6, 30, zw + 6, 14), Color(0, 0, 0, 0.55))
 	_hud.draw_string(font, Vector2(632 - zw - 3, 41), zt, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.95, 0.85, 0.45))
+	_draw_offscreen_hint(font)
 	if path_open:
 		var pt := "▲ 위쪽 길: %d구역 %s (F)" % [zone + 2, Config.HUNT_ZONES[zone + 1].name]
 		var pw := font.get_string_size(pt, HORIZONTAL_ALIGNMENT_LEFT, -1, 9).x
 		_hud.draw_rect(Rect2(13 * T - pw / 2 - 3, 2 * T - 10, pw + 6, 13), Color(0, 0, 0, 0.55))
 		_hud.draw_string(font, Vector2(13 * T - pw / 2, 2 * T), pt, HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(1.0, 0.9, 0.35))
+
+
+## 넓은 맵: 가장 가까운 몬스터가 화면 밖이면 화면 가장자리에 그쪽 화살표와 이름을 띄운다.
+func _draw_offscreen_hint(font: Font) -> void:
+	if map == null or hunter == null:
+		return
+	var s := _nearest_slime(hunter.feet())
+	if s == null:
+		return
+	var view := Rect2(Vector2(0, 48), Vector2(640, 276))
+	var sp := get_viewport().canvas_transform * s.position
+	if view.has_point(sp):
+		return
+	var center := view.get_center()
+	var dir := (sp - center).normalized()
+	# 화면 가장자리에서 조금 안쪽
+	var inner := view.grow(-18)
+	var t := INF
+	if dir.x != 0.0:
+		t = minf(t, ((inner.end.x if dir.x > 0 else inner.position.x) - center.x) / dir.x)
+	if dir.y != 0.0:
+		t = minf(t, ((inner.end.y if dir.y > 0 else inner.position.y) - center.y) / dir.y)
+	var at := center + dir * t
+	var col := Color(0.95, 0.85, 0.45) if s.boss else Color(1, 0.97, 0.85)
+	var side := dir.orthogonal()
+	_hud.draw_colored_polygon(PackedVector2Array([at + dir * 9, at - dir * 5 + side * 6, at - dir * 5 - side * 6]), col)
+	var text := s.title
+	var w := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 8).x
+	var tp := (at - dir * 18 - Vector2(w / 2, -3)).clamp(Vector2(4, 56), Vector2(636 - w, 320))
+	_hud.draw_rect(Rect2(tp + Vector2(-2, -8), Vector2(w + 4, 11)), Color(0, 0, 0, 0.55))
+	_hud.draw_string(font, tp, text, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, col)
