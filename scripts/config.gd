@@ -102,6 +102,13 @@ const COMPANION_SHOT_RANGE := 110.0
 const COMPANION_SHOT_INTERVAL := 1.6
 const COMPANION_BUMP_RANGE := 16.0
 const COMPANION_BUMP_INTERVAL := 1.0
+## 혀 당기기 (아기 금두꺼비, 2026-09-28): 이 거리 안의 몬스터를 동행 바로 앞까지 끌어와 잠깐 멈춘다
+const COMPANION_PULL_RANGE := 100.0
+const COMPANION_PULL_INTERVAL := 1.8
+const COMPANION_PULL_GAP := 18.0
+const COMPANION_PULL_STUN := 1.0
+## 끌려오는 데 걸리는 시간 (초). 혀도 이만큼 보인다.
+const COMPANION_PULL_TIME := 0.25
 ## 박치기 크리처가 야생 슬라임을 쫓아가기 시작하는 거리 (사냥꾼에게서 너무 멀어지지 않게)
 const COMPANION_CHASE_DISTANCE := 90.0
 
@@ -155,12 +162,15 @@ const HUNT_ZONES: Array[Dictionary] = [
 		count = WILD_SLIME_COUNT, hp = WILD_SLIME_HP, speed = 1.0, boss_hp = BOSS_HP,
 		loot = HUNT_LOOT_WEIGHTS, rarity = GEAR_RARITY_WEIGHTS, boss_rarity = BOSS_RARITY_WEIGHTS,
 		money = [HUNT_MONEY_MIN, HUNT_MONEY_MAX], boss_money = [BOSS_MONEY_MIN, BOSS_MONEY_MAX],
+		boss_egg = "",
 		monster_tint = Color(1, 0.8, 0.75), boss_tint = Color(1.0, 0.82, 0.4), ground_tint = Color(0.82, 0.9, 0.8), tree_tint = Color(0.78, 0.92, 0.78),
 	},
 	{
 		name = "금사리", monster = "모래게", boss_monster = "금두꺼비", waypoint = true,
 		sheet = "res://assets/creatures/wild_sand_crab.png", boss_sheet = "res://assets/creatures/wild_gold_toad.png", burrow = true,
 		sign = "금사리(구터)",
+		## 대장을 쓰러뜨리면 반드시 떨어지는 알 (그날 첫 처치 알과는 따로)
+		boss_egg = "res://data/creatures/species/gold_toad.tres",
 		count = 3, hp = 3, speed = 1.25, boss_hp = 6,
 		loot = {&"money": 38, &"potion": 25, &"junk": 19, &"gear": 18},
 		rarity = {&"normal": 50, &"magic": 38, &"rare": 12}, boss_rarity = {&"normal": 20, &"magic": 55, &"rare": 25},

@@ -33,11 +33,19 @@
 땅속성(`earth.tres`)은 파종 재능 1.5배, 대신 이동이 조금 느리다(0.9배).
 비행(`flying.tres`)은 이동 속도 1.6배라서 밭 사이를 더 빨리 오간다.
 
+## 종 고유 능력 (선택)
+
+- `companion_style`: 사냥 동행 공격 방식. 비우면 첫 속성으로 정한다 (물 = 멀리서 물총, 그 밖 = 붙어서 박치기). `&"pull"` = 혀 당기기 (멀리 있는 몬스터를 끌어와 잠깐 멈춤)
+- `daily_gold`: 사금 줍기. 밭에서 일을 맡은 개체가 밤마다 이 범위의 돈을 주워 온다 (쉬는 중이면 없음)
+- `egg_color`, `egg_spot_color`: 사냥터에 떨어진 알 색
+
+사냥터 구역의 `boss_egg`(`Config.HUNT_ZONES`)에 종 경로를 넣으면 그 구역 대장이 그 알을 반드시 남긴다.
+
 ## 새 몬스터 추가하기
 
 1. Godot 파일시스템에서 `data/creatures/species/` 에 새 리소스 → `CreatureSpecies` 선택
 2. 이름, 가질 수 있는 속성 후보, 고유 재능, 능력치 범위, Trait 후보, 임시 색을 채운다. 속성별 스프라이트 시트가 있으면 `sprite_sheets`에 속성 id로 연결한다 (규격은 `docs/sprites.md`)
-3. `creature_catalog.gd` 의 `HUNT_TABLE` (또는 다른 획득 경로)에 넣는다
+3. `creature_catalog.gd` 의 `HUNT_TABLE`, 또는 구역 대장 알(`Config.HUNT_ZONES`의 `boss_egg`) 같은 획득 경로에 넣는다
 
 새 속성이나 Trait도 같은 방식으로 `data/creatures/elements/`, `data/creatures/traits/` 에 리소스를 만들면 된다.
 
@@ -52,6 +60,7 @@
 | 종 | 가능한 속성 | 비고 |
 |---|---|---|
 | 슬라임 | 물, 땅 | 첫 슬라임은 물속성 고정 (2026-09-27 결정) |
+| 아기 금두꺼비 | 땅 | 금사리 대장 금두꺼비를 쓰러뜨리면 알 (2026-09-28 사용자 선택). 사냥 동행 = 혀 당기기, 밭에서 일하면 밤마다 사금 5~15원 |
 
 | 속성 | 효과 (임시값) |
 |---|---|

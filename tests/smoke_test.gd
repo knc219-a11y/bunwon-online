@@ -891,6 +891,8 @@ func _ready() -> void:
 	sh.tick(Config.SWING_COOLDOWN)
 	sh.swing()
 	_check(sh.slimes.is_empty() and not sh.path_open, "마지막 구역 대장 뒤엔 길이 열리지 않음 (다음 구역은 아직)")
+	var toad_eggs := sh.drops.filter(func(d: Dictionary) -> bool: return d.species == CreatureCatalog.GOLD_TOAD)
+	_check(toad_eggs.size() == 1, "대장 금두꺼비는 금두꺼비 알을 반드시 남김")
 	main.hunter.position = HuntGround.NEXT_AREA.get_center()
 	_check(not sh.advance() and sh.zone == 1, "더 깊이 갈 수 없음")
 	main.hunter.position = HuntGround.EXIT_AREA.get_center()
@@ -917,10 +919,12 @@ func _ready() -> void:
 	zr.seed = 23
 	var zc := {&"normal": 0, &"magic": 0, &"rare": 0}
 	var zmoney_ok := true
+	# 입은 장비의 "돈 드롭 +%" 옵션만큼 범위가 늘어난다
+	var zmult := 1.0 + Wearables.stat_sum(&"hunter", "money") / 100.0
 	for i in 4000:
 		var zd := HuntLoot.roll_for_boss(zr, 1)
 		if zd.kind == &"money":
-			zmoney_ok = zmoney_ok and zd.amount >= z2.boss_money[0] and zd.amount <= z2.boss_money[1]
+			zmoney_ok = zmoney_ok and zd.amount >= roundi(z2.boss_money[0] * zmult) and zd.amount <= roundi(z2.boss_money[1] * zmult)
 		elif zd.has("roll"):
 			zc[zd.roll.rarity] += 1
 	var zg: int = zc[&"normal"] + zc[&"magic"] + zc[&"rare"]
@@ -931,6 +935,54 @@ func _ready() -> void:
 		if HuntLoot.pick_kind(i / 10.0, z2.loot) == &"gear":
 			kind_gear += 1
 	_check(kind_gear == z2.loot[&"gear"] * 10, "2구역 장비 몫 %d" % z2.loot[&"gear"])
+
+	# 24. 아기 금두꺼비 (2026-09-28 사용자 선택): 땅속성만, 혀 당기기 동행, 밭에서 사금 줍기
+	var trng := RandomNumberGenerator.new()
+	trng.seed = 24
+	var only_earth := true
+	for i in 50:
+		var td := CreatureData.hatch(CreatureCatalog.GOLD_TOAD, trng)
+		only_earth = only_earth and td.elements.size() == 1 and td.elements[0].id == &"earth"
+	_check(only_earth, "금두꺼비는 땅속성만 나옴")
+	var water_el: CreatureElement = load("res://data/creatures/elements/water.tres")
+	_check(not CreatureData.hatch(CreatureCatalog.GOLD_TOAD, trng).set_element(water_el), "금두꺼비에 물속성은 못 붙임")
+	var toad: Creature = main._hatch(CreatureCatalog.GOLD_TOAD, Vector2i(6, 12))
+	_check(toad.data.species.id == &"gold_toad" and toad.data.species.sprite_sheets.has(&"earth"), "금두꺼비 부화 (땅속성 그림)")
+	_check(HuntCompanion.style_for(toad.data) == HuntCompanion.Style.PULL and HuntCompanion.style_name(toad.data) == "혀로 끌어오기", "금두꺼비 동행은 혀로 끌어오기")
+	toad.job = CreatureJobs.SOW
+	var money_t := GameState.money
+	var night: Array = main.next_day()
+	var gained := GameState.money - money_t
+	_check(gained >= 5 and gained <= 15 and night.any(func(l: String) -> bool: return l.contains("사금")), "밭에서 일하는 금두꺼비는 밤마다 사금 5~15원 (+%d)" % gained)
+	toad.job = CreatureJobs.REST
+	money_t = GameState.money
+	main.next_day()
+	_check(GameState.money == money_t, "쉬는 금두꺼비는 사금을 줍지 않음")
+	_check(main.enter_hunt(toad, 1) and main.hunt.companion.style == HuntCompanion.Style.PULL, "금두꺼비와 금사리로")
+	var th: HuntGround = main.hunt
+	th.set_ai(false)
+	th.companion_ai = false
+	var pc := th.companion
+	main.hunter.position = Vector2(10, 7) * HuntGround.T
+	pc.position = main.hunter.feet() + Vector2(0, 20)
+	var pulled: WildSlime = th.slimes[0]
+	pulled.buried = false
+	pulled.hp = 3
+	pulled.position = pc.position + Vector2(Config.COMPANION_PULL_RANGE - 10, 0)
+	for other in th.slimes:
+		if other != pulled:
+			other.position = pc.position + Vector2(0, -Config.COMPANION_PULL_RANGE * 3)
+	var hp_before := pulled.hp
+	th.tick(Config.COMPANION_PULL_INTERVAL * 2)
+	th.tick(Config.COMPANION_PULL_TIME)
+	_check(pulled.hp == hp_before - 1 and pulled.position.distance_to(pc.position) <= Config.COMPANION_PULL_GAP + 1 and pulled.stunned(), "혀 당기기: 멀리 있는 몬스터를 끌어와 피해 1 + 멈춤")
+	var hearts_t := th.hearts
+	pulled.position = main.hunter.feet()
+	th.tick(0.01)
+	_check(th.hearts == hearts_t, "멈춘 몬스터에 닿아도 다치지 않음")
+	pulled.tick(Config.COMPANION_PULL_STUN, main.hunter.feet())
+	_check(not pulled.stunned(), "%.0f초 뒤 다시 움직임" % Config.COMPANION_PULL_STUN)
+	main.leave_hunt()
 
 	print("SMOKE TEST: %s (%d failures)" % ["PASS" if _failures == 0 else "FAIL", _failures])
 	get_tree().quit(1 if _failures > 0 else 0)

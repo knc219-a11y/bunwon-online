@@ -241,7 +241,7 @@ func tick(delta: float) -> void:
 	var feet := hunter.feet()
 	for s in slimes:
 		s.tick(delta, feet)
-		if _invulnerable <= 0.0 and not s.buried and s.position.distance_to(feet) <= Config.WILD_SLIME_TOUCH_DISTANCE:
+		if _invulnerable <= 0.0 and not s.buried and not s.stunned() and s.position.distance_to(feet) <= Config.WILD_SLIME_TOUCH_DISTANCE:
 			_hurt(s.position)
 	if companion:
 		_tick_companion(delta)
@@ -313,6 +313,12 @@ func companion_attack(target: WildSlime) -> void:
 	companion.play_attack(target.position)
 	if target.hit(companion.position):
 		_defeat(target)
+	elif companion.style == HuntCompanion.Style.PULL:
+		# 혀 당기기: 동행 바로 앞까지 끌어와 잠깐 멈춘다 (사냥꾼 칼 앞으로 데려옴)
+		var toward := (target.position - companion.position).normalized()
+		target.pull_to((companion.position + toward * Config.COMPANION_PULL_GAP).clamp(target.area.position, target.area.end))
+		target.stun(Config.COMPANION_PULL_STUN)
+		companion.pulling = target
 	elif companion.style == HuntCompanion.Style.BUMP:
 		# 박치기는 더 멀리 밀쳐낸다
 		var away := (target.position - companion.position).normalized()
@@ -345,6 +351,12 @@ func _defeat(s: WildSlime) -> void:
 		GameState.notify("모두 쓰러뜨렸다. 아래 입구에서 F로 마을로 돌아가자.")
 	else:
 		GameState.notify("%s을(를) 쓰러뜨렸다. 남은 %d마리." % [s.title, slimes.size()])
+	var boss_egg: String = Config.HUNT_ZONES[zone].get("boss_egg", "")
+	if s.boss and boss_egg != "":
+		# 금사리 대장 금두꺼비는 알을 반드시 남긴다 (2026-09-28 사용자 선택: 아기 금두꺼비)
+		var sp: CreatureSpecies = load(boss_egg)
+		drops.append({at = s.position + Vector2(-10, 4), species = sp})
+		GameState.notify("%s이(가) 금빛 알을 남겼다! 부화하면 %s." % [s.title, sp.display_name])
 	if s.boss and zone + 1 < Config.HUNT_ZONES.size():
 		path_open = true
 		_ground.queue_redraw()
@@ -427,10 +439,11 @@ func _draw() -> void:
 		draw_set_transform(p + Vector2(0, 6), 0.0, Vector2(1.0, 0.4))
 		draw_circle(Vector2.ZERO, 7.0, Color(0.27, 0.16, 0.33, 0.25))
 		draw_set_transform(Vector2.ZERO)
-		draw_circle(p + Vector2(0, 1), 6, Color(0.97, 0.93, 0.8))
-		draw_circle(p + Vector2(0, -3), 5, Color(0.97, 0.93, 0.8))
-		draw_circle(p + Vector2(-2, 0), 1.5, Color(0.55, 0.8, 0.95))
-		draw_circle(p + Vector2(2, 2), 1.2, Color(0.55, 0.8, 0.95))
+		var sp: CreatureSpecies = d.species
+		draw_circle(p + Vector2(0, 1), 6, sp.egg_color)
+		draw_circle(p + Vector2(0, -3), 5, sp.egg_color)
+		draw_circle(p + Vector2(-2, 0), 1.5, sp.egg_spot_color)
+		draw_circle(p + Vector2(2, 2), 1.2, sp.egg_spot_color)
 	var font := ThemeDB.fallback_font
 	for d in loot:
 		var p: Vector2 = d.at
