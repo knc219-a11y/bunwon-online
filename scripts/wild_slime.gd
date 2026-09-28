@@ -38,6 +38,12 @@ var _hop_to := Vector2.ZERO
 var _hop_t := -1.0
 var _flash := 0.0
 var _anim_time := 0.0
+## 혀에 끌려가는 중 (0~1, -1 = 아님)
+var _pull_t := -1.0
+var _pull_from := Vector2.ZERO
+var _pull_to := Vector2.ZERO
+## 멈춘 남은 시간 (금두꺼비 혀 당기기). 멈춘 동안은 움직이지 않고 부딪혀도 다치지 않는다.
+var _stun := 0.0
 
 
 func _ready() -> void:
@@ -98,14 +104,37 @@ func hit(from: Vector2) -> bool:
 	return hp <= 0
 
 
+func stun(time: float) -> void:
+	_stun = maxf(_stun, time)
+	_hop_t = -1.0
+
+
+## 혀에 끌려 to 까지 짧게 미끄러진다 (금두꺼비 혀 당기기). 멈춤과 함께 쓴다.
+func pull_to(to: Vector2) -> void:
+	_pull_from = position
+	_pull_to = to
+	_pull_t = 0.0
+	_hop_t = -1.0
+
+
+func stunned() -> bool:
+	return _stun > 0.0
+
+
 func tick(delta: float, target: Vector2) -> void:
 	_anim_time += delta
 	_flash = maxf(_flash - delta, 0.0)
+	_stun = maxf(_stun - delta, 0.0)
 	if buried and position.distance_to(target) <= Config.WILD_BURROW_POP_DISTANCE:
 		# 사냥꾼이 다가오면 모래에서 튀어나온다
 		buried = false
 		_rest = 0.4
-	if buried:
+	if _pull_t >= 0.0:
+		_pull_t = minf(_pull_t + delta / Config.COMPANION_PULL_TIME, 1.0)
+		position = _pull_from.lerp(_pull_to, _pull_t)
+		if _pull_t >= 1.0:
+			_pull_t = -1.0
+	if buried or _stun > 0.0:
 		pass
 	elif ai_enabled:
 		if _hop_t >= 0.0:
@@ -146,6 +175,11 @@ func _draw() -> void:
 	if hp < max_hp:
 		draw_rect(Rect2(-10, -24, 20, 3), Color(0.25, 0.2, 0.2))
 		draw_rect(Rect2(-10, -24, 20.0 * hp / max_hp, 3), Color(0.9, 0.5, 0.3))
+	# 멈춤 (혀 당기기): 머리 위에 빙글 도는 별 셋
+	if _stun > 0.0:
+		for i in 3:
+			var a := _anim_time * 6.0 + i * TAU / 3.0
+			draw_circle(Vector2(cos(a) * 8.0, -22 + sin(a) * 2.0), 2.0, Color(1.0, 0.92, 0.45))
 	# 대장 이름표 (디아블로2 챔피언처럼 금색)
 	if boss:
 		var font := ThemeDB.fallback_font

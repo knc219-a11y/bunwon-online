@@ -2,10 +2,13 @@ class_name HuntCompanion
 extends Node2D
 ## 사냥터에 따라온 농장 크리처 (2026-09-27 결정 A. 따라오는 동료, 첫 조각).
 ## 사냥꾼 뒤를 따라다니다가 가까운 야생 슬라임을 스스로 공격한다. 다치지 않는다.
-## 공격 방식은 첫 번째 속성으로 정한다: 물 = 멀리서 물총, 그 밖(땅) = 붙어서 박치기.
+## 공격 방식은 종에 정해져 있으면 그것 (금두꺼비 = 혀 당기기), 아니면 첫 번째 속성으로 정한다:
+## 물 = 멀리서 물총, 그 밖(땅) = 붙어서 박치기.
 ## 누구를 언제 때릴지는 HuntGround 가 정하고, 이 노드는 움직임과 그리기만 맡는다.
 
-enum Style { SHOT, BUMP }
+enum Style { SHOT, BUMP, PULL }
+
+const STYLE_NAMES := {Style.SHOT: "멀리서 물총", Style.BUMP: "붙어서 박치기", Style.PULL: "혀로 끌어오기"}
 
 ## 농장에 있는 크리처 (돌아가면 그 자리·그 일로 복귀)
 var source: Creature
@@ -14,6 +17,8 @@ var style := Style.BUMP
 ## 물총이 날아가는 모습을 그릴 끝점과 남은 시간
 var shot_to := Vector2.ZERO
 var shot_time := 0.0
+## 혀로 끌어오는 몬스터 (혀 끝이 따라간다)
+var pulling: WildSlime
 
 var _sprite: Sprite2D
 var _anim_time := 0.0
@@ -25,7 +30,7 @@ func setup(from: Creature) -> void:
 	source = from
 	data = from.data
 	var element: StringName = data.elements[0].id if not data.elements.is_empty() else &""
-	style = Style.SHOT if element == &"water" else Style.BUMP
+	style = style_for(data)
 	var sheet: Texture2D = data.species.sprite_sheets.get(element)
 	if sheet != null:
 		_sprite = Sprite2D.new()
@@ -36,19 +41,30 @@ func setup(from: Creature) -> void:
 		add_child(_sprite)
 
 
+static func style_for(d: CreatureData) -> Style:
+	if d.species.companion_style == &"pull":
+		return Style.PULL
+	var element: StringName = d.elements[0].id if not d.elements.is_empty() else &""
+	return Style.SHOT if element == &"water" else Style.BUMP
+
+
+static func style_name(d: CreatureData) -> String:
+	return STYLE_NAMES[style_for(d)]
+
+
 func display_name() -> String:
 	return "%s %s" % [data.element_names(), data.species.display_name]
 
 
 ## 공격 한 번에 걸리는 시간. 일 속도가 빠른 개체일수록 조금 짧다 (절반~두 배 사이).
 func attack_interval() -> float:
-	var base := Config.COMPANION_SHOT_INTERVAL if style == Style.SHOT else Config.COMPANION_BUMP_INTERVAL
+	var base: float = {Style.SHOT: Config.COMPANION_SHOT_INTERVAL, Style.BUMP: Config.COMPANION_BUMP_INTERVAL, Style.PULL: Config.COMPANION_PULL_INTERVAL}[style]
 	return base / clampf(data.base_work_speed, 0.5, 2.0)
 
 
 ## 공격이 닿는 거리 (px)
 func reach() -> float:
-	return Config.COMPANION_SHOT_RANGE if style == Style.SHOT else Config.COMPANION_BUMP_RANGE
+	return {Style.SHOT: Config.COMPANION_SHOT_RANGE, Style.BUMP: Config.COMPANION_BUMP_RANGE, Style.PULL: Config.COMPANION_PULL_RANGE}[style]
 
 
 func speed() -> float:
@@ -68,6 +84,9 @@ func play_attack(at: Vector2) -> void:
 	if style == Style.SHOT:
 		shot_to = at
 		shot_time = 0.2
+	elif style == Style.PULL:
+		shot_to = at
+		shot_time = Config.COMPANION_PULL_TIME
 	else:
 		# 박치기: 상대 쪽으로 살짝 튀어 나갔다 돌아온다 (그림만)
 		shot_to = at
@@ -83,7 +102,7 @@ func _process(delta: float) -> void:
 	shot_time = maxf(shot_time - delta, 0.0)
 	if _sprite != null:
 		var col: int
-		if _attack_time > 0.0 and style == Style.SHOT:
+		if _attack_time > 0.0 and style != Style.BUMP:
 			var i := Creature.WATER_COLUMNS.size() - 1 - int(_attack_time * Creature.WORK_FPS)
 			col = Creature.WATER_COLUMNS[clampi(i, 0, Creature.WATER_COLUMNS.size() - 1)]
 		elif _moving or _attack_time > 0.0:
@@ -107,7 +126,13 @@ func _draw() -> void:
 	if _sprite == null:
 		var body := data.elements[0].color if not data.elements.is_empty() else data.species.color
 		draw_circle(Vector2(0, 4), 11.0, body)
-	if shot_time > 0.0:
+	if shot_time > 0.0 and style == Style.PULL:
+		# 혀 당기기: 입에서 상대까지 분홍 혀
+		var at := pulling.position if is_instance_valid(pulling) else shot_to
+		var tip := at - position + Vector2(0, -2)
+		draw_line(Vector2(0, -2), tip, Color(0.9, 0.42, 0.48), 3.0)
+		draw_circle(tip, 3.5, Color(0.95, 0.55, 0.6))
+	elif shot_time > 0.0:
 		# 물총: 입에서 상대까지 물줄기 (전용 그림은 다음 단계)
 		var from := Vector2(0, -6)
 		var to := shot_to - position + Vector2(0, -6)

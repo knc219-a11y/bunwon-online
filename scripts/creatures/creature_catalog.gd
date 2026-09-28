@@ -3,6 +3,8 @@ extends RefCounted
 ## 게임에 등장하는 종 목록과 획득 경로.
 
 const SLIME: CreatureSpecies = preload("res://data/creatures/species/slime.tres")
+## 금사리 대장 금두꺼비를 쓰러뜨리면 나오는 알 (2026-09-28 사용자 선택)
+const GOLD_TOAD: CreatureSpecies = preload("res://data/creatures/species/gold_toad.tres")
 
 ## 게임 시작 시 마을 공급함에 들어 있는 알
 const STARTER_EGG := SLIME

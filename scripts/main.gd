@@ -691,7 +691,7 @@ func companion_option_text(id: StringName) -> String:
 	var s := companion_from_option(id)
 	if s == null:
 		return "혼자 가기"
-	var fight := "멀리서 물총" if not s.data.elements.is_empty() and s.data.elements[0].id == &"water" else "붙어서 박치기"
+	var fight := HuntCompanion.style_name(s.data)
 	return "%s %s (밭: %s · 사냥: %s)" % [s.data.element_names(), s.data.species.display_name, CreatureJobs.display_name(s.job), fight]
 
 
@@ -791,6 +791,9 @@ func next_day() -> Array[String]:
 	var ripe := farm.ripe_count()
 	if ripe > 0:
 		lines.append("수확할 수 있는 작물 %d개." % ripe)
+	var gold := gather_gold_dust()
+	if gold > 0:
+		lines.append("금두꺼비가 밭에서 사금을 주웠다. 돈통에 +%d원" % gold)
 	if GameState.hunter_unlocked and GameState.hunts_today > 0:
 		lines.append("사냥꾼이 다시 사냥을 나갈 수 있다.")
 	GameState.hunts_today = 0
@@ -810,6 +813,18 @@ func next_day() -> Array[String]:
 	_refresh_props()
 	GameState.notify(text)
 	return lines
+
+
+## 사금 줍기 (아기 금두꺼비, 2026-09-28): 밭에서 일을 맡은 개체마다 종의 daily_gold 범위만큼 돈을 줍는다.
+## 쉬는 중이면 줍지 않는다. 주운 돈을 돌려준다.
+func gather_gold_dust() -> int:
+	var total := 0
+	for c in creatures:
+		var r := c.data.species.daily_gold
+		if r.y > 0 and c.job != CreatureJobs.REST:
+			total += _rng.randi_range(r.x, r.y)
+	GameState.money += total
+	return total
 
 
 func _hatch(species: CreatureSpecies, at_cell: Vector2i) -> Creature:
