@@ -144,21 +144,29 @@ const BOSS_MONEY_MAX := 60
 ## 구역마다 몬스터가 세지고 장비 등급이 오른다. 대장을 쓰러뜨리면 위쪽 길이 열려 같은 날 다음 구역으로 이어서 간다.
 ## waypoint 가 있는 구역은 처음 도착하면 웨이포인트가 켜지고, 다음 날부터 사냥터 입구에서 거기서 시작할 수 있다.
 ## 드롭 확률 20% · 장비 보장 없음 · 그날 첫 처치 알 보장은 모든 구역 그대로.
-## monster_tint · ground_tint 는 전용 그림 전 임시 색 (몬스터는 땅속성 슬라임 시트를 물들여 쓴다).
+## sheet · boss_sheet 는 몬스터 시트 (32x32 칸, 0-1 대기 · 2-5 이동, 모래게는 6-7 모래에 숨음). monster_tint · boss_tint · ground_tint 는 물들이는 색.
+## 금사리 (2026-09-28 사용자 선택): 하천 모래에서 사금이 나와 붙은 이름. 모래 속에 숨었다 튀어나오는 모래게 + 대장 금두꺼비.
+## burrow 면 몬스터가 모래에 숨어 있다가 사냥꾼이 WILD_BURROW_POP_DISTANCE 안에 오면 튀어나온다 (숨어 있는 동안은 부딪혀도 안 다침).
+## sign 이 있으면 아래 입구 오른쪽에 그 마을 표지 (금사리: 회색 항아리 구조물에 검정 글씨, 사용자 설명).
 const HUNT_ZONES: Array[Dictionary] = [
 	{
-		name = "분원농협", monster = "야생 슬라임", waypoint = false,
+		name = "분원농협", monster = "야생 슬라임", boss_monster = "대장 슬라임", waypoint = false,
+		sheet = "res://assets/creatures/slime_earth.png", boss_sheet = "res://assets/creatures/slime_earth.png", burrow = false,
 		count = WILD_SLIME_COUNT, hp = WILD_SLIME_HP, speed = 1.0, boss_hp = BOSS_HP,
 		loot = HUNT_LOOT_WEIGHTS, rarity = GEAR_RARITY_WEIGHTS, boss_rarity = BOSS_RARITY_WEIGHTS,
 		money = [HUNT_MONEY_MIN, HUNT_MONEY_MAX], boss_money = [BOSS_MONEY_MIN, BOSS_MONEY_MAX],
-		monster_tint = Color(1, 0.8, 0.75), ground_tint = Color(0.82, 0.9, 0.8), tree_tint = Color(0.78, 0.92, 0.78),
+		monster_tint = Color(1, 0.8, 0.75), boss_tint = Color(1.0, 0.82, 0.4), ground_tint = Color(0.82, 0.9, 0.8), tree_tint = Color(0.78, 0.92, 0.78),
 	},
 	{
-		name = "금사리", monster = "이끼 슬라임", waypoint = true,
+		name = "금사리", monster = "모래게", boss_monster = "금두꺼비", waypoint = true,
+		sheet = "res://assets/creatures/wild_sand_crab.png", boss_sheet = "res://assets/creatures/wild_gold_toad.png", burrow = true,
+		sign = "금사리(구터)",
 		count = 3, hp = 3, speed = 1.25, boss_hp = 6,
 		loot = {&"money": 38, &"potion": 25, &"junk": 19, &"gear": 18},
 		rarity = {&"normal": 50, &"magic": 38, &"rare": 12}, boss_rarity = {&"normal": 20, &"magic": 55, &"rare": 25},
 		money = [20, 45], boss_money = [45, 80],
-		monster_tint = Color(0.62, 0.9, 0.6), ground_tint = Color(0.62, 0.78, 0.72), tree_tint = Color(0.55, 0.75, 0.62),
+		monster_tint = Color.WHITE, boss_tint = Color.WHITE, ground_tint = Color(0.9, 0.86, 0.72), tree_tint = Color(0.72, 0.86, 0.7),
 	},
 ]
+## 숨은 몬스터가 튀어나오는 거리 (px)
+const WILD_BURROW_POP_DISTANCE := 60.0

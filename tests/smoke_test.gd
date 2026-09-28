@@ -866,6 +866,17 @@ func _ready() -> void:
 	_check(sh.hearts == hearts_before and GameState.hunts_today == 1, "하트는 그대로, 같은 날 같은 사냥 (%d/%d, %d번)" % [sh.hearts, hearts_before, GameState.hunts_today])
 	_check(1 in GameState.waypoints, "%s에 도착하면 웨이포인트가 켜짐" % z2.name)
 	_check(sh.slimes.size() == z2.count and sh.slimes[0].hp == z2.hp and sh.slimes[0].speed == z2.speed and sh.slimes[0].title == z2.monster, "2구역 몬스터: %s 체력 %d · 빠르기 %s" % [z2.monster, z2.hp, z2.speed])
+	# 금사리 (사용자 선택: 모래게 + 대장 금두꺼비, 입구에 "금사리(구터)" 회색 항아리 표지)
+	var crab: WildSlime = sh.slimes[0]
+	_check(crab.buried and crab.sheet.resource_path.ends_with("wild_sand_crab.png"), "모래게는 모래에 숨어 있음")
+	_check(sh.sign_node != null and z2.sign == "금사리(구터)", "금사리 입구에 마을 표지")
+	var hearts_c := sh.hearts
+	crab.position = main.hunter.feet() + Vector2(Config.WILD_BURROW_POP_DISTANCE + 20, 0)
+	sh.tick(0.01)
+	_check(crab.buried, "멀면 숨은 채로")
+	crab.position = main.hunter.feet() + Vector2(Config.WILD_BURROW_POP_DISTANCE - 10, 0)
+	sh.tick(0.01)
+	_check(not crab.buried and sh.hearts == hearts_c, "가까이 가면 모래에서 튀어나옴 (아직 안 부딪힘)")
 	for i in z2.count:
 		var zw: WildSlime = sh.slimes[0]
 		zw.position = main.hunter.feet() + Vector2(0, -8 - Config.SWING_REACH)
@@ -874,6 +885,7 @@ func _ready() -> void:
 			sh.swing()
 			zw.position = main.hunter.feet() + Vector2(0, -8 - Config.SWING_REACH)
 	_check(sh.boss_spawned and sh.slimes.size() == 1 and sh.slimes[0].hp == z2.boss_hp, "2구역 대장 체력 %d" % z2.boss_hp)
+	_check(sh.slimes[0].title == z2.boss_monster and not sh.slimes[0].buried and sh.slimes[0].sheet.resource_path.ends_with("wild_gold_toad.png"), "금사리 대장은 %s" % z2.boss_monster)
 	sh.slimes[0].hp = 1
 	sh.slimes[0].position = main.hunter.feet() + Vector2(0, -8 - Config.SWING_REACH)
 	sh.tick(Config.SWING_COOLDOWN)

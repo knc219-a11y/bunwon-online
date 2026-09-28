@@ -5,6 +5,8 @@ extends Node2D
 ## 그림은 땅속성 슬라임 시트를 붉게 물들여 쓴다 (야생 전용 그림은 다음 단계).
 
 const SHEET: Texture2D = preload("res://assets/creatures/slime_earth.png")
+## 모래에 숨은 모습 (burrow 몬스터의 시트 6-7열)
+const BURIED_COLUMNS: Array[int] = [6, 7]
 const TINT := Color(1, 0.8, 0.75)
 const FRAME_SIZE := 32
 const IDLE_COLUMNS: Array[int] = [0, 1]
@@ -19,6 +21,10 @@ var boss := false
 var title := "야생 슬라임"
 ## 빠르기 배율 (쉬는 시간과 뛰는 시간을 나눈다)
 var speed := 1.0
+## 몬스터 시트 (구역마다 다름, 32x32 칸)
+var sheet: Texture2D = SHEET
+## 모래에 숨어 있는지 (금사리 모래게). 사냥꾼이 가까이 오거나 맞으면 튀어나온다.
+var buried := false
 var _tint := TINT
 ## 움직일 수 있는 영역 (사냥터 공터)
 var area := Rect2()
@@ -36,9 +42,9 @@ var _anim_time := 0.0
 
 func _ready() -> void:
 	_sprite = Sprite2D.new()
-	_sprite.texture = SHEET
+	_sprite.texture = sheet
 	_sprite.centered = false
-	_sprite.hframes = 10
+	_sprite.hframes = sheet.get_width() / FRAME_SIZE
 	_sprite.modulate = _tint
 	_sprite.position = Vector2(-FRAME_SIZE / 2.0, BOTTOM_Y - FRAME_SIZE)
 	add_child(_sprite)
@@ -53,6 +59,8 @@ func setup_zone(zone: int) -> void:
 	hp = z.hp
 	max_hp = z.hp
 	_tint = z.monster_tint
+	sheet = load(z.sheet)
+	buried = z.burrow
 
 
 ## 대장으로 만든다 (트리에 넣기 전후 모두 가능)
@@ -60,10 +68,16 @@ func make_boss(zone := 0) -> void:
 	boss = true
 	hp = Config.HUNT_ZONES[zone].boss_hp
 	max_hp = hp
-	title = "대장 " + String(Config.HUNT_ZONES[zone].monster).trim_prefix("야생 ")
-	speed = Config.HUNT_ZONES[zone].speed
+	var z: Dictionary = Config.HUNT_ZONES[zone]
+	title = z.boss_monster
+	speed = z.speed
 	scale = Vector2.ONE * Config.BOSS_SCALE
-	_tint = Color(1.0, 0.82, 0.4) if zone == 0 else Color(1.0, 0.82, 0.4).lerp(Config.HUNT_ZONES[zone].monster_tint, 0.35)
+	_tint = z.boss_tint
+	buried = false
+	sheet = load(z.boss_sheet)
+	if _sprite:
+		_sprite.texture = sheet
+		_sprite.hframes = sheet.get_width() / FRAME_SIZE
 
 
 func sort_y() -> float:
@@ -72,6 +86,7 @@ func sort_y() -> float:
 
 ## 한 대 맞는다. 쓰러지면 true.
 func hit(from: Vector2) -> bool:
+	buried = false
 	hp -= 1
 	_flash = 0.25
 	var away := (position - from).normalized()
@@ -86,7 +101,13 @@ func hit(from: Vector2) -> bool:
 func tick(delta: float, target: Vector2) -> void:
 	_anim_time += delta
 	_flash = maxf(_flash - delta, 0.0)
-	if ai_enabled:
+	if buried and position.distance_to(target) <= Config.WILD_BURROW_POP_DISTANCE:
+		# 사냥꾼이 다가오면 모래에서 튀어나온다
+		buried = false
+		_rest = 0.4
+	if buried:
+		pass
+	elif ai_enabled:
 		if _hop_t >= 0.0:
 			_hop_t += delta * speed / Config.WILD_SLIME_HOP_TIME
 			position = _hop_from.lerp(_hop_to, minf(_hop_t, 1.0))
@@ -98,7 +119,7 @@ func tick(delta: float, target: Vector2) -> void:
 			if _rest <= 0.0:
 				_start_hop(target)
 	var hopping := _hop_t >= 0.0
-	var cols := HOP_COLUMNS if hopping else IDLE_COLUMNS
+	var cols := BURIED_COLUMNS if buried else (HOP_COLUMNS if hopping else IDLE_COLUMNS)
 	var col: int = HOP_COLUMNS[mini(int(_hop_t * 4), 3)] if hopping else cols[int(_anim_time * 2.0) % 2]
 	_sprite.frame = col
 	_sprite.modulate = Color(1, 1, 1) * 2.0 if _flash > 0.0 and int(_flash * 20) % 2 == 0 else _tint

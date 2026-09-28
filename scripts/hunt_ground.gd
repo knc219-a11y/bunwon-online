@@ -25,6 +25,8 @@ const SPAWN_AT := Vector2(13 * T, 11 * T)
 const SLIME_CELLS: Array[Vector2i] = [Vector2i(7, 6), Vector2i(13, 5), Vector2i(19, 7), Vector2i(10, 9)]
 ## 대장을 쓰러뜨리면 열리는 위쪽 길 (다음 구역으로). F가 닿는 범위 (px)
 const NEXT_AREA := Rect2(11 * T, 3 * T, 5 * T, 2 * T)
+## 마을 표지 자리 (아래 입구 오른쪽, 그림 밑 가운데, px). 금사리: 회색 항아리 구조물에 검정 글씨.
+const SIGN_AT := Vector2(16 * T + 12, 13 * T + 14)
 ## 웨이포인트 돌 자리 (웨이포인트가 있는 구역의 아래 입구 왼쪽 위, px)
 const WAYPOINT_AT := Vector2(9 * T, 11 * T)
 const TREE_SPOTS: Array[Vector2] = [
@@ -67,6 +69,8 @@ var _swing_dir := Vector2.DOWN
 var _hud: Node2D
 var _ground: Node2D
 var _trees: Array[Sprite2D] = []
+## 지금 구역의 마을 표지 (없으면 null)
+var sign_node: Sprite2D
 
 
 func _ready() -> void:
@@ -116,6 +120,18 @@ func _fill_zone() -> void:
 		slimes.append(s)
 	for tree in _trees:
 		tree.modulate = z.tree_tint
+	if sign_node:
+		sign_node.queue_free()
+		sign_node = null
+	if z.has("sign"):
+		sign_node = Sprite2D.new()
+		sign_node.texture = preload("res://assets/props/geumsa_jar.png")
+		sign_node.centered = false
+		sign_node.offset = Vector2(-24, -64)
+		sign_node.position = SIGN_AT
+		sign_node.z_index = int(SIGN_AT.y)
+		sign_node.draw.connect(_draw_sign.bind(z.sign))
+		add_child(sign_node)
 	_ground.queue_redraw()
 
 
@@ -225,7 +241,7 @@ func tick(delta: float) -> void:
 	var feet := hunter.feet()
 	for s in slimes:
 		s.tick(delta, feet)
-		if _invulnerable <= 0.0 and s.position.distance_to(feet) <= Config.WILD_SLIME_TOUCH_DISTANCE:
+		if _invulnerable <= 0.0 and not s.buried and s.position.distance_to(feet) <= Config.WILD_SLIME_TOUCH_DISTANCE:
 			_hurt(s.position)
 	if companion:
 		_tick_companion(delta)
@@ -444,6 +460,19 @@ func _draw() -> void:
 		var c := hunter.feet() + Vector2(0, -12)
 		var a := _swing_dir.angle()
 		draw_arc(c, 20, a - 1.0, a + 1.0, 10, Color(1, 1, 1, 0.85), 2.5)
+
+
+## 마을 표지 글씨: 항아리 몸통에 검정 글씨 (사용자: "금사리(구터)", 구조물은 회색 · 글씨는 검정)
+func _draw_sign(text: String) -> void:
+	var font := ThemeDB.fallback_font
+	var i := text.find("(")
+	var lines := [text.substr(0, i), text.substr(i)] if i > 0 else [text]
+	var y := -36.0 if lines.size() > 1 else -30.0
+	for line: String in lines:
+		var size := 9 if line == lines[0] else 7
+		var w := font.get_string_size(line, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
+		sign_node.draw_string(font, Vector2(-w / 2, y), line, HORIZONTAL_ALIGNMENT_LEFT, -1, size, Color(0.08, 0.08, 0.08))
+		y += size + 3
 
 
 func _draw_ground(n: Node2D) -> void:
