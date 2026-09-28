@@ -1153,6 +1153,19 @@ func _ready() -> void:
 	_check(not main.hunt.minimap_seen(k_cell), "다음 사냥에서는 작은 지도가 다시 가려짐")
 	main.leave_hunt()
 
+	# 27) 아침 카드: 밤사이 일이 많아도 "F 일어나기"까지 카드 안에 들어온다 (핵심 루프 점검 2026-09-28)
+	var busy: Array[String] = []
+	for i in 7:
+		busy.append("알이 부화했다! 아기 금두꺼비 [쉬는 중] 땅 · 속도 1.54 / 범위 1 / 부지런함")
+	main.show_morning_card(busy)
+	var mcard: Control = main._morning_card
+	var mfont: Font = main._morning_text.get_theme_font("font")
+	var need: float = mfont.get_multiline_string_size(main._morning_text.text, HORIZONTAL_ALIGNMENT_CENTER, mcard.size.x - 24, 10).y
+	_check(mcard.size.y > Config.TILE * 6 and main._morning_text.size.y >= need and mcard.position.y >= 0 and mcard.get_rect().end.y <= 360, "밤사이 일이 많으면 아침 카드가 늘어나 글이 넘치지 않음")
+	main.show_morning_card([] as Array[String])
+	_check(mcard.size.y == main.MORNING_CARD_SIZE.y, "조용한 밤에는 아침 카드가 원래 크기")
+	mcard.visible = false
+
 	print("SMOKE TEST: %s (%d failures)" % ["PASS" if _failures == 0 else "FAIL", _failures])
 	get_tree().quit(1 if _failures > 0 else 0)
 
