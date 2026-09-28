@@ -137,3 +137,28 @@ const BOSS_GEAR_CHANCE := 0.4
 const BOSS_RARITY_WEIGHTS := {&"normal": 30, &"magic": 55, &"rare": 15}
 const BOSS_MONEY_MIN := 30
 const BOSS_MONEY_MAX := 60
+
+## 스테이지 사냥터 (2026-09-28 사용자 선택 B + 웨이포인트, 디아블로2처럼 앞으로 걸어가기). 값·몬스터 이름은 임시.
+## 구역 이름은 사용자가 정함: 1 망조고개 (경기도 광주 분원에 실제로 있는 고개), 2 금사리 (분원리 옆 동네). 다음 구역 이름도 사용자가 정한다.
+## 사용자: "B 방식으로 진행하고 특정 이상 구간부터 이어서 하고싶으면 특정 웨이포인트에서 시작하는게 더 탐험하는 맛이 나고 좋을거같아"
+## 구역마다 몬스터가 세지고 장비 등급이 오른다. 대장을 쓰러뜨리면 위쪽 길이 열려 같은 날 다음 구역으로 이어서 간다.
+## waypoint 가 있는 구역은 처음 도착하면 웨이포인트가 켜지고, 다음 날부터 사냥터 입구에서 거기서 시작할 수 있다.
+## 드롭 확률 20% · 장비 보장 없음 · 그날 첫 처치 알 보장은 모든 구역 그대로.
+## monster_tint · ground_tint 는 전용 그림 전 임시 색 (몬스터는 땅속성 슬라임 시트를 물들여 쓴다).
+const HUNT_ZONES: Array[Dictionary] = [
+	{
+		name = "망조고개", monster = "야생 슬라임", waypoint = false,
+		count = WILD_SLIME_COUNT, hp = WILD_SLIME_HP, speed = 1.0, boss_hp = BOSS_HP,
+		loot = HUNT_LOOT_WEIGHTS, rarity = GEAR_RARITY_WEIGHTS, boss_rarity = BOSS_RARITY_WEIGHTS,
+		money = [HUNT_MONEY_MIN, HUNT_MONEY_MAX], boss_money = [BOSS_MONEY_MIN, BOSS_MONEY_MAX],
+		monster_tint = Color(1, 0.8, 0.75), ground_tint = Color(0.82, 0.9, 0.8), tree_tint = Color(0.78, 0.92, 0.78),
+	},
+	{
+		name = "금사리", monster = "이끼 슬라임", waypoint = true,
+		count = 3, hp = 3, speed = 1.25, boss_hp = 6,
+		loot = {&"money": 38, &"potion": 25, &"junk": 19, &"gear": 18},
+		rarity = {&"normal": 50, &"magic": 38, &"rare": 12}, boss_rarity = {&"normal": 20, &"magic": 55, &"rare": 25},
+		money = [20, 45], boss_money = [45, 80],
+		monster_tint = Color(0.62, 0.9, 0.6), ground_tint = Color(0.62, 0.78, 0.72), tree_tint = Color(0.55, 0.75, 0.62),
+	},
+]
