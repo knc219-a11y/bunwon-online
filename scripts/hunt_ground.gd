@@ -4,6 +4,9 @@ extends Node2D
 ## 숲 공터에 야생 슬라임이 돌아다닌다. 사냥꾼은 걸어 다니며 휘둘러 쓰러뜨린다.
 ## 그날 처음 쓰러뜨린 슬라임은 알을 반드시 떨어뜨린다. 하트가 0이 되면 쓰러져 마을로 돌아가고, 주운 것은 그대로 가진다.
 ## 그림은 마을 그림을 다시 쓴 임시 배치 (사냥터 전용 그림은 다음 단계).
+## 스테이지 (2026-09-28 사용자 선택 B + 웨이포인트): 구역(Config.HUNT_ZONES)을 앞으로 걸어간다.
+## 대장을 쓰러뜨리면 위쪽 길이 열리고, 그 길에서 F로 같은 날 다음 구역으로 이어서 간다 (하트는 그대로).
+## 웨이포인트가 있는 구역에 처음 도착하면 웨이포인트가 켜지고, 다음 날부터 사냥터 입구에서 거기서 시작할 수 있다.
 
 signal knocked_out
 
@@ -19,7 +22,11 @@ const CLEARING := Rect2i(4, 4, 18, 8)
 const EXIT_AT := Vector2(13 * T, 15 * T)
 const EXIT_AREA := Rect2(10 * T, 11 * T, 6 * T, 3 * T)
 const SPAWN_AT := Vector2(13 * T, 11 * T)
-const SLIME_CELLS: Array[Vector2i] = [Vector2i(7, 6), Vector2i(13, 5), Vector2i(19, 7)]
+const SLIME_CELLS: Array[Vector2i] = [Vector2i(7, 6), Vector2i(13, 5), Vector2i(19, 7), Vector2i(10, 9)]
+## 대장을 쓰러뜨리면 열리는 위쪽 길 (다음 구역으로). F가 닿는 범위 (px)
+const NEXT_AREA := Rect2(11 * T, 3 * T, 5 * T, 2 * T)
+## 웨이포인트 돌 자리 (웨이포인트가 있는 구역의 아래 입구 왼쪽 위, px)
+const WAYPOINT_AT := Vector2(9 * T, 11 * T)
 const TREE_SPOTS: Array[Vector2] = [
 	Vector2(24, 52), Vector2(72, 44), Vector2(124, 50), Vector2(176, 42), Vector2(228, 48), Vector2(280, 40),
 	Vector2(332, 46), Vector2(384, 42), Vector2(436, 50), Vector2(488, 44), Vector2(540, 48), Vector2(592, 42),
@@ -28,6 +35,10 @@ const TREE_SPOTS: Array[Vector2] = [
 ]
 
 var hunter: Character
+## 지금 구역 (Config.HUNT_ZONES 번호)
+var zone := 0
+## 이번 구역 대장을 쓰러뜨려 위쪽 길이 열렸는지
+var path_open := false
 var hearts := Config.HUNTER_HEARTS
 var slimes: Array[WildSlime] = []
 ## 땅에 떨어진 알 (자리 → 종)
@@ -54,6 +65,8 @@ var _invulnerable := 0.0
 var _swing_time := 0.0
 var _swing_dir := Vector2.DOWN
 var _hud: Node2D
+var _ground: Node2D
+var _trees: Array[Sprite2D] = []
 
 
 func _ready() -> void:
@@ -61,15 +74,16 @@ func _ready() -> void:
 	ground.z_index = -1000
 	ground.draw.connect(_draw_ground.bind(ground))
 	add_child(ground)
+	_ground = ground
 	for p in TREE_SPOTS:
 		var tree := Sprite2D.new()
 		tree.texture = preload("res://assets/props/tree_persimmon.png")
 		tree.centered = false
 		tree.offset = Vector2(-24, -72)
 		tree.position = p
-		tree.modulate = Color(0.78, 0.92, 0.78)
 		tree.z_index = int(p.y)
 		add_child(tree)
+		_trees.append(tree)
 	var gate := Sprite2D.new()
 	gate.texture = preload("res://assets/props/hunt_gate.png")
 	gate.centered = false
@@ -83,18 +97,36 @@ func _ready() -> void:
 	_hud = Node2D.new()
 	_hud.draw.connect(_draw_hud)
 	layer.add_child(_hud)
-	for cell in SLIME_CELLS:
+	_fill_zone()
+
+
+## 지금 구역의 몬스터를 새로 놓고 풍경 색을 바꾼다.
+func _fill_zone() -> void:
+	for s in slimes:
+		s.queue_free()
+	slimes.clear()
+	var z: Dictionary = Config.HUNT_ZONES[zone]
+	for i in z.count:
 		var s := WildSlime.new()
+		s.setup_zone(zone)
 		s.area = Rect2(Vector2(CLEARING.position * T) + Vector2(12, 12), Vector2(CLEARING.size * T) - Vector2(24, 24))
-		s.position = Farm.center_of(cell)
+		s.position = Farm.center_of(SLIME_CELLS[i % SLIME_CELLS.size()])
+		s.ai_enabled = _ai_on
 		add_child(s)
 		slimes.append(s)
+	for tree in _trees:
+		tree.modulate = z.tree_tint
+	_ground.queue_redraw()
 
 
 ## 사냥꾼을 사냥터로 데려온다. first_today 면 처음 쓰러뜨린 슬라임이 알을 반드시 떨어뜨린다.
-func start(h: Character, first_today: bool) -> void:
+## start_zone 은 사냥터 입구에서 고른 웨이포인트 구역 (0 = 숲 공터부터).
+func start(h: Character, first_today: bool, start_zone := 0) -> void:
 	hunter = h
 	egg_guaranteed = not first_today
+	if start_zone != zone:
+		zone = start_zone
+		_fill_zone()
 	loot_rng.randomize()
 	hearts = max_hearts()
 	hunter.walk_area = WALK_AREA
@@ -145,6 +177,39 @@ func set_ai(on: bool) -> void:
 
 func near_exit() -> bool:
 	return EXIT_AREA.has_point(hunter.position)
+
+
+## 열린 위쪽 길 가까이인지
+func near_next() -> bool:
+	return path_open and NEXT_AREA.has_point(hunter.position)
+
+
+## 위쪽 길로 다음 구역에 들어간다 (같은 날, 하트 그대로). 땅에 남은 것은 챙겨 간다.
+func advance() -> bool:
+	if not path_open or zone + 1 >= Config.HUNT_ZONES.size():
+		return false
+	for d in drops:
+		picked.append(d.species)
+	drops.clear()
+	for i in range(loot.size() - 1, -1, -1):
+		if _take(loot[i]):
+			loot.remove_at(i)
+	loot.clear()
+	zone += 1
+	path_open = false
+	boss_spawned = false
+	_fill_zone()
+	hunter.position = SPAWN_AT
+	hunter.facing = Vector2i.UP
+	if companion:
+		companion.position = hunter.feet() + Vector2(0, Config.COMPANION_FOLLOW_DISTANCE)
+	var z: Dictionary = Config.HUNT_ZONES[zone]
+	var text := "%d구역 %s에 들어왔다. %s이(가) 더 단단하고 빠르다!" % [zone + 1, z.name, z.monster]
+	if z.waypoint and not zone in GameState.waypoints:
+		GameState.waypoints.append(zone)
+		text += " 웨이포인트가 켜졌다. 내일부터 사냥터 입구에서 여기서 시작할 수 있다."
+	GameState.notify(text)
+	return true
 
 
 func _process(delta: float) -> void:
@@ -254,16 +319,21 @@ func _defeat(s: WildSlime) -> void:
 		var table := CreatureCatalog.HUNT_TABLE
 		drops.append({at = s.position, species = table[randi() % table.size()]})
 		GameState.notify("야생 슬라임을 쓰러뜨리자 알이 떨어졌다!")
+	elif s.boss and zone + 1 < Config.HUNT_ZONES.size():
+		GameState.notify("%s을(를) 쓰러뜨렸다! 위쪽 길이 열렸다. 길에서 F로 %d구역 %s, 아래 입구 F로 마을." % [s.title, zone + 2, Config.HUNT_ZONES[zone + 1].name])
 	elif s.boss:
-		GameState.notify("대장 슬라임을 쓰러뜨렸다! 아래 입구에서 F로 마을로 돌아가자.")
+		GameState.notify("%s을(를) 쓰러뜨렸다! 더 깊은 곳은 아직 막혀 있다. 아래 입구에서 F로 마을로 돌아가자." % s.title)
 	elif slimes.is_empty() and not boss_spawned:
-		GameState.notify("셋을 다 쓰러뜨리자 대장 슬라임이 나타났다!")
+		GameState.notify("다 쓰러뜨리자 대장이 나타났다!")
 	elif slimes.is_empty():
-		GameState.notify("야생 슬라임을 모두 쓰러뜨렸다. 아래 입구에서 F로 마을로 돌아가자.")
+		GameState.notify("모두 쓰러뜨렸다. 아래 입구에서 F로 마을로 돌아가자.")
 	else:
-		GameState.notify("야생 슬라임을 쓰러뜨렸다. 남은 슬라임 %d마리." % slimes.size())
+		GameState.notify("%s을(를) 쓰러뜨렸다. 남은 %d마리." % [s.title, slimes.size()])
+	if s.boss and zone + 1 < Config.HUNT_ZONES.size():
+		path_open = true
+		_ground.queue_redraw()
 	if loot_enabled:
-		var d := HuntLoot.roll_for_boss(loot_rng) if s.boss else HuntLoot.roll_for_kill(loot_rng)
+		var d := HuntLoot.roll_for_boss(loot_rng, zone) if s.boss else HuntLoot.roll_for_kill(loot_rng, zone)
 		if not d.is_empty():
 			# 알과 겹치지 않게 살짝 옆에 떨어뜨린다
 			d.at = s.position + Vector2(10, 4)
@@ -279,7 +349,7 @@ func _defeat(s: WildSlime) -> void:
 func spawn_boss() -> WildSlime:
 	boss_spawned = true
 	var b := WildSlime.new()
-	b.make_boss()
+	b.make_boss(zone)
 	b.area = Rect2(Vector2(CLEARING.position * T) + Vector2(12, 12), Vector2(CLEARING.size * T) - Vector2(24, 24))
 	b.position = BOSS_AT
 	b.ai_enabled = _ai_on
@@ -382,10 +452,19 @@ func _draw_ground(n: Node2D) -> void:
 		for y in Config.MAP_SIZE.y:
 			var h := (x * 73856093) ^ (y * 19349663)
 			var v := [0, 0, 0, 1, 1, 2, 3][absi(h) % 7] as int
-			n.draw_texture_rect_region(tiles, Rect2(x * T, y * T, T, T), Rect2(v * T, 0, T, T), Color(0.82, 0.9, 0.8))
+			n.draw_texture_rect_region(tiles, Rect2(x * T, y * T, T, T), Rect2(v * T, 0, T, T), Config.HUNT_ZONES[zone].ground_tint)
 	for x in range(CLEARING.position.x, CLEARING.end.x):
-		for y in range(CLEARING.position.y, CLEARING.end.y + 3 if x >= 11 and x <= 13 else CLEARING.end.y):
+		var top := 0 if path_open and x >= 12 and x <= 14 else CLEARING.position.y
+		for y in range(top, CLEARING.end.y + 3 if x >= 11 and x <= 13 else CLEARING.end.y):
 			n.draw_texture_rect_region(tiles, Rect2(x * T, y * T, T, T), Rect2(4 * T, 0, T, T))
+	if Config.HUNT_ZONES[zone].waypoint:
+		# 웨이포인트 돌: 납작한 돌판에 푸른 빛
+		var p := WAYPOINT_AT
+		n.draw_set_transform(p, 0.0, Vector2(1.0, 0.5))
+		n.draw_circle(Vector2.ZERO, 16, Color(0.45, 0.45, 0.5))
+		n.draw_circle(Vector2.ZERO, 12, Color(0.6, 0.62, 0.68))
+		n.draw_arc(Vector2.ZERO, 8, 0, TAU, 20, Color(0.55, 0.85, 1.0), 2.0)
+		n.draw_set_transform(Vector2.ZERO)
 
 
 func _draw_hud() -> void:
@@ -401,3 +480,13 @@ func _draw_hud() -> void:
 	_hud.draw_circle(Vector2(x, 41), 4, Color(0.85, 0.2, 0.22))
 	_hud.draw_rect(Rect2(x - 1, 34, 2, 3), Color(0.85, 0.8, 0.7))
 	_hud.draw_string(font, Vector2(x + 6, 45), "x%d (1)" % GameState.potions, HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(1, 0.97, 0.85))
+	# 지금 구역 (오른쪽 위)
+	var zt := "%d구역 %s" % [zone + 1, Config.HUNT_ZONES[zone].name]
+	var zw := font.get_string_size(zt, HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x
+	_hud.draw_rect(Rect2(632 - zw - 6, 30, zw + 6, 14), Color(0, 0, 0, 0.55))
+	_hud.draw_string(font, Vector2(632 - zw - 3, 41), zt, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.95, 0.85, 0.45))
+	if path_open:
+		var pt := "▲ 위쪽 길: %d구역 %s (F)" % [zone + 2, Config.HUNT_ZONES[zone + 1].name]
+		var pw := font.get_string_size(pt, HORIZONTAL_ALIGNMENT_LEFT, -1, 9).x
+		_hud.draw_rect(Rect2(13 * T - pw / 2 - 3, 2 * T - 10, pw + 6, 13), Color(0, 0, 0, 0.55))
+		_hud.draw_string(font, Vector2(13 * T - pw / 2, 2 * T), pt, HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(1.0, 0.9, 0.35))

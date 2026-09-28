@@ -8,6 +8,7 @@ extends RefCounted
 ## 장비 등급 (2026-09-28 사용자 선택 A: 디아블로2 그대로): 세트 조각이 아닌 장비는 기본 장비에 등급과 옵션을 굴린다.
 ## 일반 흰색 · 마법 파랑 · 레어 노랑. 세트를 다 모아도 장비는 계속 떨어진다.
 ## 대장 슬라임 (2026-09-28 사용자 선택 B): 반드시 하나. 장비 40% (마법·레어가 잘 나옴), 아니면 돈 주머니.
+## 스테이지 사냥터 (2026-09-28 사용자 선택 B + 웨이포인트): 구역(Config.HUNT_ZONES)마다 종류 무게 · 등급 무게 · 돈 범위가 다르다.
 
 const KINDS: Array[StringName] = [&"money", &"potion", &"junk", &"gear"]
 const COLORS := {
@@ -26,38 +27,42 @@ const RARITY_COLORS := {
 
 
 ## 한 마리를 쓰러뜨렸을 때 떨어질 것. 없으면 빈 사전.
-static func roll_for_kill(rng: RandomNumberGenerator) -> Dictionary:
+static func roll_for_kill(rng: RandomNumberGenerator, zone := 0) -> Dictionary:
+	var z: Dictionary = Config.HUNT_ZONES[zone]
 	var missing := Wearables.missing_hunt_drops()
 	if rng.randf() >= loot_chance():
 		return {}
-	var kind := pick_kind(rng.randf() * 100.0)
+	var kind := pick_kind(rng.randf() * 100.0, z.loot)
 	if kind == &"gear":
 		# 세트 조각이 남아 있으면 절반은 세트 조각, 나머지는 등급을 굴린 장비
 		if not missing.is_empty() and rng.randf() < Config.SET_PIECE_SHARE:
 			return _gear(missing, rng)
-		return {kind = &"gear", roll = Wearables.roll_gear(rng)}
+		return {kind = &"gear", roll = Wearables.roll_gear(rng, &"", z.rarity)}
 	match kind:
 		&"money":
-			return _money(rng)
+			return _money(rng, z.money[0], z.money[1])
 		_:
 			return {kind = kind}
 
 
 ## 대장 슬라임을 쓰러뜨렸을 때 떨어질 것 (늘 하나). "드롭 확률 +%p" 옵션은 쓰이지 않는다.
-static func roll_for_boss(rng: RandomNumberGenerator) -> Dictionary:
+static func roll_for_boss(rng: RandomNumberGenerator, zone := 0) -> Dictionary:
+	var z: Dictionary = Config.HUNT_ZONES[zone]
 	if rng.randf() >= Config.BOSS_GEAR_CHANCE:
-		return _money(rng, Config.BOSS_MONEY_MIN, Config.BOSS_MONEY_MAX)
+		return _money(rng, z.boss_money[0], z.boss_money[1])
 	var missing := Wearables.missing_hunt_drops()
 	if not missing.is_empty() and rng.randf() < Config.SET_PIECE_SHARE:
 		return _gear(missing, rng)
-	return {kind = &"gear", roll = Wearables.roll_gear(rng, &"", Config.BOSS_RARITY_WEIGHTS)}
+	return {kind = &"gear", roll = Wearables.roll_gear(rng, &"", z.boss_rarity)}
 
 
-## 0~100 사이 값으로 종류를 고른다 (무게 순서대로)
-static func pick_kind(roll: float) -> StringName:
+## 0~100 사이 값으로 종류를 고른다 (무게 순서대로). weights 가 비면 숲 공터 무게.
+static func pick_kind(roll: float, weights := {}) -> StringName:
+	if weights.is_empty():
+		weights = Config.HUNT_LOOT_WEIGHTS
 	var acc := 0.0
 	for kind: StringName in KINDS:
-		acc += Config.HUNT_LOOT_WEIGHTS[kind]
+		acc += weights[kind]
 		if roll < acc:
 			return kind
 	return KINDS[-1]

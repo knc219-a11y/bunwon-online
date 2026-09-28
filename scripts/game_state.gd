@@ -20,6 +20,8 @@ var hunter_eggs: Array[CreatureSpecies] = []
 ## 마을 공급함에 있는 알
 var village_eggs: Array[CreatureSpecies] = []
 var hunts_today := 0
+## 켜진 사냥터 웨이포인트 (Config.HUNT_ZONES 번호). 0 = 숲 공터 (처음부터 입구에서 시작).
+var waypoints: Array[int] = [0]
 ## 강화한 농사 도구 (Farm.Work 값 → 단계). 0이면 처음 도구.
 var tool_levels := {}
 ## 사냥꾼 튼튼한 사냥칼을 샀는지
@@ -72,6 +74,7 @@ func reset() -> void:
 	for i in Config.START_VILLAGE_EGGS:
 		village_eggs.append(CreatureCatalog.STARTER_EGG)
 	hunts_today = 0
+	waypoints = [0]
 	tool_levels = {}
 	hunter_knife = false
 	owned_wear = []

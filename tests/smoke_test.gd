@@ -829,6 +829,97 @@ func _ready() -> void:
 	_check(hcg.loot.size() == 1 and hcg.slimes.is_empty(), "동행이 쓰러뜨린 것과 같은 길로도 대장 드롭")
 	hcg.queue_free()
 
+	# 23) 스테이지 사냥터 (2026-09-28 사용자 선택 B + 웨이포인트): 대장을 쓰러뜨리면 위쪽 길로 다음 구역, 웨이포인트는 도착하면 켜짐
+	var z2: Dictionary = Config.HUNT_ZONES[1]
+	_check(GameState.waypoints == [0], "처음엔 웨이포인트가 1구역(입구)뿐")
+	main.next_day()
+	main._set_active(main.hunter)
+	main.hunter.position = main.hunt_gate.position
+	main._hunter_interact()
+	_check(not main.menu_open or main.menu_kind != &"waypoint", "웨이포인트가 하나면 시작 구역을 묻지 않음")
+	if main.menu_open:
+		main.close_menu()
+	if main.hunt == null:
+		main.enter_hunt()
+	var sh: HuntGround = main.hunt
+	sh.set_ai(false)
+	_check(sh.zone == 0 and sh.slimes.size() == Config.WILD_SLIME_COUNT, "1구역 %s에서 시작" % Config.HUNT_ZONES[0].name)
+	main.hunter.facing = Vector2i.UP
+	for i in Config.WILD_SLIME_COUNT + 1:
+		var sw: WildSlime = sh.slimes[0]
+		_check(not sh.path_open, "대장을 쓰러뜨리기 전엔 위쪽 길이 닫힘 (%d)" % i)
+		sw.hp = 1
+		sw.position = main.hunter.feet() + Vector2(0, -8 - Config.SWING_REACH)
+		sh.tick(Config.SWING_COOLDOWN)
+		sh.swing()
+	_check(sh.path_open and sh.slimes.is_empty(), "대장을 쓰러뜨리면 위쪽 길이 열림")
+	main.hunter.position = Vector2(13, 8) * Config.TILE
+	main.interact()
+	_check(main.hunt == sh and sh.zone == 0, "위쪽 길에서 멀면 F로 넘어가지 않음")
+	# 드롭이 하트 장비면 하트 칸이 바뀌므로 비교 전에 치운다
+	sh.loot.clear()
+	var hearts_before := sh.hearts - 1
+	sh.hearts = hearts_before
+	main.hunter.position = HuntGround.NEXT_AREA.get_center()
+	main.interact()
+	_check(sh.zone == 1 and not sh.path_open and not sh.boss_spawned, "위쪽 길에서 F → 2구역 %s" % z2.name)
+	_check(sh.hearts == hearts_before and GameState.hunts_today == 1, "하트는 그대로, 같은 날 같은 사냥 (%d/%d, %d번)" % [sh.hearts, hearts_before, GameState.hunts_today])
+	_check(1 in GameState.waypoints, "%s에 도착하면 웨이포인트가 켜짐" % z2.name)
+	_check(sh.slimes.size() == z2.count and sh.slimes[0].hp == z2.hp and sh.slimes[0].speed == z2.speed and sh.slimes[0].title == z2.monster, "2구역 몬스터: %s 체력 %d · 빠르기 %s" % [z2.monster, z2.hp, z2.speed])
+	for i in z2.count:
+		var zw: WildSlime = sh.slimes[0]
+		zw.position = main.hunter.feet() + Vector2(0, -8 - Config.SWING_REACH)
+		for k in z2.hp:
+			sh.tick(Config.SWING_COOLDOWN)
+			sh.swing()
+			zw.position = main.hunter.feet() + Vector2(0, -8 - Config.SWING_REACH)
+	_check(sh.boss_spawned and sh.slimes.size() == 1 and sh.slimes[0].hp == z2.boss_hp, "2구역 대장 체력 %d" % z2.boss_hp)
+	sh.slimes[0].hp = 1
+	sh.slimes[0].position = main.hunter.feet() + Vector2(0, -8 - Config.SWING_REACH)
+	sh.tick(Config.SWING_COOLDOWN)
+	sh.swing()
+	_check(sh.slimes.is_empty() and not sh.path_open, "마지막 구역 대장 뒤엔 길이 열리지 않음 (다음 구역은 아직)")
+	main.hunter.position = HuntGround.NEXT_AREA.get_center()
+	_check(not sh.advance() and sh.zone == 1, "더 깊이 갈 수 없음")
+	main.hunter.position = HuntGround.EXIT_AREA.get_center()
+	main.interact()
+	_check(main.hunt == null, "아래 입구 F로 마을로")
+	# 다음 날: 사냥터 입구에서 웨이포인트를 고른다
+	main.next_day()
+	main.hunter.position = main.hunt_gate.position
+	main._hunter_interact()
+	_check(main.menu_open and main.menu_kind == &"waypoint" and main.waypoint_options() == [&"zone_0", &"zone_1", &"close"], "웨이포인트가 둘이면 어디서 시작할지 물음")
+	main.menu_move(1)
+	main.menu_confirm()
+	if main.menu_open and main.menu_kind == &"companion":
+		main.menu_index = main.companion_options().size() - 1
+		main.menu_confirm()
+	_check(main.hunt != null and main.hunt.zone == 1 and main.hunt.slimes[0].hp == z2.hp, "%s 웨이포인트에서 바로 시작" % z2.name)
+	main.leave_hunt()
+	_check(not main.enter_hunt(null, 1), "하루 한 번은 그대로")
+	main.next_day()
+	_check(main.enter_hunt(null, 5) and main.hunt.zone == 0, "켜지지 않은 구역은 입구에서 시작")
+	main.leave_hunt()
+	# 2구역 드롭: 등급 무게가 오르고, 대장 돈 주머니도 큼
+	var zr := RandomNumberGenerator.new()
+	zr.seed = 23
+	var zc := {&"normal": 0, &"magic": 0, &"rare": 0}
+	var zmoney_ok := true
+	for i in 4000:
+		var zd := HuntLoot.roll_for_boss(zr, 1)
+		if zd.kind == &"money":
+			zmoney_ok = zmoney_ok and zd.amount >= z2.boss_money[0] and zd.amount <= z2.boss_money[1]
+		elif zd.has("roll"):
+			zc[zd.roll.rarity] += 1
+	var zg: int = zc[&"normal"] + zc[&"magic"] + zc[&"rare"]
+	_check(zmoney_ok, "2구역 대장 돈 주머니 %d~%d원" % z2.boss_money)
+	_check(zc[&"rare"] > zg * 0.2 and zc[&"rare"] < zg * 0.3 and zc[&"normal"] < zg * 0.26, "2구역 대장 장비 등급 약 일반 20 · 마법 55 · 레어 25 %s" % [zc])
+	var kind_gear := 0
+	for i in 1000:
+		if HuntLoot.pick_kind(i / 10.0, z2.loot) == &"gear":
+			kind_gear += 1
+	_check(kind_gear == z2.loot[&"gear"] * 10, "2구역 장비 몫 %d" % z2.loot[&"gear"])
+
 	print("SMOKE TEST: %s (%d failures)" % ["PASS" if _failures == 0 else "FAIL", _failures])
 	get_tree().quit(1 if _failures > 0 else 0)
 

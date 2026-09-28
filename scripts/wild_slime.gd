@@ -15,6 +15,10 @@ var hp := Config.WILD_SLIME_HP
 var max_hp := Config.WILD_SLIME_HP
 ## 대장 슬라임 (크고 금빛, 체력 Config.BOSS_HP). make_boss() 로 만든다.
 var boss := false
+## 이름 (대장 이름표에 쓴다). 구역마다 다르다 (Config.HUNT_ZONES).
+var title := "야생 슬라임"
+## 빠르기 배율 (쉬는 시간과 뛰는 시간을 나눈다)
+var speed := 1.0
 var _tint := TINT
 ## 움직일 수 있는 영역 (사냥터 공터)
 var area := Rect2()
@@ -41,13 +45,25 @@ func _ready() -> void:
 	_rest = randf_range(0.3, Config.WILD_SLIME_REST_TIME)
 
 
-## 대장 슬라임으로 만든다 (트리에 넣기 전후 모두 가능)
-func make_boss() -> void:
+## 구역에 맞춘다: 체력 · 빠르기 · 색 (트리에 넣기 전에 부른다)
+func setup_zone(zone: int) -> void:
+	var z: Dictionary = Config.HUNT_ZONES[zone]
+	title = z.monster
+	speed = z.speed
+	hp = z.hp
+	max_hp = z.hp
+	_tint = z.monster_tint
+
+
+## 대장으로 만든다 (트리에 넣기 전후 모두 가능)
+func make_boss(zone := 0) -> void:
 	boss = true
-	hp = Config.BOSS_HP
-	max_hp = Config.BOSS_HP
+	hp = Config.HUNT_ZONES[zone].boss_hp
+	max_hp = hp
+	title = "대장 " + String(Config.HUNT_ZONES[zone].monster).trim_prefix("야생 ")
+	speed = Config.HUNT_ZONES[zone].speed
 	scale = Vector2.ONE * Config.BOSS_SCALE
-	_tint = Color(1.0, 0.82, 0.4)
+	_tint = Color(1.0, 0.82, 0.4) if zone == 0 else Color(1.0, 0.82, 0.4).lerp(Config.HUNT_ZONES[zone].monster_tint, 0.35)
 
 
 func sort_y() -> float:
@@ -72,11 +88,11 @@ func tick(delta: float, target: Vector2) -> void:
 	_flash = maxf(_flash - delta, 0.0)
 	if ai_enabled:
 		if _hop_t >= 0.0:
-			_hop_t += delta / Config.WILD_SLIME_HOP_TIME
+			_hop_t += delta * speed / Config.WILD_SLIME_HOP_TIME
 			position = _hop_from.lerp(_hop_to, minf(_hop_t, 1.0))
 			if _hop_t >= 1.0:
 				_hop_t = -1.0
-				_rest = Config.WILD_SLIME_REST_TIME * randf_range(0.7, 1.3)
+				_rest = Config.WILD_SLIME_REST_TIME * randf_range(0.7, 1.3) / speed
 		else:
 			_rest -= delta
 			if _rest <= 0.0:
@@ -112,6 +128,6 @@ func _draw() -> void:
 	# 대장 이름표 (디아블로2 챔피언처럼 금색)
 	if boss:
 		var font := ThemeDB.fallback_font
-		var w := font.get_string_size("대장 슬라임", HORIZONTAL_ALIGNMENT_LEFT, -1, 6).x
+		var w := font.get_string_size(title, HORIZONTAL_ALIGNMENT_LEFT, -1, 6).x
 		draw_rect(Rect2(-w / 2 - 1.5, -35.5, w + 3, 7), Color(0, 0, 0, 0.55))
-		draw_string(font, Vector2(-w / 2, -30), "대장 슬라임", HORIZONTAL_ALIGNMENT_LEFT, -1, 6, Color(0.95, 0.85, 0.45))
+		draw_string(font, Vector2(-w / 2, -30), title, HORIZONTAL_ALIGNMENT_LEFT, -1, 6, Color(0.95, 0.85, 0.45))

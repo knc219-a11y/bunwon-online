@@ -270,6 +270,10 @@ func interact() -> void:
 	if hunt:
 		if hunt.near_exit():
 			leave_hunt()
+		elif hunt.near_next():
+			hunt.advance()
+		elif hunt.path_open:
+			GameState.notify("위쪽 길에서 F로 더 깊이, 아래 입구에서 F로 마을로 돌아간다.")
 		else:
 			GameState.notify("아래 입구에서 F로 마을로 돌아간다.")
 		return
@@ -314,11 +318,12 @@ func _farmer_interact() -> void:
 
 func _hunter_interact() -> void:
 	if _near(hunt_gate):
-		# 밭에 크리처가 있으면 누구랑 갈지 먼저 고른다 (2026-09-27 결정 A. 따라오는 동료)
-		if GameState.hunts_today < Config.HUNTS_PER_DAY and not companion_candidates().is_empty():
-			open_menu(&"companion")
+		# 켜진 웨이포인트가 있으면 어디서 시작할지 먼저 고른다 (2026-09-28 사용자 선택 B + 웨이포인트)
+		_pending_zone = 0
+		if GameState.hunts_today < Config.HUNTS_PER_DAY and GameState.waypoints.size() > 1:
+			open_menu(&"waypoint")
 		else:
-			enter_hunt()
+			_open_companion_or_enter()
 	elif _near_stash():
 		open_inventory(true)
 	elif _near(supply_box):
@@ -350,6 +355,17 @@ func _hunter_interact() -> void:
 
 # --- 사냥터 (2026-09-27 결정 A. 실시간 한 화면, 첫 조각) ------------------
 
+## 사냥터 입구에서 고른 시작 구역 (웨이포인트). 동행을 고른 뒤 enter_hunt 에 넘긴다.
+var _pending_zone := 0
+
+
+## 밭에 크리처가 있으면 누구랑 갈지 먼저 고른다 (2026-09-27 결정 A. 따라오는 동료)
+func _open_companion_or_enter() -> void:
+	if GameState.hunts_today < Config.HUNTS_PER_DAY and not companion_candidates().is_empty():
+		open_menu(&"companion")
+	else:
+		enter_hunt(null, _pending_zone)
+
 ## 사냥에 데려갈 수 있는 크리처 (농장에 나와 있고 들려 있지 않은 크리처)
 func companion_candidates() -> Array[Creature]:
 	var list: Array[Creature] = []
@@ -361,9 +377,12 @@ func companion_candidates() -> Array[Creature]:
 
 ## 사냥터 입구에서 F. 하루 한 번 들어간다. 마을은 숨기고 사냥터 화면을 띄운다.
 ## companion 을 주면 그 크리처가 따라온다. 사냥하는 동안 농장 일은 쉬고, 돌아오면 원래 자리·원래 일로 돌아간다.
-func enter_hunt(companion: Creature = null) -> bool:
+## zone 은 시작할 웨이포인트 구역 (켜진 것만, 0 = 숲 공터부터).
+func enter_hunt(companion: Creature = null, zone := 0) -> bool:
 	if hunt:
 		return false
+	if not zone in GameState.waypoints:
+		zone = 0
 	if GameState.hunts_today >= Config.HUNTS_PER_DAY:
 		GameState.notify("오늘은 이미 사냥을 다녀왔다. 자고 나면 다시 갈 수 있다.")
 		return false
@@ -377,7 +396,8 @@ func enter_hunt(companion: Creature = null) -> bool:
 	hunt = HuntGround.new()
 	add_child(hunt)
 	hunter.farm = null
-	hunt.start(hunter, first_today)
+	hunt.start(hunter, first_today, zone)
+	_pending_zone = 0
 	hunt.knocked_out.connect(leave_hunt)
 	if companion:
 		_companion_source = companion
@@ -385,7 +405,10 @@ func enter_hunt(companion: Creature = null) -> bool:
 		var c := hunt.add_companion(companion)
 		GameState.notify("%s과(와) 사냥터에 들어왔다. 클릭(또는 Space)으로 휘두르면 %s도 알아서 돕는다!" % [c.display_name(), c.display_name()])
 		return true
-	GameState.notify("사냥터에 들어왔다. 클릭(또는 Space)으로 사냥칼을 휘두른다. 야생 슬라임을 쓰러뜨리자!")
+	if zone > 0:
+		GameState.notify("%s 웨이포인트에서 사냥을 시작했다. 클릭(또는 Space)으로 휘두른다!" % Config.HUNT_ZONES[zone].name)
+	else:
+		GameState.notify("사냥터에 들어왔다. 클릭(또는 Space)으로 사냥칼을 휘두른다. 야생 슬라임을 쓰러뜨리자!")
 	return true
 
 
@@ -505,7 +528,14 @@ func menu_confirm() -> void:
 	if menu_kind == &"companion":
 		var pick := companion_from_option(id)
 		close_menu()
-		enter_hunt(pick)
+		enter_hunt(pick, _pending_zone)
+		return
+	if menu_kind == &"waypoint":
+		close_menu()
+		if id == &"close":
+			return
+		_pending_zone = String(id).trim_prefix("zone_").to_int()
+		_open_companion_or_enter()
 		return
 	if id == &"close":
 		close_menu()
@@ -665,20 +695,43 @@ func companion_option_text(id: StringName) -> String:
 	return "%s %s (밭: %s · 사냥: %s)" % [s.data.element_names(), s.data.species.display_name, CreatureJobs.display_name(s.job), fight]
 
 
+## 웨이포인트 선택창 항목: 켜진 구역마다 &"zone_<번호>", 마지막에 닫기
+func waypoint_options() -> Array[StringName]:
+	var options: Array[StringName] = []
+	for z in GameState.waypoints:
+		options.append(StringName("zone_%d" % z))
+	options.append(&"close")
+	return options
+
+
+func waypoint_option_text(id: StringName) -> String:
+	if id == &"close":
+		return "닫기"
+	var z := String(id).trim_prefix("zone_").to_int()
+	if z == 0:
+		return "1구역 %s부터 걸어가기" % Config.HUNT_ZONES[0].name
+	return "%d구역 %s 웨이포인트 (%s)" % [z + 1, Config.HUNT_ZONES[z].name, Config.HUNT_ZONES[z].monster]
+
+
 func _rebuild_menu() -> void:
 	var companion := menu_kind == &"companion"
-	_menu_options = companion_options() if companion else supply_options()
+	var waypoint := menu_kind == &"waypoint"
+	_menu_options = companion_options() if companion else (waypoint_options() if waypoint else supply_options())
 	menu_index = clampi(menu_index, 0, _menu_options.size() - 1)
-	var lines: Array[String] = ["사냥터 입구 · 누구랑 갈까?" if companion else "마을 공급함   가진 돈 %d원" % GameState.money]
+	var head := "사냥터 입구 · 누구랑 갈까?" if companion else ("사냥터 입구 · 어디서 시작할까?" if waypoint else "마을 공급함   가진 돈 %d원" % GameState.money)
+	var lines: Array[String] = [head]
 	for i in _menu_options.size():
-		var text := companion_option_text(_menu_options[i]) if companion else supply_option_text(_menu_options[i])
+		var o := _menu_options[i]
+		var text := companion_option_text(o) if companion else (waypoint_option_text(o) if waypoint else supply_option_text(o))
 		lines.append(("▶ " if i == menu_index else "   ") + text)
 	if companion:
 		lines.append("데려간 크리처는 돌아오면 제자리에서 다시 일한다")
+	if waypoint:
+		lines.append("대장을 쓰러뜨리면 위쪽 길로 더 깊이 갈 수 있다")
 	_menu_text.text = "\n".join(lines)
 	_menu.size = _menu_text.get_minimum_size() + Vector2(16, 10)
 	# 공급함(또는 사냥터 입구) 옆에 띄우되 화면 밖으로 나가지 않게
-	var at := (hunt_gate.position + Vector2(-200, 8)) if companion else supply_box.position + Vector2(36, -80)
+	var at := (hunt_gate.position + Vector2(-200, 8)) if companion or waypoint else supply_box.position + Vector2(36, -80)
 	_menu.position = at.clamp(Vector2(4, 32), Vector2(636, 324) - _menu.size)
 	_menu.visible = menu_open
 
@@ -883,7 +936,7 @@ func _refresh_hud() -> void:
 	var tool_text: String = tool_name(TOOLS[tool_index]) if active == farmer else ("튼튼한 사냥칼" if GameState.hunter_knife else "사냥칼")
 	if hunt:
 		var buddy := hunt.companion.display_name() if hunt.companion else "혼자"
-		_status.text = "%d일째 | 사냥터 | 도구: %s | 동행: %s | 남은 야생 슬라임 %d | 주운 알 %d | 돈 %d원 · 젤리 %d" % [GameState.day, tool_text, buddy, hunt.slimes.size(), hunt.picked.size(), GameState.money, GameState.junk]
+		_status.text = "%d일째 | %s | 도구: %s | 동행: %s | 남은 몬스터 %d | 주운 알 %d | 돈 %d원 · 젤리 %d" % [GameState.day, Config.HUNT_ZONES[hunt.zone].name, tool_text, buddy, hunt.slimes.size(), hunt.picked.size(), GameState.money, GameState.junk]
 		return
 	_status.text = "%d일째 | %s | 도구: %s | 돈 %d원 | 씨앗 %d  작물 %d | 알: 농부 %d · 사냥꾼 %d · 공급함 %d | 크리처 %d" % [
 		GameState.day, active.display_name, tool_text, GameState.money, GameState.seeds, GameState.crops,
