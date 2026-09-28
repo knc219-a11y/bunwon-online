@@ -163,8 +163,10 @@ func tick(delta: float) -> void:
 			GameState.notify("알을 주웠다! 마을로 돌아가 공급함에 넣자.")
 	for i in range(loot.size() - 1, -1, -1):
 		if loot[i].at.distance_to(feet) <= 14.0:
-			_take(loot[i])
-			loot.remove_at(i)
+			if _take(loot[i]):
+				loot.remove_at(i)
+		else:
+			loot[i].erase("full")
 	queue_redraw()
 	_hud.queue_redraw()
 
@@ -257,13 +259,21 @@ func _defeat(s: WildSlime) -> void:
 	s.queue_free()
 
 
-## 드롭을 줍는다. 장비면 바로 입고, 늘어난 하트 칸만큼 하트도 채운다.
-func _take(d: Dictionary) -> void:
+## 드롭을 줍는다. 장비면 바로 입거나 가방에 넣고, 늘어난 하트 칸만큼 하트도 채운다.
+## 가방과 창고가 다 차서 못 주우면 false (땅에 남기고, 그 자리에 서 있는 동안 한 번만 알린다).
+func _take(d: Dictionary) -> bool:
 	var before := max_hearts()
-	GameState.notify(HuntLoot.take(d))
+	var text := HuntLoot.take(d)
+	if text == "":
+		if not d.has("full"):
+			d.full = true
+			GameState.notify("가방과 창고가 모두 가득 차서 %s을(를) 주울 수 없다." % HuntLoot.label(d))
+		return false
+	GameState.notify(text)
 	if d.kind == &"gear":
 		hearts += max_hearts() - before
 		hunter.refresh_wear()
+	return true
 
 
 func _hurt(from: Vector2) -> void:
@@ -286,9 +296,13 @@ func collect_all() -> Array[CreatureSpecies]:
 	for d in drops:
 		picked.append(d.species)
 	drops.clear()
+	var left := 0
 	for d in loot:
-		_take(d)
+		if not _take(d):
+			left += 1
 	loot.clear()
+	if left > 0:
+		GameState.notify("가방과 창고가 모두 차서 장비 %d개를 두고 왔다." % left)
 	return picked
 
 
@@ -305,7 +319,7 @@ func _draw() -> void:
 	var font := ThemeDB.fallback_font
 	for d in loot:
 		var p: Vector2 = d.at
-		var col: Color = HuntLoot.COLORS[d.kind]
+		var col := HuntLoot.color(d)
 		draw_set_transform(p + Vector2(0, 5), 0.0, Vector2(1.0, 0.4))
 		draw_circle(Vector2.ZERO, 6.0, Color(0.27, 0.16, 0.33, 0.25))
 		draw_set_transform(Vector2.ZERO)
@@ -320,7 +334,8 @@ func _draw() -> void:
 				draw_circle(p, 4, Color(0.62, 0.52, 0.42, 0.9))
 			_:
 				draw_rect(Rect2(p + Vector2(-5, -8), Vector2(10, 10)), Color(0.2, 0.35, 0.2))
-				draw_texture_rect_region(Wearables.ITEMS[d.id].sheet, Rect2(p + Vector2(-12, -20), Vector2(24, 24)), Rect2(0, 0, 48, 48))
+				var sheet: Texture2D = Wearables.ITEMS[d.roll.base if d.has("roll") else d.id].sheet
+				draw_texture_rect_region(sheet, Rect2(p + Vector2(-12, -20), Vector2(24, 24)), Rect2(0, 0, 48, 48))
 		# 디아블로2처럼 떨어진 것의 이름을 종류별 색으로 띄운다
 		var text := HuntLoot.label(d)
 		var w := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 8).x

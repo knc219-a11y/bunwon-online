@@ -5,6 +5,8 @@ extends RefCounted
 ## 쓰러뜨릴 때마다 20% 확률로 돈 · 빨간 물약 · 잡템 · 장비 중 하나가 떨어진다 (무게는 Config.HUNT_LOOT_WEIGHTS).
 ## 장비 보장 칸은 없다. 장비는 아직 없는 것만 나온다 (다 모으면 돈으로 바뀜). 그날 첫 알 보장은 따로 그대로.
 ## 땅에 떨어진 이름은 디아블로2처럼 종류별 색으로 보인다 (돈 금색, 물약 빨강, 잡템 회색, 세트 장비 초록).
+## 장비 등급 (2026-09-28 사용자 선택 A: 디아블로2 그대로): 세트 조각이 아닌 장비는 기본 장비에 등급과 옵션을 굴린다.
+## 일반 흰색 · 마법 파랑 · 레어 노랑. 세트를 다 모아도 장비는 계속 떨어진다.
 
 const KINDS: Array[StringName] = [&"money", &"potion", &"junk", &"gear"]
 const COLORS := {
@@ -13,17 +15,26 @@ const COLORS := {
 	&"junk": Color(0.78, 0.78, 0.74),
 	&"gear": Color(0.45, 0.95, 0.4),
 }
+## 장비 등급 색 (땅 이름 · 가방 테두리 · 설명 줄)
+const RARITY_COLORS := {
+	&"normal": Color(0.95, 0.95, 0.92),
+	&"magic": Color(0.5, 0.62, 1.0),
+	&"rare": Color(1.0, 0.9, 0.35),
+	&"set": Color(0.45, 0.95, 0.4),
+}
 
 
 ## 한 마리를 쓰러뜨렸을 때 떨어질 것. 없으면 빈 사전.
 static func roll_for_kill(rng: RandomNumberGenerator) -> Dictionary:
 	var missing := Wearables.missing_hunt_drops()
-	if rng.randf() >= Config.HUNT_LOOT_CHANCE:
+	if rng.randf() >= loot_chance():
 		return {}
 	var kind := pick_kind(rng.randf() * 100.0)
 	if kind == &"gear":
-		# 세트를 다 모았으면 장비 대신 돈
-		return _gear(missing, rng) if not missing.is_empty() else _money(rng)
+		# 세트 조각이 남아 있으면 절반은 세트 조각, 나머지는 등급을 굴린 장비
+		if not missing.is_empty() and rng.randf() < Config.SET_PIECE_SHARE:
+			return _gear(missing, rng)
+		return {kind = &"gear", roll = Wearables.roll_gear(rng)}
 	match kind:
 		&"money":
 			return _money(rng)
@@ -41,12 +52,27 @@ static func pick_kind(roll: float) -> StringName:
 	return KINDS[-1]
 
 
+## 드롭 확률 (사냥꾼이 입은 "드롭 확률 +%p" 옵션을 더한다)
+static func loot_chance() -> float:
+	return Config.HUNT_LOOT_CHANCE + Wearables.stat_sum(&"hunter", "find") / 100.0
+
+
+## 땅에 보이는 이름 색
+static func color(d: Dictionary) -> Color:
+	if d.kind == &"gear":
+		return RARITY_COLORS[d.roll.rarity] if d.has("roll") else RARITY_COLORS[&"set"]
+	return COLORS[d.kind]
+
+
 static func _gear(missing: Array[StringName], rng: RandomNumberGenerator) -> Dictionary:
 	return {kind = &"gear", id = missing[rng.randi() % missing.size()]}
 
 
 static func _money(rng: RandomNumberGenerator) -> Dictionary:
-	return {kind = &"money", amount = rng.randi_range(Config.HUNT_MONEY_MIN, Config.HUNT_MONEY_MAX)}
+	var amount := rng.randi_range(Config.HUNT_MONEY_MIN, Config.HUNT_MONEY_MAX)
+	# "돈 드롭 +%" 옵션
+	amount = roundi(amount * (1.0 + Wearables.stat_sum(&"hunter", "money") / 100.0))
+	return {kind = &"money", amount = amount}
 
 
 ## 땅에 보이는 이름
@@ -59,10 +85,11 @@ static func label(d: Dictionary) -> String:
 		&"junk":
 			return "슬라임 젤리"
 		_:
-			return Wearables.ITEMS[d.id].name
+			return d.roll.name if d.has("roll") else Wearables.ITEMS[d.id].name
 
 
-## 주운 것을 가진 것에 넣고 알림 문장을 돌려준다. 장비는 바로 입는다 (덧그림은 부른 쪽이 새로 그린다).
+## 주운 것을 가진 것에 넣고 알림 문장을 돌려준다. 세트 조각은 바로 입고, 등급 장비는 칸이 비었으면 입고 아니면 가방으로.
+## 가방과 창고가 모두 차 있으면 줍지 못하고 빈 문장을 돌려준다 (땅에 남는다). 덧그림은 부른 쪽이 새로 그린다.
 static func take(d: Dictionary) -> String:
 	match d.kind:
 		&"money":
@@ -74,6 +101,17 @@ static func take(d: Dictionary) -> String:
 		&"junk":
 			GameState.junk += 1
 			return "슬라임 젤리를 주웠다. 마을 공급함에서 사냥꾼이 F로 팔 수 있다."
+		_ when d.has("roll"):
+			var where := Wearables.gain_rolled(d.roll)
+			var what := "%s %s" % [Wearables.RARITY_NAMES[d.roll.rarity], d.roll.name]
+			match where:
+				&"worn":
+					return "%s을(를) 주워 바로 입었다! %s" % [what, Wearables.affix_text(d.roll.affixes)]
+				&"bag":
+					return "%s을(를) 주워 가방에 넣었다. (I 키)" % what
+				&"stash":
+					return "가방이 가득 차서 %s을(를) 마을 창고로 보냈다." % what
+			return ""
 		_:
 			var item: Dictionary = Wearables.ITEMS[d.id]
 			Wearables.gain_and_wear(d.id)

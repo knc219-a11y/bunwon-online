@@ -322,8 +322,12 @@ func _hunter_interact() -> void:
 	elif _near_stash():
 		open_inventory(true)
 	elif _near(supply_box):
+		var has_gear := Wearables.rolled_in_bag(&"hunter") > 0
 		if GameState.hunter_eggs.is_empty() and GameState.junk <= 0:
-			GameState.notify("공급할 알이 없다. 사냥터 입구로 가자.")
+			if has_gear:
+				open_menu()
+			else:
+				GameState.notify("공급할 알이 없다. 사냥터 입구로 가자.")
 			return
 		var parts: Array[String] = []
 		if not GameState.hunter_eggs.is_empty():
@@ -337,6 +341,9 @@ func _hunter_interact() -> void:
 			GameState.money += earned
 			GameState.junk = 0
 		GameState.notify(" ".join(parts))
+		# 가방에 사냥터 등급 장비가 있으면 장비 팔기 선택창도 연다 (2026-09-28 사용자 선택 A)
+		if has_gear:
+			open_menu()
 	else:
 		GameState.notify("사냥터 입구나 마을 공급함 가까이에서 F.")
 
@@ -416,6 +423,14 @@ func leave_hunt() -> void:
 ## 지금 공급함에서 할 수 있는 일. 알 받기와 진열은 가진 게 있을 때만 보인다.
 func supply_options() -> Array[StringName]:
 	var options: Array[StringName] = []
+	# 사냥꾼: 알 넣기 · 젤리 팔기는 F 한 번에 끝나고, 선택창에는 장비 팔기만 (2026-09-28 사용자 선택 A)
+	if active == hunter:
+		if Wearables.normal_in_bag(&"hunter") > 0:
+			options.append(&"sell_normal")
+		if Wearables.rolled_in_bag(&"hunter") > 0:
+			options.append(&"sell_gear")
+		options.append(&"close")
+		return options
 	if not GameState.village_eggs.is_empty():
 		options.append(&"take_eggs")
 	if GameState.crops > 0:
@@ -451,6 +466,11 @@ func supply_option_text(id: StringName) -> String:
 			return "도구 손보기: %s → %s (앞 %d칸, %d원)" % [TOOL_NAMES[work], UPGRADED_TOOL_NAMES[work], Config.TOOL_UPGRADE_REACH, TOOL_UPGRADES[id][1]]
 		&"buy_knife":
 			return "사냥꾼 튼튼한 사냥칼 (%d원)" % Config.HUNTER_KNIFE_PRICE
+		&"sell_normal":
+			var n := Wearables.normal_in_bag(active.who)
+			return "일반 장비 한꺼번에 팔기 (%d개, %d원)" % [n, n * Config.GEAR_SELL_PRICES[&"normal"]]
+		&"sell_gear":
+			return "가방에서 장비 팔기 (일반 %d · 마법 %d · 레어 %d원)" % [Config.GEAR_SELL_PRICES[&"normal"], Config.GEAR_SELL_PRICES[&"magic"], Config.GEAR_SELL_PRICES[&"rare"]]
 		_ when Wearables.ITEMS.has(id):
 			var item: Dictionary = Wearables.ITEMS[id]
 			return "%s %s: %s (%s, %d원)" % ["농부" if item.who == &"farmer" else "사냥꾼", Wearables.SLOT_NAMES[item.slot], item.name, item.effect, item.price]
@@ -489,6 +509,9 @@ func menu_confirm() -> void:
 		return
 	if id == &"close":
 		close_menu()
+		return
+	if id == &"sell_gear":
+		open_inventory(false, true)
 		return
 	supply_action(id)
 	_rebuild_menu()
@@ -554,6 +577,12 @@ func supply_action(id: StringName) -> bool:
 			GameState.money -= Config.HUNTER_KNIFE_PRICE
 			GameState.hunter_knife = true
 			GameState.notify("사냥꾼에게 튼튼한 사냥칼을 사 줬다! -%d원. 이제 태어나는 크리처는 능력치가 너무 낮게 나오지 않는다." % Config.HUNTER_KNIFE_PRICE)
+		&"sell_normal":
+			var sold := Wearables.sell_all_normal(active.who)
+			if sold[0] == 0:
+				GameState.notify("가방에 일반 장비가 없다.")
+				return false
+			GameState.notify("일반 장비 %d개를 팔았다. +%d원" % [sold[0], sold[1]])
 		_ when Wearables.ITEMS.has(id) and not Wearables.is_hunt_drop(id):
 			return buy_wear(id)
 		_:
@@ -581,12 +610,13 @@ func buy_wear(id: StringName) -> bool:
 # --- 디아블로식 가방 · 공용 창고 (2026-09-28 사용자 요청) ----------------
 
 ## 가방 창을 연다. stash 면 창고 칸도 옆에 붙인다 (마을 창고 궤짝에서 F).
-func open_inventory(stash := false) -> void:
+## sell 이면 공급함 장비 팔기 창 (가방 칸 클릭 = 팔기).
+func open_inventory(stash := false, sell := false) -> void:
 	close_menu()
 	active.frozen = true
 	if hunt:
 		hunt.set_process(false)
-	inventory.open(active, stash)
+	inventory.open(active, stash, sell)
 
 
 func close_inventory() -> void:
