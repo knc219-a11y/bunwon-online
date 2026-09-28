@@ -55,7 +55,8 @@ const HUNTS_PER_DAY := 1
 ## 사냥터 첫 조각 (2026-09-27 결정 A. 실시간 한 화면). 값은 전부 임시.
 ## 사냥꾼 하트 수, 야생 슬라임 수와 맞아야 쓰러지는 횟수
 const HUNTER_HEARTS := 5
-const WILD_SLIME_COUNT := 3
+## 1구역 분원농협 야생 슬라임 수. 넓은 맵(창고 마당)이 되며 3 → 7 (2026-09-28, 임시)
+const WILD_SLIME_COUNT := 7
 const WILD_SLIME_HP := 2
 ## 휘두르기: 발 앞 이 거리에 원을 그려 닿은 야생 슬라임을 때린다 (px)
 const SWING_REACH := 18.0
@@ -158,6 +159,10 @@ const BOSS_MONEY_MAX := 60
 const HUNT_ZONES: Array[Dictionary] = [
 	{
 		name = "분원농협", monster = "야생 슬라임", boss_monster = "대장 슬라임", waypoint = false,
+		## 넓은 맵 (2026-09-28 사용자 선택 C. 창고 마당): 아래는 농협 창고 마당, 철망 너머 위는 논밭, 대장은 곳간 앞
+		map = "nonghyup",
+		## 창고 벽 간판 (칸 자리, 글씨). 그림은 칸 지도에서 그린 임시 그림
+		labels = [[Vector2(10.5, 21.3), "분원농협"], [Vector2(40, 20.3), "분원농협 2창고"], [Vector2(22, 18.3), "농기계"], [Vector2(19.5, 9.3), "곳간"]],
 		sheet = "res://assets/creatures/slime_earth.png", boss_sheet = "res://assets/creatures/slime_earth.png", burrow = false,
 		count = WILD_SLIME_COUNT, hp = WILD_SLIME_HP, speed = 1.0, boss_hp = BOSS_HP,
 		loot = HUNT_LOOT_WEIGHTS, rarity = GEAR_RARITY_WEIGHTS, boss_rarity = BOSS_RARITY_WEIGHTS,

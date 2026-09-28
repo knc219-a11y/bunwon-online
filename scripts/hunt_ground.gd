@@ -9,7 +9,9 @@ extends Node2D
 ## 웨이포인트가 있는 구역에 처음 도착하면 웨이포인트가 켜지고, 다음 날부터 사냥터 입구에서 거기서 시작할 수 있다.
 ## 넓은 맵 (2026-09-28 사용자 선택 C): 구역 데이터에 map 이 있으면 칸 지도(HuntMap)로 화면보다 넓은 사냥터를 만들고
 ## 카메라가 사냥꾼을 따라간다. 입구·위쪽 길·웨이포인트·표지·대장·몬스터 자리는 지도의 표식에서 온다.
-## map 이 없는 구역(분원농협)은 예전 한 화면 공터 그대로.
+## map 이 없는 구역은 예전 한 화면 공터 그대로 (분원농협도 2026-09-28 사용자 선택 C. 창고 마당으로 넓은 맵이 됨).
+## 작은 지도 (2026-09-28 추천 M2, 사용자가 따로 말하지 않아 그대로 감): 넓은 맵이면 오른쪽 위 구석에 작은 지도를 띄우고,
+## 이번 사냥에서 가 본 곳 둘레만 드러난다. 게임 화면은 가리지 않는다. 구역을 옮기거나 다음 사냥이면 다시 가려진다.
 
 signal knocked_out
 
@@ -78,6 +80,10 @@ var sign_node: Sprite2D
 var map: HuntMap
 var camera: Camera2D
 var _gate: Sprite2D
+## 작은 지도: 한 칸 = 한 픽셀, 가 본 칸만 색이 칠해진다 (안 가 본 칸은 투명)
+var _mini_img: Image
+var _mini_tex: ImageTexture
+var _mini_cell := Vector2i(-999, -999)
 ## 넓은 맵에 세운 나무 (구역이 바뀌면 치운다)
 var _map_trees: Array[Sprite2D] = []
 
@@ -197,6 +203,7 @@ func _place_hunter() -> void:
 	hunter.position = spawn_at()
 	hunter.facing = Vector2i.UP
 	_follow_camera()
+	_reset_minimap()
 
 
 func _follow_camera() -> void:
@@ -333,6 +340,7 @@ func tick(delta: float) -> void:
 	_invulnerable = maxf(_invulnerable - delta, 0.0)
 	_swing_time = maxf(_swing_time - delta, 0.0)
 	_follow_camera()
+	_reveal_minimap()
 	var feet := hunter.feet()
 	for s in slimes:
 		s.tick(delta, feet)
@@ -587,6 +595,7 @@ func _draw_sign(text: String) -> void:
 func _draw_ground(n: Node2D) -> void:
 	if map:
 		n.draw_texture(map.ground, Vector2.ZERO)
+		_draw_labels(n)
 		_draw_waypoint(n)
 		return
 	var tiles: Texture2D = preload("res://assets/tiles/farm_tiles.png")
@@ -600,6 +609,18 @@ func _draw_ground(n: Node2D) -> void:
 		for y in range(top, CLEARING.end.y + 3 if x >= 11 and x <= 13 else CLEARING.end.y):
 			n.draw_texture_rect_region(tiles, Rect2(x * T, y * T, T, T), Rect2(4 * T, 0, T, T))
 	_draw_waypoint(n)
+
+
+## 창고 벽 간판 (구역 데이터 labels: 칸 자리 + 글씨)
+func _draw_labels(n: Node2D) -> void:
+	var font := ThemeDB.fallback_font
+	for l in Config.HUNT_ZONES[zone].get("labels", []):
+		var text: String = l[1]
+		var w := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 8).x
+		var r := Rect2(Vector2(l[0]) * T + Vector2(-w / 2 - 3, -1), Vector2(w + 6, 11))
+		n.draw_rect(r, Color(0.98, 0.97, 0.93))
+		n.draw_rect(r, Color(0.35, 0.45, 0.6), false, 1.0)
+		n.draw_string(font, r.position + Vector2(3, 9), text, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(0.15, 0.3, 0.55))
 
 
 func _draw_waypoint(n: Node2D) -> void:
@@ -632,11 +653,87 @@ func _draw_hud() -> void:
 	_hud.draw_rect(Rect2(632 - zw - 6, 30, zw + 6, 14), Color(0, 0, 0, 0.55))
 	_hud.draw_string(font, Vector2(632 - zw - 3, 41), zt, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.95, 0.85, 0.45))
 	_draw_offscreen_hint(font)
+	_draw_minimap()
 	if path_open:
 		var pt := "▲ 위쪽 길: %d구역 %s (F)" % [zone + 2, Config.HUNT_ZONES[zone + 1].name]
 		var pw := font.get_string_size(pt, HORIZONTAL_ALIGNMENT_LEFT, -1, 9).x
 		_hud.draw_rect(Rect2(13 * T - pw / 2 - 3, 2 * T - 10, pw + 6, 13), Color(0, 0, 0, 0.55))
 		_hud.draw_string(font, Vector2(13 * T - pw / 2, 2 * T), pt, HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(1.0, 0.9, 0.35))
+
+
+## 작은 지도 칸 색 (칸 글자 → 색). 없는 글자는 풀색
+const MINI_COLORS := {
+	".": Color(0.5, 0.68, 0.42), "J": Color(0.5, 0.68, 0.42), "T": Color(0.3, 0.48, 0.3), "B": Color(0.3, 0.5, 0.3), "R": Color(0.55, 0.53, 0.55),
+	",": Color(0.8, 0.7, 0.52), "S": Color(0.8, 0.7, 0.52), "E": Color(0.8, 0.7, 0.52), "N": Color(0.8, 0.7, 0.52), "W": Color(0.8, 0.7, 0.52),
+	"K": Color(0.8, 0.7, 0.52), "c": Color(0.8, 0.7, 0.52),
+	"~": Color(0.36, 0.55, 0.72), "=": Color(0.55, 0.72, 0.8), "o": Color(0.6, 0.6, 0.62), "b": Color(0.62, 0.48, 0.34),
+	"p": Color(0.48, 0.66, 0.64), "x": Color(0.84, 0.75, 0.56), "r": Color(0.6, 0.45, 0.33), "%": Color(0.78, 0.78, 0.75),
+	"m": Color(0.78, 0.66, 0.4), "H": Color(0.5, 0.58, 0.68), "F": Color(0.55, 0.55, 0.6), "s": Color(0.9, 0.88, 0.8),
+	"h": Color(0.85, 0.72, 0.4), "w": Color(0.95, 0.95, 0.95),
+}
+## 사냥꾼 둘레 이만큼(칸, 가로·세로 반지름)이 작은 지도에 드러난다. 화면 절반쯤 (임시)
+const MINI_REVEAL := Vector2i(12, 7)
+## 작은 지도 한 칸 크기 (px)
+const MINI_SCALE := 2
+
+
+func _reset_minimap() -> void:
+	_mini_cell = Vector2i(-999, -999)
+	if map == null:
+		_mini_img = null
+		_mini_tex = null
+		return
+	_mini_img = Image.create(map.size.x, map.size.y, false, Image.FORMAT_RGBA8)
+	_mini_tex = ImageTexture.create_from_image(_mini_img)
+	_reveal_minimap()
+
+
+## 사냥꾼이 칸을 옮기면 둘레 칸을 작은 지도에 드러낸다
+func _reveal_minimap() -> void:
+	if _mini_img == null or hunter == null:
+		return
+	var c := Vector2i((hunter.feet() / T).floor())
+	if c == _mini_cell:
+		return
+	_mini_cell = c
+	var changed := false
+	for y in range(maxi(c.y - MINI_REVEAL.y, 0), mini(c.y + MINI_REVEAL.y + 1, map.size.y)):
+		for x in range(maxi(c.x - MINI_REVEAL.x, 0), mini(c.x + MINI_REVEAL.x + 1, map.size.x)):
+			if _mini_img.get_pixel(x, y).a == 0.0:
+				_mini_img.set_pixel(x, y, MINI_COLORS.get(map.at(Vector2i(x, y)), MINI_COLORS["."]))
+				changed = true
+	if changed:
+		_mini_tex.update(_mini_img)
+
+
+## 이번 사냥에서 이 칸을 작은 지도에 드러냈는지
+func minimap_seen(c: Vector2i) -> bool:
+	return _mini_img != null and c.x >= 0 and c.y >= 0 and c.x < map.size.x and c.y < map.size.y and _mini_img.get_pixel(c.x, c.y).a > 0.0
+
+
+## 작은 지도 자리 (화면 px): 오른쪽 위, 구역 이름 아래
+func minimap_rect() -> Rect2:
+	var size := Vector2(map.size * MINI_SCALE)
+	return Rect2(Vector2(636 - size.x, 50), size)
+
+
+func _draw_minimap() -> void:
+	if _mini_tex == null or hunter == null:
+		return
+	var r := minimap_rect()
+	_hud.draw_rect(r.grow(2), Color(0, 0, 0, 0.55))
+	_hud.draw_texture_rect(_mini_tex, r, false, Color(1, 1, 1, 0.9))
+	# 아래 입구는 늘 보이고, 위쪽 길은 가 본 뒤에 보인다
+	var gold := Color(1, 0.95, 0.6)
+	var e := r.position + map.spot("E") / T * MINI_SCALE
+	_hud.draw_rect(Rect2(e - Vector2(2, 3), Vector2(4, 3)), gold)
+	var n := map.spot("N")
+	if minimap_seen(Vector2i(n / T)):
+		var np := r.position + n / T * MINI_SCALE
+		_hud.draw_rect(Rect2(np - Vector2(2, 1), Vector2(4, 3)), gold)
+	var hp := r.position + hunter.feet() / T * MINI_SCALE
+	_hud.draw_circle(hp, 2.5, Color.WHITE)
+	_hud.draw_circle(hp, 1.5, Color(0.9, 0.3, 0.35))
 
 
 ## 넓은 맵: 가장 가까운 몬스터가 화면 밖이면 화면 가장자리에 그쪽 화살표와 이름을 띄운다.

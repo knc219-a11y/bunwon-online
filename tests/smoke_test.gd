@@ -180,7 +180,7 @@ func _ready() -> void:
 	main._unhandled_input(_action(&"move_down"))
 	main._unhandled_input(_action(&"interact"))
 	var hunt: HuntGround = main.hunt
-	_check(hunt != null and hunt.companion == null and not main.menu_open and not main.farm.visible and not farmer.visible and hunt.slimes.size() == Config.WILD_SLIME_COUNT, "사냥터 입구 F → 사냥터 화면, 야생 슬라임 3마리")
+	_check(hunt != null and hunt.companion == null and not main.menu_open and not main.farm.visible and not farmer.visible and hunt.slimes.size() == Config.WILD_SLIME_COUNT, "사냥터 입구 F → 사냥터 화면, 야생 슬라임 %d마리" % Config.WILD_SLIME_COUNT)
 	hunt.set_ai(false)
 	_check(hunt.hearts == Config.HUNTER_HEARTS, "하트 5개로 시작")
 	# Space(바라보는 쪽)로 두 번 휘두르면 쓰러진다
@@ -192,7 +192,7 @@ func _ready() -> void:
 	hunt.tick(Config.SWING_COOLDOWN)
 	wild.position = hunter.feet() + Vector2(0, -8 - Config.SWING_REACH)
 	hunt.swing()
-	_check(hunt.slimes.size() == 2 and hunt.drops.size() == 1, "두 번 맞으면 쓰러지고 그날 첫 슬라임은 알을 떨어뜨림")
+	_check(hunt.slimes.size() == Config.WILD_SLIME_COUNT - 1 and hunt.drops.size() == 1, "두 번 맞으면 쓰러지고 그날 첫 슬라임은 알을 떨어뜨림")
 	# 마우스 클릭: 누른 쪽을 향해 휘두른다
 	hunt.tick(Config.SWING_COOLDOWN)
 	var wild2: WildSlime = hunt.slimes[0]
@@ -201,7 +201,7 @@ func _ready() -> void:
 	hunt.tick(Config.SWING_COOLDOWN)
 	wild2.position = hunter.feet() + Vector2(-Config.SWING_REACH, -8)
 	hunt.swing(Vector2(-30, 2))
-	_check(hunt.slimes.size() == 1 and hunt.drops.size() == 1, "알 보장은 첫 슬라임 한 번뿐")
+	_check(hunt.slimes.size() == Config.WILD_SLIME_COUNT - 2 and hunt.drops.size() == 1, "알 보장은 첫 슬라임 한 번뿐")
 	# 부딪히면 하트 -1, 잠깐 무적
 	var wild3: WildSlime = hunt.slimes[0]
 	wild3.position = hunter.feet()
@@ -214,7 +214,7 @@ func _ready() -> void:
 	hunter.position = hunt.drops[0].at - Vector2(0, Character.FEET_Y)
 	hunt.tick(0.01)
 	_check(hunt.picked.size() == 1 and hunt.drops.is_empty(), "떨어진 알 줍기")
-	hunter.position = hunt.SPAWN_AT
+	hunter.position = hunt.spawn_at()
 	main.interact()
 	_check(main.hunt == null and main.farm.visible and GameState.hunter_eggs.size() == 1, "아래 입구 F로 마을에 돌아오면 알 1개")
 	_check(main._near(main.hunt_gate) and hunter.walk_area == Rect2(), "마을 사냥터 입구 앞으로 돌아옴")
@@ -501,7 +501,7 @@ func _ready() -> void:
 	_check(h3.hearts == Config.HUNTER_HEARTS, "크리처 동행 중에도 하트는 그대로 (크리처는 다치지 않음)")
 	# 돌아오면 원래 자리·원래 일
 	var eggs_before_buddy := GameState.hunter_eggs.size()
-	main.hunter.position = h3.SPAWN_AT
+	main.hunter.position = h3.spawn_at()
 	main.interact()
 	_check(main.hunt == null and buddy.visible and buddy.can_process(), "돌아오면 크리처가 농장에 다시 나타나 일한다")
 	_check(buddy.home == buddy_home and buddy.job == buddy_job and buddy.position == buddy_pos, "원래 자리·원래 일 그대로")
@@ -535,7 +535,7 @@ func _ready() -> void:
 	var gap := h4.companion.position.distance_to(near.position)
 	h4.tick(0.1)
 	_check(h4.companion.position.distance_to(near.position) < gap, "박치기 크리처는 가까운 야생 슬라임에게 다가간다")
-	main.hunter.position = h4.SPAWN_AT
+	main.hunter.position = h4.spawn_at()
 	main.interact()
 	_check(main.hunt == null and earth_buddy.can_process(), "땅 슬라임도 돌아와 다시 일함")
 
@@ -607,7 +607,7 @@ func _ready() -> void:
 	h5.loot.append({kind = &"junk", at = Vector2(7 * Config.TILE, 5 * Config.TILE)})
 	h5.loot.append({kind = &"money", amount = 20, at = Vector2(8 * Config.TILE, 5 * Config.TILE)})
 	var junk_before := GameState.junk
-	main.hunter.position = h5.SPAWN_AT
+	main.hunter.position = h5.spawn_at()
 	main.interact()
 	_check(main.hunt == null and GameState.junk == junk_before + 1 and GameState.money == money_before + 20, "떠날 때 안 주운 젤리·돈도 챙김")
 	_check(Wearables.set_complete(&"forest", &"hunter") and Wearables.bonus_hearts(&"hunter") == 2, "숲 공터 세트 완성: 하트 +1 더")
@@ -672,7 +672,7 @@ func _ready() -> void:
 
 	# 21) 장비 등급 (2026-09-28 사용자 선택 A: 디아블로2 그대로): 일반 · 마법 · 레어, 무작위 옵션, 공급함 팔기
 	main.close_inventory()
-	main.hunter.position = h6.SPAWN_AT
+	main.hunter.position = h6.spawn_at()
 	main.interact()
 	_check(main.hunt == null, "사냥터에서 돌아옴")
 	var rr := RandomNumberGenerator.new()
@@ -860,7 +860,7 @@ func _ready() -> void:
 	sh.loot.clear()
 	var hearts_before := sh.hearts - 1
 	sh.hearts = hearts_before
-	main.hunter.position = HuntGround.NEXT_AREA.get_center()
+	main.hunter.position = sh.next_area().get_center()
 	main.interact()
 	_check(sh.zone == 1 and not sh.path_open and not sh.boss_spawned, "위쪽 길에서 F → 2구역 %s" % z2.name)
 	_check(sh.hearts == hearts_before and GameState.hunts_today == 1, "하트는 그대로, 같은 날 같은 사냥 (%d/%d, %d번)" % [sh.hearts, hearts_before, GameState.hunts_today])
@@ -1058,6 +1058,100 @@ func _ready() -> void:
 	main.interact()
 	await get_tree().process_frame
 	_check(main.hunt == null and hunter_w.terrain == null and get_viewport().canvas_transform == Transform2D.IDENTITY, "마을로 돌아오면 화면이 원래대로")
+
+	# 26. 분원농협 넓은 맵 (2026-09-28 사용자 선택 C. 창고 마당) + 작은 지도 (추천 M2: 가 본 곳만 보임)
+	main.next_day()
+	var z1: Dictionary = Config.HUNT_ZONES[0]
+	_check(main.enter_hunt(null, 0), "분원농협으로 입장")
+	var nh: HuntGround = main.hunt
+	nh.set_ai(false)
+	var nm := nh.map
+	var hunter_n: Character = main.hunter
+	_check(nh.zone == 0 and nm != null and z1.map == "nonghyup" and nm.size == Vector2i(52, 30), "분원농협도 52x30칸 (화면 2x2) 넓은 맵")
+	_check(hunter_n.position == nm.spot("S") and nh.near_exit(), "아래 입구 앞에서 시작")
+	_check(nh.slimes.size() == Config.WILD_SLIME_COUNT and nh.slimes.all(func(s: WildSlime) -> bool: return not s.buried and nm.at_point(s.position) == "c"), "야생 슬라임 %d마리가 마당·논밭에 흩어져 있음" % Config.WILD_SLIME_COUNT)
+	_check(nm.find("H").size() > 100 and nm.find("F").size() > 30 and nm.find("s").size() > 5 and nm.find("m").size() > 10, "창고 · 철망 · 쌀 포대 · 멍석이 있음")
+	_check((z1.labels as Array).any(func(l: Array) -> bool: return l[1] == "분원농협" and nm.at_point(Vector2(l[0]) * HuntGround.T) == "H"), "창고 벽에 분원농협 간판")
+	# 창고: 마당에서 창고 벽 쪽으로 걸어도 못 들어감
+	var wall := Vector2i(-1, -1)
+	for x in range(2, 50):
+		if wall.x < 0 and nm.at(Vector2i(x, 22)) == "H" and nm.at(Vector2i(x, 23)) == "%":
+			wall = Vector2i(x, 22)
+	hunter_n.position = Vector2(wall.x * 24 + 12, 24 * 24 + 12)
+	for i in 30:
+		hunter_n.step(Vector2(0, -2))
+	_check(wall.x > 0 and nm.at_point(hunter_n.feet()) != "H" and hunter_n.feet().y > 23 * 24, "창고 안으로는 못 들어감")
+	# 철망: 울타리는 막히고, 철망 문으로는 지나감
+	var fence_x := -1
+	var gate_x := -1
+	for x in range(2, 50):
+		if nm.at(Vector2i(x, 15)) == "F" and nm.at(Vector2i(x, 14)) == "." and nm.at(Vector2i(x, 16)) == "%" and fence_x < 0:
+			fence_x = x
+		if nm.at(Vector2i(x, 15)) == "%" and gate_x < 0:
+			gate_x = x
+	hunter_n.position = Vector2(fence_x * 24 + 12, 16 * 24 + 18 - Character.FEET_Y)
+	var fence_free := nm.is_free(hunter_n.feet_rect(hunter_n.position))
+	for i in 40:
+		hunter_n.step(Vector2(0, -2))
+	_check(fence_x > 0 and fence_free and hunter_n.feet().y > 16 * 24, "철망 울타리는 못 넘음")
+	hunter_n.position = Vector2(gate_x * 24 + 12, 16 * 24 + 18 - Character.FEET_Y)
+	for i in 40:
+		hunter_n.step(Vector2(0, -2))
+	_check(gate_x > 0 and hunter_n.feet().y < 15 * 24, "철망 문으로는 논밭 쪽으로 나감")
+	# 논: 걸을 수 있지만 사냥꾼만 느려짐
+	var paddy := Vector2(-1, -1)
+	for p in nm.find("p"):
+		if paddy.x < 0 and nm.at_point(p + Vector2(0, 24)) == "p" and nm.at_point(p - Vector2(0, 24)) == "p":
+			paddy = p
+	hunter_n.active = true
+	hunter_n.frozen = false
+	hunter_n.position = paddy - Vector2(0, Character.FEET_Y)
+	Input.action_press(&"move_down")
+	var py0 := hunter_n.position.y
+	hunter_n._process(0.1)
+	var paddy_step := hunter_n.position.y - py0
+	hunter_n.position = nm.spot("S") - Vector2(0, 24 * 3)
+	py0 = hunter_n.position.y
+	hunter_n._process(0.1)
+	var yard_step := hunter_n.position.y - py0
+	Input.action_release(&"move_down")
+	_check(paddy_step > 0.0 and absf(paddy_step / yard_step - Config.HUNT_PADDY_SPEED) < 0.01, "논에서는 걷기 %d%% (%.1f / %.1f px)" % [roundi(Config.HUNT_PADDY_SPEED * 100), paddy_step, yard_step])
+	_check(nm.monster_ok(paddy) and not nm.monster_ok(nm.find("s")[0]) and not nm.monster_ok(nm.find("F")[0]), "슬라임은 논에 들어가고, 쌀 포대·철망에는 못 감")
+	# 작은 지도: 들어온 곳 둘레만 보이고, 걸어간 곳이 늘어남
+	hunter_n.position = nm.spot("S")
+	nh._reset_minimap()
+	var k_cell := Vector2i(nm.spot("K") / 24)
+	var n_cell := Vector2i(nm.spot("N") / 24)
+	var s_cell := Vector2i(nm.spot("S") / 24)
+	var r := nh.minimap_rect()
+	_check(nh.minimap_seen(s_cell) and not nh.minimap_seen(k_cell) and not nh.minimap_seen(n_cell), "작은 지도: 처음엔 입구 둘레만 보임")
+	_check(r.size == Vector2(104, 60) and r.position.y >= 48 and r.end.x <= 640, "작은 지도는 오른쪽 위 구석 %s" % r)
+	hunter_n.position = nm.spot("K")
+	nh.tick(0.01)
+	_check(nh.minimap_seen(k_cell) and not nh.minimap_seen(n_cell), "대장 자리까지 가 보면 그곳이 지도에 드러남")
+	# 대장은 곳간 앞, 위쪽 길로 금사리
+	for s in nh.slimes.duplicate():
+		s.hp = 1
+		hunter_n.position = s.position - Vector2(0, -8 - Config.SWING_REACH) - Vector2(0, Character.FEET_Y)
+		nh.tick(Config.SWING_COOLDOWN)
+		nh.swing(Vector2.UP)
+	_check(nh.boss_spawned and nh.slimes.size() == 1 and nh.slimes[0].position == nm.spot("K"), "다 잡으면 %s이(가) 곳간 앞에 나타남" % z1.boss_monster)
+	var nboss: WildSlime = nh.slimes[0]
+	nboss.hp = 1
+	hunter_n.position = nboss.position - Vector2(0, -8 - Config.SWING_REACH) - Vector2(0, Character.FEET_Y)
+	nh.tick(Config.SWING_COOLDOWN)
+	nh.swing(Vector2.UP)
+	nh.loot.clear()
+	hunter_n.position = nm.spot("N") + Vector2(0, 30)
+	nh.tick(0.01)
+	_check(nh.path_open and nh.near_next() and nh.minimap_seen(n_cell), "대장을 잡으면 위쪽 길이 열리고, 지도에도 위쪽 길이 보임")
+	main.interact()
+	_check(nh.zone == 1 and nh.map.size == Vector2i(52, 30) and nh.minimap_seen(Vector2i(nh.map.spot("S") / 24)) and not nh.minimap_seen(Vector2i(nh.map.spot("K") / 24)), "금사리로 넘어가면 작은 지도가 새로 가려짐")
+	main.leave_hunt()
+	main.next_day()
+	_check(main.enter_hunt(null, 0), "다음 날 다시 분원농협")
+	_check(not main.hunt.minimap_seen(k_cell), "다음 사냥에서는 작은 지도가 다시 가려짐")
+	main.leave_hunt()
 
 	print("SMOKE TEST: %s (%d failures)" % ["PASS" if _failures == 0 else "FAIL", _failures])
 	get_tree().quit(1 if _failures > 0 else 0)
