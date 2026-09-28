@@ -98,3 +98,15 @@ const COMPANION_BUMP_RANGE := 16.0
 const COMPANION_BUMP_INTERVAL := 1.0
 ## 박치기 크리처가 야생 슬라임을 쫓아가기 시작하는 거리 (사냥꾼에게서 너무 멀어지지 않게)
 const COMPANION_CHASE_DISTANCE := 90.0
+
+## 사냥터 드롭 (2026-09-27 결정 A + 드롭표, 사용자: 디아블로2처럼 장비·포션·잡템을 한 드롭표에, 장비 보장은 뺌). 값은 전부 임시.
+## 야생 슬라임을 쓰러뜨릴 때마다 이 확률로 무언가 떨어진다 (그날 첫 알 보장과는 따로)
+const HUNT_LOOT_CHANCE := 0.2
+## 떨어질 때 종류별 무게 (합 100)
+const HUNT_LOOT_WEIGHTS := {&"money": 40, &"potion": 25, &"junk": 20, &"gear": 15}
+const HUNT_MONEY_MIN := 10
+const HUNT_MONEY_MAX := 30
+## 빨간 물약: 1 키로 마시면 하트 회복
+const POTION_HEAL := 1
+## 잡템(슬라임 젤리)은 사냥꾼이 마을 공급함에서 F로 판다
+const JUNK_PRICE := 15

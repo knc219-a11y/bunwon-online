@@ -6,6 +6,8 @@ var _failures := 0
 
 
 func _ready() -> void:
+	# 사냥터 드롭표는 19)에서 따로 본다. 그 전까지는 알 보장만 보도록 끈다.
+	HuntGround.loot_enabled = false
 	var main: Node2D = load("res://scenes/main.tscn").instantiate()
 	add_child(main)
 	await get_tree().process_frame
@@ -89,10 +91,10 @@ func _ready() -> void:
 	_check(main.supply_options().has(&"rain_boots") and main.supply_option_text(&"seed_vest").contains("씨앗 주머니 조끼"), "공급함에 입는 장비")
 	_check(not main.supply_action(&"rain_boots") and Wearables.speed_mult(&"farmer") == 1.0, "돈이 모자라면 장비를 못 삼")
 	var wear_total := 0
-	for id: StringName in Wearables.ITEMS:
+	for id: StringName in Wearables.shop_items():
 		wear_total += Wearables.ITEMS[id].price
 	GameState.money = wear_total
-	for id: StringName in Wearables.ITEMS:
+	for id: StringName in Wearables.shop_items():
 		_check(main.supply_action(id), "장비 사서 입기: %s" % Wearables.ITEMS[id].name)
 	_check(GameState.money == 0 and not main.supply_action(&"rain_boots"), "산 장비는 다시 못 삼")
 	_check(Wearables.worn_by(&"farmer").size() == 3 and Wearables.worn_by(&"hunter").size() == 2, "농부 모자·옷·신발, 사냥꾼 모자·신발")
@@ -536,6 +538,85 @@ func _ready() -> void:
 	main.hunter.position = h4.SPAWN_AT
 	main.interact()
 	_check(main.hunt == null and earth_buddy.can_process(), "땅 슬라임도 돌아와 다시 일함")
+
+	# 19) 사냥터 드롭 (A + 드롭표, 디아블로2식): 20%로 돈 · 물약 · 잡템 · 장비, 장비 보장 칸 없음
+	HuntGround.loot_enabled = true
+	_check(HuntLoot.pick_kind(0.0) == &"money" and HuntLoot.pick_kind(39.9) == &"money" and HuntLoot.pick_kind(40.0) == &"potion" \
+		and HuntLoot.pick_kind(65.0) == &"junk" and HuntLoot.pick_kind(85.0) == &"gear" and HuntLoot.pick_kind(99.9) == &"gear", "드롭 종류 무게 돈 40 · 물약 25 · 젤리 20 · 장비 15")
+	for id in Wearables.ITEMS:
+		if Wearables.is_hunt_drop(id):
+			_check(not id in main.supply_options(), "사냥터 장비는 공급함에서 팔지 않음: %s" % id)
+	var loot_rng := RandomNumberGenerator.new()
+	loot_rng.seed = 7
+	# 확률: 많이 굴려 보면 약 20%, 장비는 없는 것만 (가진 셈 치고 되돌린다)
+	var owned_before := GameState.owned_wear.duplicate()
+	var dropped := 0
+	var gear_ids: Array[StringName] = []
+	for i in 2000:
+		var d := HuntLoot.roll_for_kill(loot_rng)
+		if d.is_empty():
+			continue
+		dropped += 1
+		if d.kind == &"gear":
+			_check(not d.id in gear_ids, "장비는 아직 없는 것만 떨어짐")
+			gear_ids.append(d.id)
+			GameState.owned_wear.append(d.id)
+	_check(dropped > 330 and dropped < 470, "처치마다 약 20%% 드롭 (%d/2000)" % dropped)
+	_check(gear_ids.size() == 3 and Wearables.missing_hunt_drops().is_empty(), "세트 세 조각이 모두 나옴")
+	var gear_after_set := 0
+	for i in 500:
+		if HuntLoot.roll_for_kill(loot_rng).get("kind") == &"gear":
+			gear_after_set += 1
+	_check(gear_after_set == 0, "세트를 다 모으면 장비 대신 돈")
+	GameState.owned_wear = owned_before
+	# 실제 사냥터: 쓰러뜨린 자리에 떨어진 장비를 주우면 바로 입는다
+	main.next_day()
+	main.hunter.position = main.hunt_gate.position
+	main.interact()
+	main.menu_index = main.companion_options().size() - 1
+	main.menu_confirm()
+	var h5: HuntGround = main.hunt
+	h5.set_ai(false)
+	var base_hearts := h5.max_hearts()
+	# 20%가 나올 때까지 같은 자리에서 쓰러뜨린다 (시드 고정)
+	h5.loot_rng.seed = 3
+	var target: WildSlime = h5.slimes[0]
+	target.hp = 1
+	main.hunter.facing = Vector2i.UP
+	target.position = main.hunter.feet() + Vector2(0, -8 - Config.SWING_REACH)
+	h5.swing()
+	_check(h5.slimes.size() == Config.WILD_SLIME_COUNT - 1, "사냥터에서 쓰러뜨리면 드롭표를 굴림")
+	h5.loot.clear()
+	h5.loot.append({kind = &"gear", id = &"acorn_helm", at = main.hunter.feet() + Vector2(0, 30)})
+	_check(HuntLoot.label(h5.loot[0]) == "도토리 투구", "땅에 장비 이름이 보임")
+	main.hunter.position = h5.loot[0].at - Vector2(0, Character.FEET_Y)
+	h5.tick(0.01)
+	_check(h5.loot.is_empty() and GameState.worn[&"hunter"].get(&"hat") == &"acorn_helm" and Wearables.is_owned(&"acorn_helm"), "주우면 바로 입음 (모자 칸)")
+	_check(h5.max_hearts() == base_hearts + 1 and h5.hearts == h5.max_hearts(), "도토리 투구: 하트 칸 +1, 그만큼 채워짐")
+	# 빨간 물약
+	GameState.potions = 1
+	h5.hearts = h5.max_hearts() - 1
+	main._unhandled_input(_action(&"use_potion"))
+	_check(h5.hearts == h5.max_hearts() and GameState.potions == 0, "1 키로 빨간 물약을 마시면 하트 +1")
+	GameState.potions = 1
+	_check(not h5.drink_potion() and GameState.potions == 1, "하트가 가득하면 물약을 아낌")
+	# 나머지 세트 조각과 잡템·돈은 땅에 둔 채 떠나도 챙긴다
+	var money_before := GameState.money
+	h5.loot.append({kind = &"gear", id = &"forest_cape", at = Vector2(5 * Config.TILE, 5 * Config.TILE)})
+	h5.loot.append({kind = &"gear", id = &"feather_boots", at = Vector2(6 * Config.TILE, 5 * Config.TILE)})
+	h5.loot.append({kind = &"junk", at = Vector2(7 * Config.TILE, 5 * Config.TILE)})
+	h5.loot.append({kind = &"money", amount = 20, at = Vector2(8 * Config.TILE, 5 * Config.TILE)})
+	var junk_before := GameState.junk
+	main.hunter.position = h5.SPAWN_AT
+	main.interact()
+	_check(main.hunt == null and GameState.junk == junk_before + 1 and GameState.money == money_before + 20, "떠날 때 안 주운 젤리·돈도 챙김")
+	_check(Wearables.set_complete(&"forest", &"hunter") and Wearables.bonus_hearts(&"hunter") == 2, "숲 공터 세트 완성: 하트 +1 더")
+	_check(is_equal_approx(Wearables.swing_radius(&"hunter"), 24.0) and is_equal_approx(Wearables.speed_mult(&"hunter"), 1.25), "숲지기 망토 휘두르기 범위 · 깃털 장화 걷기 +25%")
+	main.hunter.position = main.supply_box.position
+	var money_before_sell := GameState.money
+	var junk_to_sell := GameState.junk
+	main.interact()
+	_check(GameState.junk == 0 and GameState.money == money_before_sell + junk_to_sell * Config.JUNK_PRICE, "사냥꾼이 공급함에서 F로 젤리를 팜")
 
 	print("SMOKE TEST: %s (%d failures)" % ["PASS" if _failures == 0 else "FAIL", _failures])
 	get_tree().quit(1 if _failures > 0 else 0)

@@ -7,6 +7,9 @@ extends Node2D
 
 signal knocked_out
 
+## false 면 드롭표를 굴리지 않는다 (알 보장만). 드롭과 상관없는 테스트에서 끈다.
+static var loot_enabled := true
+
 const T := Config.TILE
 ## 사냥꾼이 걸을 수 있는 공터 (캐릭터 위치 기준, px)
 const WALK_AREA := Rect2(3 * T, 3 * T, 20 * T, 9 * T + 12)
@@ -33,6 +36,9 @@ var drops: Array[Dictionary] = []
 var picked: Array[CreatureSpecies] = []
 ## 이번 사냥에서 알 보장을 이미 썼는지 (그날 첫 사냥에서 처음 쓰러뜨린 슬라임)
 var egg_guaranteed := true
+## 땅에 떨어진 드롭 (HuntLoot 사전 + at)
+var loot: Array[Dictionary] = []
+var loot_rng := RandomNumberGenerator.new()
 var knocked := false
 ## 따라온 크리처 (없으면 혼자). 2026-09-27 결정 A. 따라오는 동료.
 var companion: HuntCompanion
@@ -85,6 +91,8 @@ func _ready() -> void:
 func start(h: Character, first_today: bool) -> void:
 	hunter = h
 	egg_guaranteed = not first_today
+	loot_rng.randomize()
+	hearts = max_hearts()
 	hunter.walk_area = WALK_AREA
 	hunter.show_facing_cell = false
 	hunter.queue_redraw()
@@ -99,6 +107,27 @@ func add_companion(from: Creature) -> HuntCompanion:
 	companion.position = hunter.feet() + Vector2(0, Config.COMPANION_FOLLOW_DISTANCE)
 	add_child(companion)
 	return companion
+
+
+## 입은 장비와 세트 보너스까지 더한 하트 칸 수
+func max_hearts() -> int:
+	return Config.HUNTER_HEARTS + Wearables.bonus_hearts(&"hunter")
+
+
+## 빨간 물약을 마신다 (1 키). 하트가 가득이면 아끼고 마시지 않는다.
+func drink_potion() -> bool:
+	if knocked:
+		return false
+	if GameState.potions <= 0:
+		GameState.notify("빨간 물약이 없다.")
+		return false
+	if hearts >= max_hearts():
+		GameState.notify("하트가 가득하다. 물약은 아껴 두자.")
+		return false
+	GameState.potions -= 1
+	hearts = mini(hearts + Config.POTION_HEAL, max_hearts())
+	GameState.notify("빨간 물약을 마셨다. 하트 %d/%d (남은 물약 %d)" % [hearts, max_hearts(), GameState.potions])
+	return true
 
 
 func set_ai(on: bool) -> void:
@@ -132,6 +161,10 @@ func tick(delta: float) -> void:
 			picked.append(drops[i].species)
 			drops.remove_at(i)
 			GameState.notify("알을 주웠다! 마을로 돌아가 공급함에 넣자.")
+	for i in range(loot.size() - 1, -1, -1):
+		if loot[i].at.distance_to(feet) <= 14.0:
+			_take(loot[i])
+			loot.remove_at(i)
 	queue_redraw()
 	_hud.queue_redraw()
 
@@ -151,7 +184,7 @@ func swing(dir := Vector2.ZERO) -> int:
 	var center := hunter.feet() + Vector2(0, -8) + _swing_dir * Config.SWING_REACH
 	var hits := 0
 	for s in slimes.duplicate():
-		if s.position.distance_to(center) <= Config.SWING_RADIUS:
+		if s.position.distance_to(center) <= Wearables.swing_radius(&"hunter"):
 			hits += 1
 			if s.hit(hunter.feet()):
 				_defeat(s)
@@ -215,7 +248,22 @@ func _defeat(s: WildSlime) -> void:
 		GameState.notify("야생 슬라임을 모두 쓰러뜨렸다. 아래 입구에서 F로 마을로 돌아가자.")
 	else:
 		GameState.notify("야생 슬라임을 쓰러뜨렸다. 남은 슬라임 %d마리." % slimes.size())
+	if loot_enabled:
+		var d := HuntLoot.roll_for_kill(loot_rng)
+		if not d.is_empty():
+			# 알과 겹치지 않게 살짝 옆에 떨어뜨린다
+			d.at = s.position + Vector2(10, 4)
+			loot.append(d)
 	s.queue_free()
+
+
+## 드롭을 줍는다. 장비면 바로 입고, 늘어난 하트 칸만큼 하트도 채운다.
+func _take(d: Dictionary) -> void:
+	var before := max_hearts()
+	GameState.notify(HuntLoot.take(d))
+	if d.kind == &"gear":
+		hearts += max_hearts() - before
+		hunter.refresh_wear()
 
 
 func _hurt(from: Vector2) -> void:
@@ -238,6 +286,9 @@ func collect_all() -> Array[CreatureSpecies]:
 	for d in drops:
 		picked.append(d.species)
 	drops.clear()
+	for d in loot:
+		_take(d)
+	loot.clear()
 	return picked
 
 
@@ -251,6 +302,30 @@ func _draw() -> void:
 		draw_circle(p + Vector2(0, -3), 5, Color(0.97, 0.93, 0.8))
 		draw_circle(p + Vector2(-2, 0), 1.5, Color(0.55, 0.8, 0.95))
 		draw_circle(p + Vector2(2, 2), 1.2, Color(0.55, 0.8, 0.95))
+	var font := ThemeDB.fallback_font
+	for d in loot:
+		var p: Vector2 = d.at
+		var col: Color = HuntLoot.COLORS[d.kind]
+		draw_set_transform(p + Vector2(0, 5), 0.0, Vector2(1.0, 0.4))
+		draw_circle(Vector2.ZERO, 6.0, Color(0.27, 0.16, 0.33, 0.25))
+		draw_set_transform(Vector2.ZERO)
+		match d.kind:
+			&"money":
+				draw_circle(p + Vector2(-2, 1), 3, col)
+				draw_circle(p + Vector2(2, 0), 3, col.darkened(0.15))
+			&"potion":
+				draw_rect(Rect2(p + Vector2(-1, -7), Vector2(2, 3)), Color(0.85, 0.8, 0.7))
+				draw_circle(p + Vector2(0, -1), 4, Color(0.85, 0.2, 0.22))
+			&"junk":
+				draw_circle(p, 4, Color(0.62, 0.52, 0.42, 0.9))
+			_:
+				draw_rect(Rect2(p + Vector2(-5, -8), Vector2(10, 10)), Color(0.2, 0.35, 0.2))
+				draw_texture_rect_region(Wearables.ITEMS[d.id].sheet, Rect2(p + Vector2(-12, -20), Vector2(24, 24)), Rect2(0, 0, 48, 48))
+		# 디아블로2처럼 떨어진 것의 이름을 종류별 색으로 띄운다
+		var text := HuntLoot.label(d)
+		var w := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 8).x
+		draw_rect(Rect2(p + Vector2(-w / 2 - 2, -22), Vector2(w + 4, 11)), Color(0, 0, 0, 0.55))
+		draw_string(font, p + Vector2(-w / 2, -14), text, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, col)
 	if _swing_time > 0.0 and hunter:
 		var c := hunter.feet() + Vector2(0, -12)
 		var a := _swing_dir.angle()
@@ -270,9 +345,15 @@ func _draw_ground(n: Node2D) -> void:
 
 
 func _draw_hud() -> void:
-	for i in Config.HUNTER_HEARTS:
+	for i in max_hearts():
 		var c := Color(0.9, 0.3, 0.35) if i < hearts else Color(0.45, 0.38, 0.38)
 		var p := Vector2(8 + i * 13, 34)
 		_hud.draw_circle(p + Vector2(3, 3), 3, c)
 		_hud.draw_circle(p + Vector2(7, 3), 3, c)
 		_hud.draw_colored_polygon(PackedVector2Array([p + Vector2(0, 4), p + Vector2(10, 4), p + Vector2(5, 10)]), c)
+	# 빨간 물약 수
+	var font := ThemeDB.fallback_font
+	var x := 12.0 + max_hearts() * 13
+	_hud.draw_circle(Vector2(x, 41), 4, Color(0.85, 0.2, 0.22))
+	_hud.draw_rect(Rect2(x - 1, 34, 2, 3), Color(0.85, 0.8, 0.7))
+	_hud.draw_string(font, Vector2(x + 6, 45), "x%d (1)" % GameState.potions, HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(1, 0.97, 0.85))

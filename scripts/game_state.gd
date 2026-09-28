@@ -27,6 +27,9 @@ var hunter_knife := false
 ## 입는 장비 (Wearables). 산 장비 id, 캐릭터별 입은 장비 (칸 → id)
 var owned_wear: Array[StringName] = []
 var worn := {&"farmer": {}, &"hunter": {}}
+## 사냥터 드롭 (2026-09-27 결정 A + 드롭표): 빨간 물약, 잡템(슬라임 젤리)
+var potions := 0
+var junk := 0
 ## 사냥꾼 조작 해금 여부. 첫 슬라임을 밭에 배치하면 열린다 (임시 조건).
 var hunter_unlocked := false
 
@@ -65,6 +68,8 @@ func reset() -> void:
 	hunter_knife = false
 	owned_wear = []
 	worn = {&"farmer": {}, &"hunter": {}}
+	potions = 0
+	junk = 0
 	hunter_unlocked = false
 	changed.emit()
 
@@ -85,6 +90,7 @@ func _register_inputs() -> void:
 		"switch_character": [KEY_TAB],
 		"next_day": [KEY_N],
 		"menu_close": [KEY_ESCAPE],
+		"use_potion": [KEY_1],
 	}
 	for action: String in map:
 		if InputMap.has_action(action):

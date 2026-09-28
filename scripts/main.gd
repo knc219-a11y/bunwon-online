@@ -166,6 +166,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			hunt.swing(get_global_mouse_position() - (hunter.feet() + Vector2(0, -12)))
 		elif event.is_action_pressed("use_tool"):
 			hunt.swing()
+		elif event.is_action_pressed("use_potion"):
+			hunt.drink_potion()
 		elif event.is_action_pressed("interact"):
 			interact()
 		elif event.is_action_pressed("switch_character"):
@@ -301,12 +303,21 @@ func _hunter_interact() -> void:
 		else:
 			enter_hunt()
 	elif _near(supply_box):
-		if GameState.hunter_eggs.is_empty():
+		if GameState.hunter_eggs.is_empty() and GameState.junk <= 0:
 			GameState.notify("공급할 알이 없다. 사냥터 입구로 가자.")
 			return
-		GameState.village_eggs.append_array(GameState.hunter_eggs)
-		GameState.hunter_eggs.clear()
-		GameState.notify("마을 공급함에 알을 넣었다. 농부가 받아 갈 수 있다.")
+		var parts: Array[String] = []
+		if not GameState.hunter_eggs.is_empty():
+			GameState.village_eggs.append_array(GameState.hunter_eggs)
+			GameState.hunter_eggs.clear()
+			parts.append("마을 공급함에 알을 넣었다. 농부가 받아 갈 수 있다.")
+		if GameState.junk > 0:
+			# 사냥터 잡템(슬라임 젤리)은 공급함에 두면 바로 값이 나온다 (제작 소재가 아님)
+			var earned := GameState.junk * Config.JUNK_PRICE
+			parts.append("슬라임 젤리 %d개를 팔았다. +%d원" % [GameState.junk, earned])
+			GameState.money += earned
+			GameState.junk = 0
+		GameState.notify(" ".join(parts))
 	else:
 		GameState.notify("사냥터 입구나 마을 공급함 가까이에서 F.")
 
@@ -398,7 +409,7 @@ func supply_options() -> Array[StringName]:
 			options.append(id)
 	if not GameState.hunter_knife:
 		options.append(&"buy_knife")
-	for id: StringName in Wearables.ITEMS:
+	for id: StringName in Wearables.shop_items():
 		if not Wearables.is_owned(id):
 			options.append(id)
 	options.append(&"close")
@@ -524,7 +535,7 @@ func supply_action(id: StringName) -> bool:
 			GameState.money -= Config.HUNTER_KNIFE_PRICE
 			GameState.hunter_knife = true
 			GameState.notify("사냥꾼에게 튼튼한 사냥칼을 사 줬다! -%d원. 이제 태어나는 크리처는 능력치가 너무 낮게 나오지 않는다." % Config.HUNTER_KNIFE_PRICE)
-		_ when Wearables.ITEMS.has(id):
+		_ when Wearables.ITEMS.has(id) and not Wearables.is_hunt_drop(id):
 			return buy_wear(id)
 		_:
 			return false
@@ -786,7 +797,7 @@ func _refresh_hud() -> void:
 	var tool_text: String = tool_name(TOOLS[tool_index]) if active == farmer else ("튼튼한 사냥칼" if GameState.hunter_knife else "사냥칼")
 	if hunt:
 		var buddy := hunt.companion.display_name() if hunt.companion else "혼자"
-		_status.text = "%d일째 | 사냥터 | 도구: %s | 동행: %s | 남은 야생 슬라임 %d | 주운 알 %d" % [GameState.day, tool_text, buddy, hunt.slimes.size(), hunt.picked.size()]
+		_status.text = "%d일째 | 사냥터 | 도구: %s | 동행: %s | 남은 야생 슬라임 %d | 주운 알 %d | 돈 %d원 · 젤리 %d" % [GameState.day, tool_text, buddy, hunt.slimes.size(), hunt.picked.size(), GameState.money, GameState.junk]
 		return
 	_status.text = "%d일째 | %s | 도구: %s | 돈 %d원 | 씨앗 %d  작물 %d | 알: 농부 %d · 사냥꾼 %d · 공급함 %d | 크리처 %d" % [
 		GameState.day, active.display_name, tool_text, GameState.money, GameState.seeds, GameState.crops,
