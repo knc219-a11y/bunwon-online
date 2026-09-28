@@ -130,13 +130,14 @@ static func affix_text(affixes: Array) -> String:
 
 
 ## 기본 장비 하나를 굴린다 (디아블로2식). 아직 가진 것에 넣지 않은 정보만 돌려준다.
-static func roll_gear(rng: RandomNumberGenerator, force_rarity := &"") -> Dictionary:
+## weights 가 비어 있으면 Config.GEAR_RARITY_WEIGHTS (대장은 Config.BOSS_RARITY_WEIGHTS 를 넘긴다).
+static func roll_gear(rng: RandomNumberGenerator, force_rarity := &"", weights := {}) -> Dictionary:
 	var bases: Array[StringName] = []
 	for id: StringName in ITEMS:
 		if ITEMS[id].get("base", false):
 			bases.append(id)
 	var base := bases[rng.randi() % bases.size()]
-	var r: StringName = force_rarity if force_rarity != &"" else pick_rarity(rng.randf() * 100.0)
+	var r: StringName = force_rarity if force_rarity != &"" else pick_rarity(rng.randf() * 100.0, weights)
 	var count_range: Array = Config.GEAR_AFFIX_COUNT[r]
 	var stats: Array = AFFIXES.keys()
 	# 섞어서 앞에서부터 (한 장비에 같은 옵션은 한 번만)
@@ -163,10 +164,12 @@ static func roll_gear(rng: RandomNumberGenerator, force_rarity := &"") -> Dictio
 
 
 ## 0~100 사이 값으로 등급을 고른다 (무게 순서대로)
-static func pick_rarity(roll: float) -> StringName:
+static func pick_rarity(roll: float, weights := {}) -> StringName:
+	if weights.is_empty():
+		weights = Config.GEAR_RARITY_WEIGHTS
 	var acc := 0.0
 	for r: StringName in RARITIES:
-		acc += Config.GEAR_RARITY_WEIGHTS[r]
+		acc += weights[r]
 		if roll < acc:
 			return r
 	return RARITIES[-1]
