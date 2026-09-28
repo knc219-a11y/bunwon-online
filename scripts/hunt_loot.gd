@@ -7,6 +7,7 @@ extends RefCounted
 ## 땅에 떨어진 이름은 디아블로2처럼 종류별 색으로 보인다 (돈 금색, 물약 빨강, 잡템 회색, 세트 장비 초록).
 ## 장비 등급 (2026-09-28 사용자 선택 A: 디아블로2 그대로): 세트 조각이 아닌 장비는 기본 장비에 등급과 옵션을 굴린다.
 ## 일반 흰색 · 마법 파랑 · 레어 노랑. 세트를 다 모아도 장비는 계속 떨어진다.
+## 대장 슬라임 (2026-09-28 사용자 선택 B): 반드시 하나. 장비 40% (마법·레어가 잘 나옴), 아니면 돈 주머니.
 
 const KINDS: Array[StringName] = [&"money", &"potion", &"junk", &"gear"]
 const COLORS := {
@@ -42,6 +43,16 @@ static func roll_for_kill(rng: RandomNumberGenerator) -> Dictionary:
 			return {kind = kind}
 
 
+## 대장 슬라임을 쓰러뜨렸을 때 떨어질 것 (늘 하나). "드롭 확률 +%p" 옵션은 쓰이지 않는다.
+static func roll_for_boss(rng: RandomNumberGenerator) -> Dictionary:
+	if rng.randf() >= Config.BOSS_GEAR_CHANCE:
+		return _money(rng, Config.BOSS_MONEY_MIN, Config.BOSS_MONEY_MAX)
+	var missing := Wearables.missing_hunt_drops()
+	if not missing.is_empty() and rng.randf() < Config.SET_PIECE_SHARE:
+		return _gear(missing, rng)
+	return {kind = &"gear", roll = Wearables.roll_gear(rng, &"", Config.BOSS_RARITY_WEIGHTS)}
+
+
 ## 0~100 사이 값으로 종류를 고른다 (무게 순서대로)
 static func pick_kind(roll: float) -> StringName:
 	var acc := 0.0
@@ -68,8 +79,8 @@ static func _gear(missing: Array[StringName], rng: RandomNumberGenerator) -> Dic
 	return {kind = &"gear", id = missing[rng.randi() % missing.size()]}
 
 
-static func _money(rng: RandomNumberGenerator) -> Dictionary:
-	var amount := rng.randi_range(Config.HUNT_MONEY_MIN, Config.HUNT_MONEY_MAX)
+static func _money(rng: RandomNumberGenerator, lo := Config.HUNT_MONEY_MIN, hi := Config.HUNT_MONEY_MAX) -> Dictionary:
+	var amount := rng.randi_range(lo, hi)
 	# "돈 드롭 +%" 옵션
 	amount = roundi(amount * (1.0 + Wearables.stat_sum(&"hunter", "money") / 100.0))
 	return {kind = &"money", amount = amount}

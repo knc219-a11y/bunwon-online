@@ -757,6 +757,78 @@ func _ready() -> void:
 	hb2.clear()
 	GameState.stash.clear()
 
+	# 22) 대장 슬라임 (2026-09-28 사용자 선택 B): 셋을 다 쓰러뜨리면 대장 1마리, 대장은 반드시 하나를 떨어뜨림
+	# 앞에서 입힌 "돈 드롭 +%" 옵션을 벗긴다
+	GameState.worn[&"hunter"] = {}
+	main.hunter.refresh_wear()
+	var money_in_range := true
+	var brng := RandomNumberGenerator.new()
+	brng.seed = 11
+	var boss_counts := {&"money": 0, &"set": 0, &"normal": 0, &"magic": 0, &"rare": 0}
+	var owned_b := GameState.owned_wear.duplicate()
+	for i in 3000:
+		var bd := HuntLoot.roll_for_boss(brng)
+		if bd.kind == &"money":
+			boss_counts[&"money"] += 1
+			if bd.amount < Config.BOSS_MONEY_MIN or bd.amount > Config.BOSS_MONEY_MAX:
+				money_in_range = false
+		elif bd.has("roll"):
+			boss_counts[bd.roll.rarity] += 1
+		else:
+			boss_counts[&"set"] += 1
+			GameState.owned_wear.append(bd.id)
+	_check(money_in_range, "대장 돈 주머니 %d~%d원" % [Config.BOSS_MONEY_MIN, Config.BOSS_MONEY_MAX])
+	var boss_gear: int = boss_counts[&"normal"] + boss_counts[&"magic"] + boss_counts[&"rare"]
+	_check(boss_counts[&"money"] + boss_gear + boss_counts[&"set"] == 3000, "대장은 반드시 하나를 떨어뜨림")
+	_check(boss_counts[&"money"] > 1650 and boss_counts[&"money"] < 1950, "대장 장비 약 40%%, 아니면 돈 %s" % [boss_counts])
+	_check(boss_counts[&"set"] == 3 and boss_counts[&"magic"] > boss_gear * 0.47 and boss_counts[&"magic"] < boss_gear * 0.63 \
+		and boss_counts[&"rare"] > boss_gear * 0.1 and boss_counts[&"rare"] < boss_gear * 0.2, "대장 장비 등급 약 일반 30 · 마법 55 · 레어 15, 세트 조각도 나옴")
+	GameState.owned_wear = owned_b
+	# 실제 사냥터: 셋을 다 쓰러뜨리면 대장이 나오고, 네 번 때려야 쓰러지고, 드롭이 반드시 떨어진다
+	main.close_inventory()
+	main.next_day()
+	main._set_active(main.hunter)
+	main.hunter.position = main.hunt_gate.position
+	_check(main.enter_hunt(), "다음 날 다시 사냥터에 들어감")
+	var bh: HuntGround = main.hunt
+	bh.set_ai(false)
+	main.hunter.facing = Vector2i.UP
+	for i in Config.WILD_SLIME_COUNT:
+		var bw: WildSlime = bh.slimes[0]
+		_check(not bh.boss_spawned, "셋을 다 잡기 전엔 대장이 없음 (%d)" % i)
+		bw.hp = 1
+		bw.position = main.hunter.feet() + Vector2(0, -8 - Config.SWING_REACH)
+		bh.tick(Config.SWING_COOLDOWN)
+		bh.swing()
+	_check(bh.boss_spawned and bh.slimes.size() == 1 and bh.slimes[0].boss and bh.slimes[0].hp == Config.BOSS_HP, "셋을 다 쓰러뜨리면 대장 슬라임 1마리 (체력 %d)" % Config.BOSS_HP)
+	var bs: WildSlime = bh.slimes[0]
+	_check(not bs.ai_enabled and is_equal_approx(bs.scale.x, Config.BOSS_SCALE), "대장은 크고, 멈춤 설정을 따름")
+	bh.loot.clear()
+	for i in Config.BOSS_HP:
+		bs.position = main.hunter.feet() + Vector2(0, -8 - Config.SWING_REACH)
+		bh.tick(Config.SWING_COOLDOWN)
+		bh.swing()
+		if i < Config.BOSS_HP - 1:
+			_check(bh.slimes.size() == 1, "대장은 %d대 맞아도 버팀" % (i + 1))
+	_check(bh.slimes.is_empty() and bh.loot.size() == 1, "대장을 쓰러뜨리면 반드시 하나가 떨어짐")
+	_check(not bh.boss_spawned or bh.slimes.is_empty(), "대장은 사냥 한 번에 한 마리")
+	bh.collect_all()
+	main.leave_hunt()
+	# 크리처 동행이 쓰러뜨려도 대장 드롭 (규칙은 같은 _defeat)
+	var hcg := HuntGround.new()
+	main.add_child(hcg)
+	hcg.set_ai(false)
+	var bb2 := hcg.spawn_boss()
+	for s in hcg.slimes.duplicate():
+		if s != bb2:
+			hcg.slimes.erase(s)
+			s.queue_free()
+	bb2.hp = 1
+	hcg.egg_guaranteed = true
+	hcg._defeat(bb2)
+	_check(hcg.loot.size() == 1 and hcg.slimes.is_empty(), "동행이 쓰러뜨린 것과 같은 길로도 대장 드롭")
+	hcg.queue_free()
+
 	print("SMOKE TEST: %s (%d failures)" % ["PASS" if _failures == 0 else "FAIL", _failures])
 	get_tree().quit(1 if _failures > 0 else 0)
 

@@ -126,3 +126,14 @@ const GEAR_AFFIX_COUNT := {&"normal": [0, 0], &"magic": [1, 2], &"rare": [3, 4]}
 const SET_PIECE_SHARE := 0.5
 ## 공급함에서 장비를 팔 때 값 (바로 돈)
 const GEAR_SELL_PRICES := {&"normal": 5, &"magic": 20, &"rare": 60}
+
+## 대장 슬라임 (2026-09-28 사용자 선택 B, 디아블로2 챔피언처럼). 값은 전부 임시.
+## 야생 슬라임을 다 쓰러뜨리면 공터 가운데에 대장 1마리가 나온다 (사냥 한 번에 한 마리).
+const BOSS_HP := 4
+const BOSS_SCALE := 1.8
+## 대장은 반드시 하나를 떨어뜨린다 (장비는 보장하지 않음): 이 확률로 장비, 아니면 돈 주머니
+const BOSS_GEAR_CHANCE := 0.4
+## 대장이 떨어뜨린 장비의 등급 무게 (합 100)
+const BOSS_RARITY_WEIGHTS := {&"normal": 30, &"magic": 55, &"rare": 15}
+const BOSS_MONEY_MIN := 30
+const BOSS_MONEY_MAX := 60

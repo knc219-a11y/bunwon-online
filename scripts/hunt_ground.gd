@@ -40,6 +40,10 @@ var egg_guaranteed := true
 var loot: Array[Dictionary] = []
 var loot_rng := RandomNumberGenerator.new()
 var knocked := false
+## 이번 사냥에서 대장 슬라임이 나왔는지 (사냥 한 번에 한 마리, 사냥은 하루 한 번)
+var boss_spawned := false
+## 대장이 나오는 자리 (공터 가운데)
+const BOSS_AT := Vector2(13 * T, 7 * T)
 ## 따라온 크리처 (없으면 혼자). 2026-09-27 결정 A. 따라오는 동료.
 var companion: HuntCompanion
 ## false 면 동행 크리처가 스스로 움직이지 않는다 (공격 간격은 그대로 흐름). 테스트에서 끈다.
@@ -130,7 +134,11 @@ func drink_potion() -> bool:
 	return true
 
 
+var _ai_on := true
+
+
 func set_ai(on: bool) -> void:
+	_ai_on = on
 	for s in slimes:
 		s.ai_enabled = on
 
@@ -246,17 +254,38 @@ func _defeat(s: WildSlime) -> void:
 		var table := CreatureCatalog.HUNT_TABLE
 		drops.append({at = s.position, species = table[randi() % table.size()]})
 		GameState.notify("야생 슬라임을 쓰러뜨리자 알이 떨어졌다!")
+	elif s.boss:
+		GameState.notify("대장 슬라임을 쓰러뜨렸다! 아래 입구에서 F로 마을로 돌아가자.")
+	elif slimes.is_empty() and not boss_spawned:
+		GameState.notify("셋을 다 쓰러뜨리자 대장 슬라임이 나타났다!")
 	elif slimes.is_empty():
 		GameState.notify("야생 슬라임을 모두 쓰러뜨렸다. 아래 입구에서 F로 마을로 돌아가자.")
 	else:
 		GameState.notify("야생 슬라임을 쓰러뜨렸다. 남은 슬라임 %d마리." % slimes.size())
 	if loot_enabled:
-		var d := HuntLoot.roll_for_kill(loot_rng)
+		var d := HuntLoot.roll_for_boss(loot_rng) if s.boss else HuntLoot.roll_for_kill(loot_rng)
 		if not d.is_empty():
 			# 알과 겹치지 않게 살짝 옆에 떨어뜨린다
 			d.at = s.position + Vector2(10, 4)
 			loot.append(d)
 	s.queue_free()
+	if slimes.is_empty() and not boss_spawned:
+		spawn_boss()
+	# 윗줄의 남은 슬라임 수를 새로 쓴다
+	GameState.touch()
+
+
+## 야생 슬라임을 다 쓰러뜨리면 공터 가운데에 대장 슬라임이 나온다 (디아블로2 챔피언처럼).
+func spawn_boss() -> WildSlime:
+	boss_spawned = true
+	var b := WildSlime.new()
+	b.make_boss()
+	b.area = Rect2(Vector2(CLEARING.position * T) + Vector2(12, 12), Vector2(CLEARING.size * T) - Vector2(24, 24))
+	b.position = BOSS_AT
+	b.ai_enabled = _ai_on
+	add_child(b)
+	slimes.append(b)
+	return b
 
 
 ## 드롭을 줍는다. 장비면 바로 입거나 가방에 넣고, 늘어난 하트 칸만큼 하트도 채운다.

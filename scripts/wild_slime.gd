@@ -12,6 +12,10 @@ const HOP_COLUMNS: Array[int] = [2, 3, 4, 5]
 const BOTTOM_Y := 8
 
 var hp := Config.WILD_SLIME_HP
+var max_hp := Config.WILD_SLIME_HP
+## 대장 슬라임 (크고 금빛, 체력 Config.BOSS_HP). make_boss() 로 만든다.
+var boss := false
+var _tint := TINT
 ## 움직일 수 있는 영역 (사냥터 공터)
 var area := Rect2()
 ## false 면 스스로 움직이지 않는다 (테스트에서 끈다)
@@ -31,10 +35,19 @@ func _ready() -> void:
 	_sprite.texture = SHEET
 	_sprite.centered = false
 	_sprite.hframes = 10
-	_sprite.modulate = TINT
+	_sprite.modulate = _tint
 	_sprite.position = Vector2(-FRAME_SIZE / 2.0, BOTTOM_Y - FRAME_SIZE)
 	add_child(_sprite)
 	_rest = randf_range(0.3, Config.WILD_SLIME_REST_TIME)
+
+
+## 대장 슬라임으로 만든다 (트리에 넣기 전후 모두 가능)
+func make_boss() -> void:
+	boss = true
+	hp = Config.BOSS_HP
+	max_hp = Config.BOSS_HP
+	scale = Vector2.ONE * Config.BOSS_SCALE
+	_tint = Color(1.0, 0.82, 0.4)
 
 
 func sort_y() -> float:
@@ -72,7 +85,7 @@ func tick(delta: float, target: Vector2) -> void:
 	var cols := HOP_COLUMNS if hopping else IDLE_COLUMNS
 	var col: int = HOP_COLUMNS[mini(int(_hop_t * 4), 3)] if hopping else cols[int(_anim_time * 2.0) % 2]
 	_sprite.frame = col
-	_sprite.modulate = Color(1, 1, 1) * 2.0 if _flash > 0.0 and int(_flash * 20) % 2 == 0 else TINT
+	_sprite.modulate = Color(1, 1, 1) * 2.0 if _flash > 0.0 and int(_flash * 20) % 2 == 0 else _tint
 	z_index = int(sort_y())
 	queue_redraw()
 
@@ -93,6 +106,12 @@ func _draw() -> void:
 	draw_circle(Vector2.ZERO, 10.0, Color(0.27, 0.16, 0.33, 0.25))
 	draw_set_transform(Vector2.ZERO)
 	# 남은 체력 (맞은 뒤에만 보임)
-	if hp < Config.WILD_SLIME_HP:
+	if hp < max_hp:
 		draw_rect(Rect2(-10, -24, 20, 3), Color(0.25, 0.2, 0.2))
-		draw_rect(Rect2(-10, -24, 20.0 * hp / Config.WILD_SLIME_HP, 3), Color(0.9, 0.5, 0.3))
+		draw_rect(Rect2(-10, -24, 20.0 * hp / max_hp, 3), Color(0.9, 0.5, 0.3))
+	# 대장 이름표 (디아블로2 챔피언처럼 금색)
+	if boss:
+		var font := ThemeDB.fallback_font
+		var w := font.get_string_size("대장 슬라임", HORIZONTAL_ALIGNMENT_LEFT, -1, 6).x
+		draw_rect(Rect2(-w / 2 - 1.5, -35.5, w + 3, 7), Color(0, 0, 0, 0.55))
+		draw_string(font, Vector2(-w / 2, -30), "대장 슬라임", HORIZONTAL_ALIGNMENT_LEFT, -1, 6, Color(0.95, 0.85, 0.45))
