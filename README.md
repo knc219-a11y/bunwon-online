@@ -55,12 +55,15 @@
 - `scripts/inventory_ui.gd` 디아블로식 가방 창 (I 키, 창고 궤짝)
 - `scripts/prop.gd` 마을 오브젝트 (부화기, 공급함, 사냥터 입구, 창고)
 - `tests/smoke_test.tscn` 핵심 순환 자동 테스트
+- `tests/playthrough.tscn` 새 게임을 며칠 자동으로 플레이하며 숫자를 남기는 점검 봇 (루프·밸런스 확인용, 통과/실패 없음)
 
 ## 테스트
 
 ```
 godot --headless --path . --import
 godot --headless --path . res://tests/smoke_test.tscn
+# 며칠 자동 플레이 (DAYS 날 수, SEED 난수, OUT 로그 파일, CAPTURE 아침 카드 캡처 폴더)
+DAYS=14 SEED=1 godot --headless --path . res://tests/playthrough.tscn
 ```
 
 ## 임시로 정해 둔 것 (기획 미확정)

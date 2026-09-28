@@ -38,6 +38,8 @@ const DANGSAN_BLOCK := Rect2(-20, -18, 40, 18)
 const HATCH_CELL := Vector2i(16, 5)
 ## 농부 집 현관 앞 흙길 칸. 여기서 F를 누르면 잔다 (2026-09-27 결정 A②).
 const DOOR_CELL := Vector2i(22, 12)
+## 아침 카드 기본 크기 (글이 많으면 세로로 늘어난다)
+const MORNING_CARD_SIZE := Vector2(300, 150)
 
 var farm: Farm
 var farmer: Character
@@ -757,7 +759,19 @@ func go_to_sleep() -> void:
 	tween.tween_property(_night, "color:a", Config.NIGHT_ALPHA, Config.SLEEP_FADE_TIME)
 	await tween.finished
 	var lines := next_day()
+	show_morning_card(lines)
+
+
+## 아침 카드를 띄운다. 밤사이 일이 많으면 카드를 늘려 글이 카드 밖으로 넘치지 않게 한다.
+func show_morning_card(lines: Array[String]) -> void:
 	_morning_text.text = "%d일째 아침\n\n%s\n\nF 일어나기" % [GameState.day, "\n".join(lines)]
+	var font := _morning_text.get_theme_font("font")
+	var font_size := _morning_text.get_theme_font_size("font_size")
+	var lines_n := roundi(font.get_multiline_string_size(_morning_text.text, HORIZONTAL_ALIGNMENT_CENTER, MORNING_CARD_SIZE.x - 24, font_size).y / font.get_height(font_size))
+	var h := lines_n * (font.get_height(font_size) + _morning_text.get_theme_constant("line_spacing")) + 28
+	_morning_card.size.y = clampf(h, MORNING_CARD_SIZE.y, 340)
+	_morning_card.position = (Vector2(640, 360) - _morning_card.size) / 2
+	_morning_text.size = _morning_card.size - Vector2(24, 20)
 	_morning_card.visible = true
 
 
@@ -918,7 +932,7 @@ func _build_hud() -> void:
 	layer.add_child(_night)
 	_morning_card = ColorRect.new()
 	(_morning_card as ColorRect).color = Color(0.99, 0.95, 0.85)
-	_morning_card.size = Vector2(300, 150)
+	_morning_card.size = MORNING_CARD_SIZE
 	_morning_card.position = (Vector2(640, 360) - _morning_card.size) / 2
 	_morning_card.visible = false
 	layer.add_child(_morning_card)
