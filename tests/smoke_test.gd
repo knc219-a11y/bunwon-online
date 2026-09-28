@@ -557,8 +557,8 @@ func _ready() -> void:
 		if d.is_empty():
 			continue
 		dropped += 1
-		if d.kind == &"gear":
-			_check(not d.id in gear_ids, "장비는 아직 없는 것만 떨어짐")
+		if d.kind == &"gear" and d.has("id"):
+			_check(not d.id in gear_ids, "세트 조각은 아직 없는 것만 떨어짐")
 			gear_ids.append(d.id)
 			GameState.owned_wear.append(d.id)
 	_check(dropped > 330 and dropped < 470, "처치마다 약 20%% 드롭 (%d/2000)" % dropped)
@@ -567,7 +567,7 @@ func _ready() -> void:
 	for i in 500:
 		if HuntLoot.roll_for_kill(loot_rng).get("kind") == &"gear":
 			gear_after_set += 1
-	_check(gear_after_set == 0, "세트를 다 모으면 장비 대신 돈")
+	_check(gear_after_set > 0, "세트를 다 모아도 등급 장비는 계속 떨어짐 (%d/500)" % gear_after_set)
 	GameState.owned_wear = owned_before
 	# 실제 사냥터: 쓰러뜨린 자리에 떨어진 장비를 주우면 바로 입는다
 	main.next_day()
@@ -669,6 +669,93 @@ func _ready() -> void:
 	_check(h6.hearts <= h6.max_hearts() and h6.max_hearts() == Config.HUNTER_HEARTS, "사냥터에서 도토리 투구를 벗으면 하트 칸이 줄어듦")
 	main._unhandled_input(_action(&"menu_close"))
 	_check(not inv.visible and h6.is_processing(), "Esc로 닫으면 사냥터 다시 움직임")
+
+	# 21) 장비 등급 (2026-09-28 사용자 선택 A: 디아블로2 그대로): 일반 · 마법 · 레어, 무작위 옵션, 공급함 팔기
+	main.close_inventory()
+	main.hunter.position = h6.SPAWN_AT
+	main.interact()
+	_check(main.hunt == null, "사냥터에서 돌아옴")
+	var rr := RandomNumberGenerator.new()
+	rr.seed = 11
+	var counts := {&"normal": 0, &"magic": 0, &"rare": 0}
+	var affix_ok := true
+	for i in 3000:
+		var roll := Wearables.roll_gear(rr)
+		counts[roll.rarity] += 1
+		var range_: Array = Config.GEAR_AFFIX_COUNT[roll.rarity]
+		var stats := {}
+		for a: Dictionary in roll.affixes:
+			stats[a.stat] = true
+			var def: Dictionary = Wearables.AFFIXES[a.stat]
+			if a.value < def.min or a.value > def.max:
+				affix_ok = false
+		if roll.affixes.size() < range_[0] or roll.affixes.size() > range_[1] or stats.size() != roll.affixes.size():
+			affix_ok = false
+	_check(counts[&"normal"] > 1650 and counts[&"normal"] < 1950 and counts[&"magic"] > 830 and counts[&"magic"] < 1100 and counts[&"rare"] > 160 and counts[&"rare"] < 320, "등급 비율 약 일반 60 · 마법 32 · 레어 8 %s" % [counts])
+	_check(affix_ok, "마법 옵션 1~2개 · 레어 3~4개, 같은 옵션 겹치지 않음, 수치 범위 안")
+	_check(Wearables.pick_rarity(0.0) == &"normal" and Wearables.pick_rarity(60.0) == &"magic" and Wearables.pick_rarity(92.0) == &"rare", "등급 무게 경계")
+	# 옵션 효과: 새로 시작한 사냥꾼에게 굴린 장비를 입힌다
+	GameState.reset()
+	main.hunter.refresh_wear()
+	var rare := {base = &"leather_shoes", rarity = &"rare", name = "이끼 발굽", affixes = [
+		{stat = &"speed", value = 20}, {stat = &"hearts", value = 1}, {stat = &"swing", value = 4}, {stat = &"money", value = 50}]}
+	_check(Wearables.gain_rolled(rare) == &"worn", "칸이 비었으면 주운 등급 장비를 바로 입음")
+	var rare_id: StringName = GameState.worn[&"hunter"][&"shoes"]
+	_check(is_equal_approx(Wearables.speed_mult(&"hunter"), 1.2) and Wearables.bonus_hearts(&"hunter") == 1 and is_equal_approx(Wearables.swing_radius(&"hunter"), Config.SWING_RADIUS + 4.0), "레어 옵션: 걷기 +20% · 하트 +1 · 휘두르기 +4")
+	_check(Wearables.describe(rare_id).contains("레어") and Wearables.describe(rare_id).contains("사냥꾼 가죽 신") and Wearables.describe(rare_id).contains("돈 드롭 +50%"), "레어 설명: 이름 · 기본 장비 · 옵션")
+	var mr := RandomNumberGenerator.new()
+	mr.seed = 5
+	var money_roll := HuntLoot._money(mr)
+	_check(money_roll.amount >= roundi(Config.HUNT_MONEY_MIN * 1.5) and money_roll.amount <= roundi(Config.HUNT_MONEY_MAX * 1.5), "돈 드롭 +50%% 옵션 (%d원)" % money_roll.amount)
+	var magic := {base = &"leather_hood", rarity = &"magic", name = "보물 찾는 가죽 두건", affixes = [{stat = &"find", value = 5}]}
+	_check(Wearables.gain_rolled(magic) == &"worn" and is_equal_approx(HuntLoot.loot_chance(), Config.HUNT_LOOT_CHANCE + 0.05), "드롭 확률 +5%p 옵션")
+	var normal := {base = &"leather_hood", rarity = &"normal", name = "가죽 두건", affixes = []}
+	_check(Wearables.gain_rolled(normal) == &"bag" and Wearables.normal_in_bag(&"hunter") == 1, "칸에 입은 게 있으면 가방으로")
+	_check(Wearables.item(GameState.bag[&"hunter"][0]).effect == "꾸미기", "일반은 효과 없음")
+	# 땅 이름 색
+	_check(HuntLoot.color({kind = &"gear", roll = magic}) == HuntLoot.RARITY_COLORS[&"magic"] and HuntLoot.color({kind = &"gear", roll = rare}) == HuntLoot.RARITY_COLORS[&"rare"] \
+		and HuntLoot.color({kind = &"gear", id = &"acorn_helm"}) == HuntLoot.RARITY_COLORS[&"set"], "땅 이름 색: 마법 파랑 · 레어 노랑 · 세트 초록")
+	_check(HuntLoot.label({kind = &"gear", roll = rare}) == "이끼 발굽", "땅에 레어 이름")
+	# 공급함 장비 팔기 (사냥꾼): 알·젤리가 없어도 가방에 등급 장비가 있으면 선택창
+	for i in 2:
+		Wearables.gain_rolled({base = &"hunter_jerkin", rarity = &"normal", name = "사냥꾼 조끼", affixes = []})
+	Wearables.take_off(&"hunter", &"hat")  # 마법 두건은 가방으로
+	GameState.bag[&"hunter"].append(&"ball_cap")
+	GameState.owned_wear.append(&"ball_cap")
+	main._set_active(main.hunter)
+	main.hunter.position = main.supply_box.position
+	main.interact()
+	_check(main.menu_open and main.supply_options() == [&"sell_normal", &"sell_gear", &"close"], "사냥꾼 공급함 F → 일반 한꺼번에 팔기 · 가방에서 팔기 · 닫기")
+	var m0 := GameState.money
+	var n0 := Wearables.normal_in_bag(&"hunter")
+	_check(n0 == 2 and main.supply_action(&"sell_normal") and GameState.money == m0 + n0 * Config.GEAR_SELL_PRICES[&"normal"] and Wearables.normal_in_bag(&"hunter") == 0, "일반 장비 한꺼번에 팔기 (두건 · 조끼, 첫 조끼는 빈 옷 칸에 입음)")
+	_check(&"ball_cap" in GameState.bag[&"hunter"], "마을 장비는 한꺼번에 팔기에서 빠짐")
+	main.menu_move(0)  # 선택창을 다시 그려 목록을 새로 받는다
+	main.menu_index = main.supply_options().find(&"sell_gear")
+	main.menu_confirm()
+	var inv2: InventoryUI = main.inventory
+	_check(inv2.visible and inv2.sell_mode and not main.menu_open, "가방에서 장비 팔기 → 팔기 창")
+	var hb2: Array[StringName] = GameState.bag[&"hunter"]
+	var m1 := GameState.money
+	var hood_i := -1
+	for i in hb2.size():
+		if Wearables.is_rolled(hb2[i]):
+			hood_i = i
+	_check(inv2.primary(&"bag", hood_i) and GameState.money == m1 + Config.GEAR_SELL_PRICES[&"magic"] and Wearables.rolled_in_bag(&"hunter") == 0, "마법 장비 클릭 = 팔기 (20원)")
+	var cap_at := hb2.find(&"ball_cap")
+	_check(not inv2.primary(&"bag", cap_at) and &"ball_cap" in hb2, "마을 장비는 팔 수 없음")
+	main.close_inventory()
+	# 가방과 창고가 모두 차면 줍지 못하고 땅에 남음
+	hb2.clear()
+	for i in Config.BAG_SIZE:
+		hb2.append(&"ball_cap")
+	GameState.stash.clear()
+	for i in Config.STASH_SIZE:
+		GameState.stash.append(&"ball_cap")
+	var gear_before := GameState.gear.size()
+	_check(Wearables.gain_rolled({base = &"hunter_jerkin", rarity = &"normal", name = "사냥꾼 조끼", affixes = []}) == &"" and GameState.gear.size() == gear_before, "가방·창고가 다 차면 줍지 못함 (가진 것에 안 들어감)")
+	hb2.clear()
+	GameState.stash.clear()
 
 	print("SMOKE TEST: %s (%d failures)" % ["PASS" if _failures == 0 else "FAIL", _failures])
 	get_tree().quit(1 if _failures > 0 else 0)

@@ -116,3 +116,13 @@ const HUNT_MONEY_MAX := 30
 const POTION_HEAL := 1
 ## 잡템(슬라임 젤리)은 사냥꾼이 마을 공급함에서 F로 판다
 const JUNK_PRICE := 15
+
+## 장비 등급 (2026-09-28 사용자 선택 A: 디아블로2 그대로). 값은 전부 임시.
+## 장비가 떨어지면 등급을 굴린다 (무게, 합 100): 일반 흰색 · 마법 파랑 · 레어 노랑
+const GEAR_RARITY_WEIGHTS := {&"normal": 60, &"magic": 32, &"rare": 8}
+## 등급별 옵션 수 [최소, 최대]
+const GEAR_AFFIX_COUNT := {&"normal": [0, 0], &"magic": [1, 2], &"rare": [3, 4]}
+## 세트 조각이 아직 남아 있을 때, 장비 드롭 중 세트 조각이 나올 몫
+const SET_PIECE_SHARE := 0.5
+## 공급함에서 장비를 팔 때 값 (바로 돈)
+const GEAR_SELL_PRICES := {&"normal": 5, &"magic": 20, &"rare": 60}

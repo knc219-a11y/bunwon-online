@@ -59,7 +59,7 @@ func refresh_wear() -> void:
 	_wear.clear()
 	for id in Wearables.worn_by(who):
 		var w := Sprite2D.new()
-		w.texture = Wearables.ITEMS[id].sheet
+		w.texture = Wearables.item(id).sheet
 		w.centered = false
 		w.hframes = 6
 		w.vframes = 3

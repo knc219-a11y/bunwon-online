@@ -29,6 +29,8 @@ HIKE, HIKE_D, LACE = (132, 92, 60), (96, 64, 42), (232, 140, 60)
 ACORN, ACORN_D, ACORN_L, CUPULE = (170, 116, 64), (132, 86, 46), (204, 150, 96), (110, 78, 48)
 CAPE, CAPE_D, CAPE_L, CLASP = (70, 132, 84), (50, 100, 62), (104, 164, 110), (236, 200, 90)
 FEATHER_B, FEATHER_B_D, FEATHER = (112, 128, 176), (84, 96, 140), (246, 246, 240)
+# 사냥터 기본 장비 (등급·옵션이 붙는 바탕, 판타지풍 가죽)
+LEATHER, LEATHER_D, LEATHER_L, STITCH = (150, 104, 70), (112, 76, 50), (184, 138, 98), (226, 196, 140)
 
 
 # ---------- 모자 ----------
@@ -78,6 +80,23 @@ def acorn_helm(c, row, b):
         c.rect(12, 9 + b, 35, 13 + b, ACORN)
 
 
+def leather_hood(c, row, b):
+    # 가죽 두건: 머리를 감싸고 뒤로 늘어지는 천
+    c.ellipse(10, 0 + b, 37, 13 + b, LEATHER)
+    c.ellipse(29, 1 + b, 37, 12 + b, LEATHER_D)
+    c.rect(15, 2 + b, 19, 3 + b, LEATHER_L)
+    if row == 0:
+        c.rect(12, 9 + b, 35, 10 + b, LEATHER_D)
+        for x in range(13, 35, 3):
+            c.px(x, 9 + b, STITCH)
+    elif row == 1:
+        c.rect(14, 9 + b, 33, 16 + b, LEATHER)  # 뒤로 늘어진 천
+        c.rect(30, 9 + b, 33, 16 + b, LEATHER_D)
+    else:
+        c.rect(10, 8 + b, 17, 16 + b, LEATHER)
+        c.rect(10, 8 + b, 11, 16 + b, LEATHER_D)
+
+
 # ---------- 옷 ----------
 def cape(c, row, b, swing):
     # 숲지기 망토: 앞에서는 어깨 양옆과 금 브로치, 뒤에서는 등 전체, 옆에서는 등 뒤로 늘어짐
@@ -119,6 +138,23 @@ def vest(c, row, b, swing):
             c.rect(x0 + 1, 29 + b, x0 + 3, 31 + b, SEED)
     else:
         c.rect(18, 25 + b, 29, 25 + b, VEST_D)
+
+
+def jerkin(c, row, b, swing):
+    # 사냥꾼 가죽 조끼: 앞을 끈으로 여민다
+    if row == 2:
+        c.rect(18, 22 + b, 29, 35 + b, LEATHER)
+        c.rect(18, 22 + b, 20, 35 + b, LEATHER_D)
+        hd = HOODIES["hunter"]
+        side_arm(c, b, -swing, hd[2], SK, hd[1])
+        return
+    c.rect(16, 22 + b, 31, 35 + b, LEATHER)
+    c.rect(28, 22 + b, 31, 35 + b, LEATHER_D)
+    c.rect(17, 23 + b, 18, 31 + b, LEATHER_L)
+    c.rect(16, 33 + b, 31, 33 + b, LEATHER_D)  # 허리띠
+    if row == 0:
+        for y in range(24, 33, 3):
+            c.rect(22, y + b, 25, y + b, STITCH)
 
 
 # ---------- 신발 ----------
@@ -176,6 +212,14 @@ def feather_boot(c, sx, bottom, hip_x=None, top=None, side=False):
     c.px(sx + 4, shaft - 2, FEATHER)
 
 
+def leather_shoe(c, sx, bottom, hip_x=None, top=None, side=False):
+    w = 7 if side else 6
+    c.rect(sx, bottom - 1, sx + w, bottom + 4, LEATHER)
+    c.rect(sx, bottom - 1, sx + w, bottom - 1, LEATHER_L)
+    c.rect(sx, bottom + 4, sx + w, bottom + 4, LEATHER_D)
+    c.px(sx + 2, bottom + 1, STITCH)
+
+
 def make(name, draw_fn):
     img = Image.new("RGBA", (CELL * COLS, CELL * ROWS), (0, 0, 0, 0))
     for row in range(ROWS):
@@ -208,6 +252,9 @@ ITEMS = {
     "acorn_helm": lambda c, row, p, k: acorn_helm(c, row, p["b"]),
     "forest_cape": lambda c, row, p, k: cape(c, row, p["b"], p["swing"]),
     "feather_boots": feet_fn(feather_boot),
+    "leather_hood": lambda c, row, p, k: leather_hood(c, row, p["b"]),
+    "hunter_jerkin": lambda c, row, p, k: jerkin(c, row, p["b"], p["swing"]),
+    "leather_shoes": feet_fn(leather_shoe),
 }
 
 if __name__ == "__main__":

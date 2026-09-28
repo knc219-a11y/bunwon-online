@@ -31,6 +31,10 @@ var worn := {&"farmer": {}, &"hunter": {}}
 var bag := {&"farmer": [] as Array[StringName], &"hunter": [] as Array[StringName]}
 ## 마을 공용 창고 (농부·사냥꾼이 함께 쓴다, Config.STASH_SIZE 칸)
 var stash: Array[StringName] = []
+## 사냥터에서 굴린 장비 한 개 한 개 (2026-09-28 사용자 선택 A: 디아블로2식 등급).
+## id(&"gear_n") → {base, rarity, name, affixes}. 가방 · 창고 · 입은 칸에는 이 id 가 들어간다.
+var gear := {}
+var gear_serial := 0
 ## 사냥터 드롭 (2026-09-27 결정 A + 드롭표): 빨간 물약, 잡템(슬라임 젤리)
 var potions := 0
 var junk := 0
@@ -74,6 +78,8 @@ func reset() -> void:
 	worn = {&"farmer": {}, &"hunter": {}}
 	bag = {&"farmer": [] as Array[StringName], &"hunter": [] as Array[StringName]}
 	stash = []
+	gear = {}
+	gear_serial = 0
 	potions = 0
 	junk = 0
 	hunter_unlocked = false

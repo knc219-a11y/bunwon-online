@@ -4,6 +4,8 @@ extends Control
 ## I 키로 어디서나 연다 (사냥터 포함, 여는 동안 사냥터는 멈춘다). 마을 창고 궤짝에서 F를 누르면 창고 칸이 옆에 붙는다.
 ## 마우스: 왼쪽 클릭 = 가방 칸 입기 / 입은 칸 벗기 (창고가 열려 있으면 가방 ↔ 창고 옮기기), 오른쪽 클릭 = 입기.
 ## 키보드: WASD 칸 고르기, F = 왼쪽 클릭, R = 오른쪽 클릭, I 또는 Esc 닫기.
+## 장비 등급 (2026-09-28 사용자 선택 A): 칸 테두리와 설명 줄이 등급색 (일반 · 마법 파랑 · 레어 노랑 · 세트 초록).
+## 공급함 "가방에서 장비 팔기"로 열면 가방 칸 클릭 = 팔기 (사냥터에서 굴린 장비만).
 
 signal wear_changed
 
@@ -16,6 +18,8 @@ const SLOT_BG := Color(0.93, 0.87, 0.74)
 const CURSOR := Color(1.0, 0.72, 0.2)
 ## 디아블로2처럼 세트 장비는 초록
 const SET_GREEN := Color(0.2, 0.6, 0.25)
+## 종이 바탕 위에서 보이도록 조금 진하게 한 등급색
+const RARITY_EDGE := {&"magic": Color(0.25, 0.4, 0.9), &"rare": Color(0.82, 0.6, 0.05), &"set": SET_GREEN}
 const SUB := Color(0.5, 0.4, 0.32)
 ## 덧그림(48x48 칸)에서 칸별 아이콘으로 잘라 쓸 부분
 const ICON_SRC := {&"hat": Rect2(12, 2, 24, 18), &"clothes": Rect2(10, 16, 28, 22), &"shoes": Rect2(12, 32, 24, 14)}
@@ -29,6 +33,8 @@ const BOTTOM_Y := 136.0
 var character: Character
 ## 창고 칸이 같이 열려 있는지
 var with_stash := false
+## 공급함에서 장비 팔기로 열었는지
+var sell_mode := false
 ## 고른 칸: {kind = &"equip"/&"bag"/&"stash", index}
 var cursor := {kind = &"bag", index = 0}
 
@@ -38,11 +44,12 @@ func _init() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
 
 
-func open(c: Character, stash := false) -> void:
+func open(c: Character, stash := false, sell := false) -> void:
 	character = c
 	with_stash = stash
+	sell_mode = sell and not stash
 	cursor = {kind = &"bag", index = 0}
-	size = Vector2(STASH_AT.x + Config.STASH_COLUMNS * (CELL + GAP) + 8 if stash else BAG_AT.x + Config.BAG_COLUMNS * (CELL + GAP) + 8, 196)
+	size = Vector2(STASH_AT.x + Config.STASH_COLUMNS * (CELL + GAP) + 8 if stash else BAG_AT.x + Config.BAG_COLUMNS * (CELL + GAP) + 8, 208)
 	position = ((Vector2(640, 360) - size) / 2).round()
 	visible = true
 	queue_redraw()
@@ -112,7 +119,16 @@ func primary(kind: StringName, i: int) -> bool:
 			if not ok and item_in(kind, i) != &"":
 				GameState.notify("가방과 창고가 모두 차서 벗을 수 없다.")
 		&"bag":
-			if with_stash:
+			if sell_mode:
+				var id := item_in(kind, i)
+				if id != &"" and not Wearables.is_rolled(id):
+					GameState.notify("%s은(는) 팔 수 없다 (사냥터에서 주운 등급 장비만 판다)." % Wearables.item(id).name)
+				elif id != &"":
+					var what := "%s %s" % [Wearables.RARITY_NAMES[Wearables.rarity(id)], Wearables.item(id).name]
+					var price := Wearables.sell(who, i)
+					ok = price > 0
+					GameState.notify("%s을(를) 팔았다. +%d원" % [what, price])
+			elif with_stash:
 				ok = Wearables.bag_to_stash(who, i)
 				if not ok and item_in(kind, i) != &"":
 					GameState.notify("창고가 가득 찼다.")
@@ -139,8 +155,10 @@ func _wear(i: int) -> bool:
 	var id := item_in(&"bag", i)
 	if id == &"":
 		return false
-	if Wearables.ITEMS[id].who != character.who:
-		GameState.notify("%s은(는) %s 장비다. 창고에 넣어 두면 %s이(가) 꺼내 입을 수 있다." % [Wearables.ITEMS[id].name, "농부" if Wearables.ITEMS[id].who == &"farmer" else "사냥꾼", "농부" if Wearables.ITEMS[id].who == &"farmer" else "사냥꾼"])
+	var it := Wearables.item(id)
+	if it.who != character.who:
+		var owner := "농부" if it.who == &"farmer" else "사냥꾼"
+		GameState.notify("%s은(는) %s 장비다. 창고에 넣어 두면 %s이(가) 꺼내 입을 수 있다." % [it.name, owner, owner])
 		return false
 	return Wearables.wear_from_bag(character.who, i)
 
@@ -213,7 +231,7 @@ func _text(p: Vector2, t: String, font_size := 9, col := INK) -> void:
 
 
 func _icon(id: StringName, r: Rect2) -> void:
-	var item: Dictionary = Wearables.ITEMS[id]
+	var item := Wearables.item(id)
 	var src: Rect2 = ICON_SRC[item.slot]
 	draw_texture_rect_region(item.sheet, Rect2(r.get_center() - src.size / 2, src.size), src)
 
@@ -224,7 +242,7 @@ func _draw() -> void:
 	var who := character.who
 	draw_rect(Rect2(Vector2.ZERO, size), PAPER)
 	draw_rect(Rect2(Vector2.ZERO, size), EDGE, false, 1.0)
-	_text(Vector2(10, 16), "%s 가방" % character.display_name, 10)
+	_text(Vector2(10, 16), "%s 가방%s" % [character.display_name, " · 장비 팔기" if sell_mode else ""], 10)
 	_text(Vector2(BAG_AT.x, 16), "가방 %d/%d" % [(GameState.bag[who] as Array).size(), Config.BAG_SIZE], 8, SUB)
 	if with_stash:
 		_text(Vector2(STASH_AT.x, 16), "공용 창고 %d/%d" % [GameState.stash.size(), Config.STASH_SIZE], 8, SUB)
@@ -234,18 +252,20 @@ func _draw() -> void:
 	var src := Rect2(0, 0, Character.FRAME_SIZE, Character.FRAME_SIZE)
 	draw_texture_rect_region(character.sheet, doll, src)
 	for id in Wearables.worn_by(who):
-		draw_texture_rect_region(Wearables.ITEMS[id].sheet, doll, src)
+		draw_texture_rect_region(Wearables.item(id).sheet, doll, src)
 	for c in _cells():
 		var r := cell_rect(c.kind, c.index)
 		var id := item_in(c.kind, c.index)
 		draw_rect(r, SLOT_BG)
 		var edge := EDGE
-		if id != &"" and Wearables.ITEMS[id].has("set"):
-			edge = SET_GREEN
-		draw_rect(r, edge, false, 1.0)
+		var width := 1.0
+		if id != &"" and RARITY_EDGE.has(Wearables.rarity(id)):
+			edge = RARITY_EDGE[Wearables.rarity(id)]
+			width = 1.5
+		draw_rect(r, edge, false, width)
 		if id != &"":
 			_icon(id, r)
-			if Wearables.ITEMS[id].who != who and c.kind != &"stash":
+			if Wearables.item(id).who != who and c.kind != &"stash":
 				# 다른 캐릭터 장비는 흐리게 (들 수만 있고 입지 못함)
 				draw_rect(r, Color(0.9, 0.85, 0.75, 0.55))
 		elif c.kind == &"equip":
@@ -265,8 +285,22 @@ func _draw() -> void:
 	# 고른 칸 설명
 	var picked := item_in(cursor.kind, cursor.index)
 	y += 13
-	_text(Vector2(10, y), Wearables.describe(picked) if picked != &"" else "", 9)
+	var picked_col: Color = RARITY_EDGE.get(Wearables.rarity(picked), INK) if picked != &"" else INK
+	var picked_text := Wearables.describe(picked) if picked != &"" else ""
+	if sell_mode and picked != &"" and Wearables.is_rolled(picked) and cursor.kind == &"bag":
+		picked_text += " · %d원" % Wearables.sell_price(picked)
+	# 옵션이 많아 창보다 길면 이름과 효과를 두 줄로 나눈다
+	var cut := picked_text.find(") · ")
+	if cut >= 0 and ThemeDB.fallback_font.get_string_size(picked_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 9).x > size.x - 20:
+		_text(Vector2(10, y), picked_text.substr(0, cut + 1), 9, picked_col)
+		y += 12
+		_text(Vector2(18, y), picked_text.substr(cut + 4), 9, picked_col)
+	else:
+		_text(Vector2(10, y), picked_text, 9, picked_col)
+		y += 12
 	y += 13
 	_text(Vector2(10, y), "물약 %d · 젤리 %d · 씨앗 %d · 무 %d · 돈 %d원" % [GameState.potions, GameState.junk, GameState.seeds, GameState.crops, GameState.money], 8, SUB)
 	var help := "클릭: 창고로 넣기/꺼내기 · 오른쪽 클릭(R): 입기 · 입은 칸 클릭: 벗기 · I 닫기" if with_stash else "클릭(F): 입기/벗기 · WASD 칸 고르기 · I 닫기"
+	if sell_mode:
+		help = "클릭(F): 팔기 (사냥터 등급 장비만) · 오른쪽 클릭(R): 입기 · I 닫기"
 	_text(Vector2(10, size.y - 6), help, 8, SUB)
