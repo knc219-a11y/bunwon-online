@@ -156,6 +156,8 @@ func _fill_zone() -> void:
 	_gate.position = Vector2(map.spot("E").x, map.pixel_size().y) if map else EXIT_AT
 	_gate.z_index = int(_gate.position.y)
 	var world := map.pixel_size() if map else Vector2(640, 360)
+	camera.limit_left = 0
+	camera.limit_top = 0
 	camera.limit_right = int(world.x)
 	camera.limit_bottom = int(world.y)
 	if sign_node:

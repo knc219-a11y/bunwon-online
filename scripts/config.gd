@@ -183,5 +183,7 @@ const HUNT_ZONES: Array[Dictionary] = [
 ]
 ## 넓은 맵의 여울(얕은 물)에서 걷기 빠르기 배율 (임시)
 const HUNT_FORD_SPEED := 0.6
+## 넓은 맵의 물 댄 논에서 사냥꾼 걷기 빠르기 배율 (임시). 슬라임은 느려지지 않는다.
+const HUNT_PADDY_SPEED := 0.6
 ## 숨은 몬스터가 튀어나오는 거리 (px)
 const WILD_BURROW_POP_DISTANCE := 60.0
