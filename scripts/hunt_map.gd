@@ -5,10 +5,10 @@ extends RefCounted
 ## 막힘 · 여울 느려짐 · 몬스터가 설 수 있는 곳을 칸으로 판정한다. 바닥 그림은 같은 지도로 만든 PNG.
 
 const T := Config.TILE
-## 사냥꾼이 못 들어가는 칸: 깊은 물 · 바위 · 덤불 · 나무
-const HUNTER_BLOCK := "~RBT"
+## 사냥꾼이 못 들어가는 칸: 깊은 물 · 바위 · 덤불 · 나무 · 창고 · 울타리 · 볏짚 더미 · 곤포 · 쌀 포대
+const HUNTER_BLOCK := "~RBTHFhws"
 ## 몬스터가 못 들어가는 칸: 위 + 징검다리 (몬스터는 냇물을 여울로만 건넌다)
-const MONSTER_BLOCK := "~RBTo"
+const MONSTER_BLOCK := "~RBTHFhwso"
 
 var rows: PackedStringArray = []
 var size := Vector2i.ZERO
@@ -70,6 +70,11 @@ func monster_ok(p: Vector2) -> bool:
 	return not MONSTER_BLOCK.contains(at_point(p))
 
 
-## 걷기 빠르기 배율 (여울은 느려짐)
+## 사냥꾼 걷기 빠르기 배율 (여울 · 물 댄 논은 느려짐)
 func speed_at(p: Vector2) -> float:
-	return Config.HUNT_FORD_SPEED if at_point(p) == "=" else 1.0
+	match at_point(p):
+		"=":
+			return Config.HUNT_FORD_SPEED
+		"p":
+			return Config.HUNT_PADDY_SPEED
+	return 1.0
