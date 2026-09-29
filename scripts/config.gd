@@ -114,7 +114,10 @@ const COMPANION_PULL_TIME := 0.25
 const COMPANION_CHASE_DISTANCE := 90.0
 
 ## 사냥터 드롭 (2026-09-27 결정 A + 드롭표, 사용자: 디아블로2처럼 장비·포션·잡템을 한 드롭표에, 장비 보장은 뺌). 값은 전부 임시.
-## 야생 슬라임을 쓰러뜨릴 때마다 이 확률로 무언가 떨어진다 (그날 첫 알 보장과는 따로)
+## 알 드롭 (2026-09-29 사용자: "알이 나왔을 때 기뻐야 하는데 너무 잘 나와서 흥미가 떨어진다" → 드롭률을 낮춤).
+## 예전: 매일 그날 첫 처치 알 보장 + 금사리 대장 알 100% (하루 알 2개). 지금: 게임 전체에서 첫 알 하나만 보장,
+## 그 뒤로는 구역의 egg_chance (몬스터 한 마리) · boss_egg_chance (대장) 확률. 값은 임시.
+## 야생 슬라임을 쓰러뜨릴 때마다 이 확률로 무언가 떨어진다 (알과는 따로 굴린다)
 const HUNT_LOOT_CHANCE := 0.2
 ## 떨어질 때 종류별 무게 (합 100)
 const HUNT_LOOT_WEIGHTS := {&"money": 40, &"potion": 25, &"junk": 20, &"gear": 15}
@@ -151,7 +154,7 @@ const BOSS_MONEY_MAX := 60
 ## 사용자: "B 방식으로 진행하고 특정 이상 구간부터 이어서 하고싶으면 특정 웨이포인트에서 시작하는게 더 탐험하는 맛이 나고 좋을거같아"
 ## 구역마다 몬스터가 세지고 장비 등급이 오른다. 대장을 쓰러뜨리면 위쪽 길이 열려 같은 날 다음 구역으로 이어서 간다.
 ## waypoint 가 있는 구역은 처음 도착하면 웨이포인트가 켜지고, 다음 날부터 사냥터 입구에서 거기서 시작할 수 있다.
-## 드롭 확률 20% · 장비 보장 없음 · 그날 첫 처치 알 보장은 모든 구역 그대로.
+## 드롭 확률 20% · 장비 보장 없음. 알은 egg_chance · boss_egg_chance (위 "알 드롭" 참고).
 ## sheet · boss_sheet 는 몬스터 시트 (32x32 칸, 0-1 대기 · 2-5 이동, 모래게는 6-7 모래에 숨음). monster_tint · boss_tint · ground_tint 는 물들이는 색.
 ## 금사리 (2026-09-28 사용자 선택): 하천 모래에서 사금이 나와 붙은 이름. 모래 속에 숨었다 튀어나오는 모래게 + 대장 금두꺼비.
 ## burrow 면 몬스터가 모래에 숨어 있다가 사냥꾼이 WILD_BURROW_POP_DISTANCE 안에 오면 튀어나온다 (숨어 있는 동안은 부딪혀도 안 다침).
@@ -167,7 +170,9 @@ const HUNT_ZONES: Array[Dictionary] = [
 		count = WILD_SLIME_COUNT, hp = WILD_SLIME_HP, speed = 1.0, boss_hp = BOSS_HP,
 		loot = HUNT_LOOT_WEIGHTS, rarity = GEAR_RARITY_WEIGHTS, boss_rarity = BOSS_RARITY_WEIGHTS,
 		money = [HUNT_MONEY_MIN, HUNT_MONEY_MAX], boss_money = [BOSS_MONEY_MIN, BOSS_MONEY_MAX],
-		boss_egg = "",
+		## 대장 슬라임도 가끔 슬라임 알을 남긴다 (임시)
+		boss_egg = "res://data/creatures/species/slime.tres",
+		egg_chance = 0.03, boss_egg_chance = 0.15,
 		monster_tint = Color(1, 0.8, 0.75), boss_tint = Color(1.0, 0.82, 0.4), ground_tint = Color(0.82, 0.9, 0.8), tree_tint = Color(0.78, 0.92, 0.78),
 	},
 	{
@@ -176,8 +181,9 @@ const HUNT_ZONES: Array[Dictionary] = [
 		map = "geumsa",
 		sheet = "res://assets/creatures/wild_sand_crab.png", boss_sheet = "res://assets/creatures/wild_gold_toad.png", burrow = true,
 		sign = "금사리(구터)",
-		## 대장을 쓰러뜨리면 반드시 떨어지는 알 (그날 첫 처치 알과는 따로)
+		## 대장을 쓰러뜨리면 boss_egg_chance 확률로 떨어지는 알 (예전엔 반드시 → 2026-09-29 낮춤)
 		boss_egg = "res://data/creatures/species/gold_toad.tres",
+		egg_chance = 0.03, boss_egg_chance = 0.25,
 		## 넓은 맵이라 모래톱마다 한 마리씩 (임시)
 		count = 6, hp = 3, speed = 1.25, boss_hp = 6,
 		loot = {&"money": 38, &"potion": 25, &"junk": 19, &"gear": 18},

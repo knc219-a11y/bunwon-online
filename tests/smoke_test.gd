@@ -192,7 +192,7 @@ func _ready() -> void:
 	hunt.tick(Config.SWING_COOLDOWN)
 	wild.position = hunter.feet() + Vector2(0, -8 - Config.SWING_REACH)
 	hunt.swing()
-	_check(hunt.slimes.size() == Config.WILD_SLIME_COUNT - 1 and hunt.drops.size() == 1, "두 번 맞으면 쓰러지고 그날 첫 슬라임은 알을 떨어뜨림")
+	_check(hunt.slimes.size() == Config.WILD_SLIME_COUNT - 1 and hunt.drops.size() == 1, "두 번 맞으면 쓰러지고 게임 첫 처치는 알을 떨어뜨림")
 	# 마우스 클릭: 누른 쪽을 향해 휘두른다
 	hunt.tick(Config.SWING_COOLDOWN)
 	var wild2: WildSlime = hunt.slimes[0]
@@ -200,8 +200,9 @@ func _ready() -> void:
 	_check(hunt.swing(Vector2(-30, 2)) == 1 and hunter.facing == Vector2i.LEFT, "클릭한 쪽(왼쪽)을 바라보고 휘두름")
 	hunt.tick(Config.SWING_COOLDOWN)
 	wild2.position = hunter.feet() + Vector2(-Config.SWING_REACH, -8)
+	HuntGround.egg_roll = 0.99
 	hunt.swing(Vector2(-30, 2))
-	_check(hunt.slimes.size() == Config.WILD_SLIME_COUNT - 2 and hunt.drops.size() == 1, "알 보장은 첫 슬라임 한 번뿐")
+	_check(hunt.slimes.size() == Config.WILD_SLIME_COUNT - 2 and hunt.drops.size() == 1, "알 보장은 게임 첫 처치 한 번뿐, 그 뒤로는 확률")
 	# 부딪히면 하트 -1, 잠깐 무적
 	var wild3: WildSlime = hunt.slimes[0]
 	wild3.position = hunter.feet()
@@ -451,7 +452,14 @@ func _ready() -> void:
 	main.hunter.facing = Vector2i.UP
 	w.position = main.hunter.feet() + Vector2(0, -8 - Config.SWING_REACH)
 	h2.swing()
-	_check(h2.drops.size() == 1, "새 날 첫 슬라임도 알 보장")
+	_check(h2.drops.is_empty(), "새 날 첫 처치라도 알은 보장되지 않음 (2026-09-29 드롭률 낮춤)")
+	HuntGround.egg_roll = 0.0
+	var w1b: WildSlime = h2.slimes[0]
+	w1b.hp = 1
+	w1b.position = main.hunter.feet() + Vector2(0, -8 - Config.SWING_REACH)
+	h2.tick(Config.SWING_COOLDOWN)
+	h2.swing()
+	_check(h2.drops.size() == 1, "알 확률에 걸리면 알이 떨어짐")
 	h2.hearts = 1
 	var w2: WildSlime = h2.slimes[0]
 	w2.position = main.hunter.feet()
@@ -489,7 +497,7 @@ func _ready() -> void:
 	_check(far.hp == Config.WILD_SLIME_HP - 1, "물총은 간격을 두고 쏜다")
 	far.position = h3.companion.position + Vector2(Config.COMPANION_SHOT_RANGE - 10, 0)
 	h3.tick(h3.companion.attack_interval())
-	_check(h3.slimes.size() == Config.WILD_SLIME_COUNT - 1 and h3.drops.size() == 1, "크리처가 쓰러뜨린 슬라임도 그날 첫 알 보장")
+	_check(h3.slimes.size() == Config.WILD_SLIME_COUNT - 1 and h3.drops.size() == 1, "크리처가 쓰러뜨린 슬라임도 알 확률은 같음")
 	# 따라다니기
 	h3.companion_ai = true
 	for other in h3.slimes:
@@ -824,7 +832,6 @@ func _ready() -> void:
 			hcg.slimes.erase(s)
 			s.queue_free()
 	bb2.hp = 1
-	hcg.egg_guaranteed = true
 	hcg._defeat(bb2)
 	_check(hcg.loot.size() == 1 and hcg.slimes.is_empty(), "동행이 쓰러뜨린 것과 같은 길로도 대장 드롭")
 	hcg.queue_free()
@@ -892,7 +899,7 @@ func _ready() -> void:
 	sh.swing()
 	_check(sh.slimes.is_empty() and not sh.path_open, "마지막 구역 대장 뒤엔 길이 열리지 않음 (다음 구역은 아직)")
 	var toad_eggs := sh.drops.filter(func(d: Dictionary) -> bool: return d.species == CreatureCatalog.GOLD_TOAD)
-	_check(toad_eggs.size() == 1, "대장 금두꺼비는 금두꺼비 알을 반드시 남김")
+	_check(toad_eggs.size() == 1, "대장 금두꺼비는 알 확률에 걸리면 금두꺼비 알을 남김")
 	main.hunter.position = sh.next_area().get_center()
 	_check(not sh.advance() and sh.zone == 1, "더 깊이 갈 수 없음")
 	main.hunter.position = sh.exit_area().get_center()
@@ -1152,6 +1159,22 @@ func _ready() -> void:
 	_check(main.enter_hunt(null, 0), "다음 날 다시 분원농협")
 	_check(not main.hunt.minimap_seen(k_cell), "다음 사냥에서는 작은 지도가 다시 가려짐")
 	main.leave_hunt()
+
+	# 28) 알 드롭률 (2026-09-29 사용자: 너무 잘 나와서 낮춤): 확률에 안 걸리면 대장도 알을 남기지 않음
+	HuntGround.egg_roll = 0.99
+	var hz := HuntGround.new()
+	main.add_child(hz)
+	hz.zone = 1
+	hz.set_ai(false)
+	var toad_b := hz.spawn_boss()
+	toad_b.hp = 1
+	hz._defeat(toad_b)
+	_check(hz.drops.is_empty(), "확률에 안 걸리면 대장 금두꺼비도 알을 남기지 않음")
+	var egg_zc: float = Config.HUNT_ZONES[1].egg_chance
+	var egg_bc: float = Config.HUNT_ZONES[1].boss_egg_chance
+	_check(egg_zc < 0.1 and egg_bc < 0.5, "금사리 알 확률: 몬스터 %d%% · 대장 %d%%" % [roundi(egg_zc * 100), roundi(egg_bc * 100)])
+	hz.queue_free()
+	HuntGround.egg_roll = -1.0
 
 	# 27) 아침 카드: 밤사이 일이 많아도 "F 일어나기"까지 카드 안에 들어온다 (핵심 루프 점검 2026-09-28)
 	var busy: Array[String] = []
