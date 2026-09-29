@@ -1938,6 +1938,16 @@ func _ready() -> void:
 	var d_boost: int = main.boost_growth()
 	d_sp.grow_chance = d_ch0
 	_check(d_boost >= 1 and main.farm.get_cell(d_cell).growth == d_g0 + 1, "아기 나무 정령 키우기: 물 준 작물이 하루 더 자람")
+	# 잡템 이름은 구역 몬스터에 맞춤 (금사리 모래게 껍데기 · 광동리 참새 깃털 · 도마리 고목 옹이)
+	var j_rng := RandomNumberGenerator.new()
+	var j_names := {}
+	for zi in 4:
+		for k in 400:
+			var jd := HuntLoot.roll_for_kill(j_rng, zi)
+			if jd.get("kind") == &"junk":
+				j_names[zi] = HuntLoot.label(jd)
+				break
+	_check(j_names.get(0) == "슬라임 젤리" and j_names.get(1) == "모래게 껍데기" and j_names.get(2) == "참새 깃털" and j_names.get(3) == "고목 옹이", "잡템 이름이 구역마다 다름 %s" % j_names)
 
 	print("SMOKE TEST: %s (%d failures)" % ["PASS" if _failures == 0 else "FAIL", _failures])
 	get_tree().quit(1 if _failures > 0 else 0)

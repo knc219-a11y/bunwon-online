@@ -404,7 +404,7 @@ func _hunter_interact() -> void:
 		if GameState.junk > 0:
 			# 사냥터 잡템(슬라임 젤리)은 공급함에 두면 바로 값이 나온다 (제작 소재가 아님)
 			var earned := GameState.junk * Config.JUNK_PRICE
-			parts.append("슬라임 젤리 %d개를 팔았다. +%d원" % [GameState.junk, earned])
+			parts.append("사냥 잡템 (젤리 · 껍데기 · 깃털 · 옹이) %d개를 팔았다. +%d원" % [GameState.junk, earned])
 			GameState.money += earned
 			GameState.junk = 0
 		GameState.notify(" ".join(parts))
@@ -1404,7 +1404,7 @@ func _refresh_hud() -> void:
 		tool_text = "망치"
 	if hunt:
 		var buddy := hunt.companion.display_name() if hunt.companion else "혼자"
-		_status.text = "%d일째 %s | %s | 도구: %s | 동행: %s | 남은 몬스터 %d | 주운 알 %d | 돈 %d원 · 젤리 %d" % [GameState.day, GameState.clock_text(GameState.minutes), Config.HUNT_ZONES[hunt.zone].name, tool_text, buddy, hunt.slimes.size(), hunt.picked.size(), GameState.money, GameState.junk]
+		_status.text = "%d일째 %s | %s | 도구: %s | 동행: %s | 남은 몬스터 %d | 주운 알 %d | 돈 %d원 · 잡템 %d" % [GameState.day, GameState.clock_text(GameState.minutes), Config.HUNT_ZONES[hunt.zone].name, tool_text, buddy, hunt.slimes.size(), hunt.picked.size(), GameState.money, GameState.junk]
 		return
 	_status.text = "%d일째 %s | %s | 도구: %s | 돈 %d원 | 씨앗 %d  작물 %d  나물 %d | 알: 농부 %d · 사냥꾼 %d · 공급함 %d | 크리처 %d" % [
 		GameState.day, GameState.clock_text(GameState.minutes), active.display_name, tool_text, GameState.money, GameState.seeds, GameState.crops, GameState.herbs,

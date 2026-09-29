@@ -286,7 +286,7 @@ const BOSS_MONEY_MAX := 60
 ## sign 이 있으면 아래 입구 오른쪽에 그 마을 표지 (금사리: 회색 항아리 구조물에 검정 글씨, 사용자 설명).
 const HUNT_ZONES: Array[Dictionary] = [
 	{
-		name = "분원농협", monster = "야생 슬라임", boss_monster = "대장 슬라임", waypoint = false,
+		name = "분원농협", junk_name = "슬라임 젤리", monster = "야생 슬라임", boss_monster = "대장 슬라임", waypoint = false,
 		## 넓은 맵 (2026-09-28 사용자 선택 C. 창고 마당): 아래는 농협 창고 마당, 철망 너머 위는 논밭, 대장은 곳간 앞
 		map = "nonghyup",
 		## 창고 벽 간판 (칸 자리, 글씨). 그림은 칸 지도에서 그린 임시 그림
@@ -303,7 +303,7 @@ const HUNT_ZONES: Array[Dictionary] = [
 		monster_tint = Color(1, 0.8, 0.75), boss_tint = Color(1.0, 0.82, 0.4), ground_tint = Color(0.82, 0.9, 0.8), tree_tint = Color(0.78, 0.92, 0.78),
 	},
 	{
-		name = "금사리", monster = "모래게", boss_monster = "금두꺼비", waypoint = true,
+		name = "금사리", junk_name = "모래게 껍데기", monster = "모래게", boss_monster = "금두꺼비", waypoint = true,
 		## 화면보다 넓은 맵 (2026-09-28 사용자 선택 C): data/hunt_maps/geumsa.txt, 카메라가 사냥꾼을 따라간다
 		map = "geumsa",
 		sheet = "res://assets/creatures/wild_sand_crab.png", boss_sheet = "res://assets/creatures/wild_gold_toad.png", burrow = true,
@@ -328,7 +328,7 @@ const HUNT_ZONES: Array[Dictionary] = [
 		## 2막 첫 구역 (2026-09-29 사용자: "3구역은 광동리다", 후보 B. 동지벌 군량 벌판 선택).
 		## 광동리 = 광복동(광백이) + 동지벌촌 (광주시 유래: 병자호란 때 군량미를 가장 많이 낸 넓은 벌판 마을).
 		## 추수한 벌판 · 짚가리 · 옛 군량 곳간 · 배수로. 곡식 도둑 참새 떼가 날아다니고, 곳간을 지키던 허수아비 장수가 대장.
-		name = "광동리", monster = "참새", boss_monster = "허수아비 장수", waypoint = true,
+		name = "광동리", junk_name = "참새 깃털", monster = "참새", boss_monster = "허수아비 장수", waypoint = true,
 		map = "gwangdong",
 		labels = [[Vector2(26, 4.3), "군량 곳간"]],
 		sheet = "res://assets/creatures/wild_sparrow.png", boss_sheet = "res://assets/creatures/wild_scarecrow.png", burrow = false,
@@ -355,7 +355,7 @@ const HUNT_ZONES: Array[Dictionary] = [
 		## (가끔 눈이 번쩍) 가까이 오면 일어나 녹슨 도끼로 달려든다 (금사리 모래게처럼 burrow + 달려들기).
 		## 2막 대장 = 장승 한 쌍 (사용자: "보스는 장승", "천하대장군 지하여장군 무섭게 그리자"). 둘 다 쓰러뜨려야 도마리를 깬다.
 		## 천하대장군 = 통나무 굴리기 (긴 띠 예고 → 통나무가 굴러감), 지하여장군 (partner) = 쿵 내려찍고 그루터기 새끼를 깨움.
-		name = "도마리", monster = "고목 그루터기", boss_monster = "천하대장군", waypoint = true,
+		name = "도마리", junk_name = "고목 옹이", monster = "고목 그루터기", boss_monster = "천하대장군", waypoint = true,
 		map = "doma",
 		sheet = "res://assets/creatures/wild_old_stump.png", boss_sheet = "res://assets/creatures/wild_cheonha.png", burrow = true,
 		partner = {name = "지하여장군", sheet = "res://assets/creatures/wild_jiha.png", pattern = &"slam"},

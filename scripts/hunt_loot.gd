@@ -43,6 +43,9 @@ static func roll_for_kill(rng: RandomNumberGenerator, zone := 0) -> Dictionary:
 	match kind:
 		&"money":
 			return _money(rng, z.money[0], z.money[1])
+		&"junk":
+			# 잡템 이름은 구역 몬스터에 맞춘다 (2026-09-29 사용자: "게한테 슬라임 젤리가 나오는게 이상함")
+			return {kind = kind, name = z.get("junk_name", "슬라임 젤리")}
 		_:
 			return {kind = kind}
 
@@ -101,7 +104,7 @@ static func label(d: Dictionary) -> String:
 		&"potion":
 			return "빨간 물약"
 		&"junk":
-			return "슬라임 젤리"
+			return d.get("name", "슬라임 젤리")
 		_:
 			return d.roll.name if d.has("roll") else Wearables.ITEMS[d.id].name
 
@@ -118,7 +121,7 @@ static func take(d: Dictionary) -> String:
 			return "빨간 물약을 주웠다! 1 키로 마시면 하트 +%d. (가진 물약 %d)" % [Config.POTION_HEAL, GameState.potions]
 		&"junk":
 			GameState.junk += 1
-			return "슬라임 젤리를 주웠다. 마을 공급함에서 사냥꾼이 F로 팔 수 있다."
+			return "%s을(를) 주웠다. 마을 공급함에서 사냥꾼이 F로 팔 수 있다." % d.get("name", "슬라임 젤리")
 		_ when d.has("roll"):
 			var where := Wearables.gain_rolled(d.roll)
 			var what := "%s %s" % [Wearables.RARITY_NAMES[d.roll.rarity], d.roll.name]
