@@ -23,6 +23,8 @@ const RARITY_COLORS := {
 	&"magic": Color(0.5, 0.62, 1.0),
 	&"rare": Color(1.0, 0.9, 0.35),
 	&"set": Color(0.45, 0.95, 0.4),
+	## 대장간 제작품 (디아블로2 제작 장비처럼 주황)
+	&"crafted": Color(1.0, 0.6, 0.25),
 }
 
 

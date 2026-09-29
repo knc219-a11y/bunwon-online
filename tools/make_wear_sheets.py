@@ -220,6 +220,46 @@ def leather_shoe(c, sx, bottom, hip_x=None, top=None, side=False):
     c.px(sx + 2, bottom + 1, STITCH)
 
 
+# ---------- 대장간 제작품 (2026-09-29 사용자 선택 A, 현대풍) ----------
+# 있는 그림을 색만 바꿔 쓰고, 안전모만 새로 그린다. 전부 임시.
+HARD, HARD_D, HARD_L = (244, 204, 70), (206, 160, 50), (252, 232, 150)
+
+
+def hard_hat(c, row, b):
+    # 노란 안전모: 둥근 머리통 + 가운데 볼록 줄 + 둘레 챙
+    c.ellipse(11, 0 + b, 36, 13 + b, HARD)
+    c.ellipse(29, 1 + b, 36, 12 + b, HARD_D)
+    c.rect(22, 0 + b, 25, 9 + b, HARD_L)
+    if row == 2:
+        c.rect(8, 9 + b, 39, 11 + b, HARD_D)
+    else:
+        c.rect(9, 9 + b, 38, 11 + b, HARD_D)
+        c.rect(10, 9 + b, 37, 9 + b, HARD)
+
+
+class Recolor:
+    """그리는 색을 바꿔 주는 Canvas 감싸개 (있는 그림을 다른 색 제작품으로)"""
+
+    def __init__(self, c, mapping):
+        self.c, self.m = c, mapping
+
+    def _col(self, col):
+        return self.m.get(tuple(col[:3]), col) if len(col) == 3 or col[3] else col
+
+    def rect(self, x0, y0, x1, y1, col):
+        self.c.rect(x0, y0, x1, y1, self._col(col))
+
+    def px(self, x, y, col):
+        self.c.px(x, y, self._col(col))
+
+    def ellipse(self, x0, y0, x1, y1, col):
+        self.c.ellipse(x0, y0, x1, y1, self._col(col))
+
+
+def recolored(fn, mapping):
+    return lambda c, row, p, k: fn(Recolor(c, mapping), row, p, k)
+
+
 def make(name, draw_fn):
     img = Image.new("RGBA", (CELL * COLS, CELL * ROWS), (0, 0, 0, 0))
     for row in range(ROWS):
@@ -255,6 +295,13 @@ ITEMS = {
     "leather_hood": lambda c, row, p, k: leather_hood(c, row, p["b"]),
     "hunter_jerkin": lambda c, row, p, k: jerkin(c, row, p["b"], p["swing"]),
     "leather_shoes": feet_fn(leather_shoe),
+    # 대장간 제작품 (현대풍)
+    "work_cap": recolored(lambda c, row, p, k: cap(c, row, p["b"]), {CAP: (236, 236, 226), CAP_D: (70, 140, 90), CAP_L: (250, 250, 244)}),
+    "rain_suit": recolored(lambda c, row, p, k: vest(c, row, p["b"], p["swing"]), {VEST: (70, 92, 132), VEST_D: (50, 66, 100), VEST_L: (100, 126, 166), SEED: (236, 214, 80)}),
+    "work_boots": recolored(feet_fn(rubber_boot), {RUBBER: (62, 62, 72), RUBBER_D: (40, 40, 48), RUBBER_L: (232, 196, 70)}),
+    "hard_hat": lambda c, row, p, k: hard_hat(c, row, p["b"]),
+    "hiking_vest": recolored(lambda c, row, p, k: jerkin(c, row, p["b"], p["swing"]), {LEATHER: (224, 112, 70), LEATHER_D: (172, 80, 56), LEATHER_L: (244, 152, 112), STITCH: (250, 240, 220)}),
+    "safety_shoes": recolored(feet_fn(hiking_shoe), {HIKE: (72, 72, 82), HIKE_D: (44, 44, 52), LACE: (204, 208, 216)}),
 }
 
 if __name__ == "__main__":

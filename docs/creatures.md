@@ -7,7 +7,7 @@
 
 | 개념 | 파일 | 역할 |
 |---|---|---|
-| 일 (Job) | `scripts/creatures/creature_jobs.gd` | 크리처가 맡는 일의 id. 지금은 쉬기, 농사, 채집. 농사 안의 파종·급수·수확 id는 재능 배율을 적는 데 쓴다 |
+| 일 (Job) | `scripts/creatures/creature_jobs.gd` | 크리처가 맡는 일의 id. 지금은 쉬기, 농사, 채집, 고철 줍기 (대장간을 고친 뒤). 농사 안의 파종·급수·수확 id는 재능 배율을 적는 데 쓴다 |
 | 속성 (Element) | `data/creatures/elements/*.tres` | 물, 비행 등. 일별 재능 배율과 이동 속도 배율 |
 | Trait | `data/creatures/traits/*.tres` | 개체 특성. 작업 속도, 이동 속도, 범위, 일별 재능 |
 | 종 (Species) | `data/creatures/species/*.tres` | 몬스터 종류. 가질 수 있는 속성 후보, 고유 재능, 부화 시 능력치 범위, Trait 후보 |
@@ -36,6 +36,12 @@
 예: 물속성(`water.tres`)은 급수 재능 1.5배라서, 농사를 맡기면 급수할 때만 1.5배 빠르다 (농사는 수확·파종·급수를 한 마리가 다 하고, 일마다 그 일의 재능 배율을 쓴다).
 땅속성(`earth.tres`)은 파종 재능 1.5배, 대신 이동이 조금 느리다(0.9배).
 비행(`flying.tres`)은 이동 속도 1.6배라서 밭 사이를 더 빨리 오간다.
+
+## 고철 줍기 (2026-09-29 대장간 복구 A)
+
+대장간을 고치면 옆에 고물 더미가 생기고 R 일 목록 끝에 **고철 줍기**(`CreatureJobs.SCRAP`)가 붙는다 (`CreatureJobs.jobs()`).
+고철 줍기 크리처는 고물 더미 왼쪽 칸까지 건너가 고철 하나를 주워 대장간에 둔다 (`GameState.scrap`). 더미가 비면 놓아 준 자리로 돌아가 쉬고, 아침마다 더미가 `Config.SCRAP_PER_DAY` 만큼 다시 쌓인다.
+땅속성은 `job_aptitude` 에 `scrap: 1.5` 라서 빠르다. 대장장이는 이 고철로 모루에서 장비를 만든다.
 
 ## 채집 일 (2026-09-29 사용자 선택 B 속성별 채집)
 

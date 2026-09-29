@@ -51,6 +51,14 @@ var junk := 0
 var hunter_unlocked := false
 ## 게임 전체에서 첫 알을 이미 얻었는지. 첫 알 하나만 보장하고, 그 뒤로는 확률 (2026-09-29).
 var first_egg_done := false
+## 대장간 (2026-09-29 사용자 선택 A): 0 = 없음, 1 = 무너진 터, 2 = 고침 (대장장이 열림)
+var forge_state := 0
+## 1막 대장(금두꺼비)을 쓰러뜨린 적이 있는지. 다음 날 아침 대장간 터가 드러난다.
+var forge_boss_down := false
+## 1막 대장 재료 (사금 덩이), 대장장이 제작 재료 (고철), 고물 더미에 남은 고철
+var material := 0
+var scrap := 0
+var scrap_pile := 0
 
 
 func _ready() -> void:
@@ -117,6 +125,11 @@ func reset() -> void:
 	junk = 0
 	hunter_unlocked = false
 	first_egg_done = false
+	forge_state = 0
+	forge_boss_down = false
+	material = 0
+	scrap = 0
+	scrap_pile = 0
 	changed.emit()
 
 

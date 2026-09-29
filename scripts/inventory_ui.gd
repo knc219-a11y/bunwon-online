@@ -19,7 +19,7 @@ const CURSOR := Color(1.0, 0.72, 0.2)
 ## 디아블로2처럼 세트 장비는 초록
 const SET_GREEN := Color(0.2, 0.6, 0.25)
 ## 종이 바탕 위에서 보이도록 조금 진하게 한 등급색
-const RARITY_EDGE := {&"magic": Color(0.25, 0.4, 0.9), &"rare": Color(0.82, 0.6, 0.05), &"set": SET_GREEN}
+const RARITY_EDGE := {&"magic": Color(0.25, 0.4, 0.9), &"rare": Color(0.82, 0.6, 0.05), &"set": SET_GREEN, &"crafted": Color(0.85, 0.42, 0.1)}
 const SUB := Color(0.5, 0.4, 0.32)
 ## 덧그림(48x48 칸)에서 칸별 아이콘으로 잘라 쓸 부분
 const ICON_SRC := {&"hat": Rect2(12, 2, 24, 18), &"clothes": Rect2(10, 16, 28, 22), &"shoes": Rect2(12, 32, 24, 14)}

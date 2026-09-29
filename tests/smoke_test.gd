@@ -1352,6 +1352,9 @@ func _ready() -> void:
 	var h_forage: Forage = main.forage
 	var h_bad: Array[Vector2i] = []
 	for spot in Config.HERB_SPOTS:
+		# 대장간 터 · 고물 더미가 들어선 자리는 쓰지 않는다 (Forage.blocked)
+		if main.forage.blocked.any(func(r: Rect2i) -> bool: return r.has_point(spot)):
+			continue
 		var stand := Farm.center_of(spot) - Vector2(0, main.farmer.FEET_Y)
 		var h_inside: bool = main.farm.get_cell(spot) != null or main.farm._path.has(spot) or main.farm._fence.has(spot) or spot.y < 1 or spot.y > 12
 		for p: Prop in main.props:
@@ -1415,6 +1418,9 @@ func _ready() -> void:
 	var f_forage: Forage = main.forage
 	var f_bad: Array[Vector2i] = []
 	for spot in Config.ROOT_SPOTS:
+		# 대장간 터 · 고물 더미가 들어선 자리는 쓰지 않는다 (Forage.blocked)
+		if main.forage.blocked.any(func(r: Rect2i) -> bool: return r.has_point(spot)):
+			continue
 		var stand := Farm.center_of(spot) - Vector2(0, main.farmer.FEET_Y)
 		var f_inside: bool = main.farm.get_cell(spot) != null or main.farm._path.has(spot) or main.farm._fence.has(spot) or spot.y < 1 or spot.y > 12 or spot in Config.HERB_SPOTS
 		for p: Prop in main.props:
@@ -1561,8 +1567,157 @@ func _ready() -> void:
 	_check(not jf.work_once(), "채집 전담은 밭 일을 하지 않음")
 	_check(j.describe().contains("수확") and j.describe().contains("급수"), "농사 크리처 설명에 일마다 속도 (%s)" % j.describe())
 
+	# 35) 대장간 복구 · 대장장이 (2026-09-29 사용자 선택 A: 한 번에 복구 + 사람 장비 제작)
+	#     금사리 대장을 잡으면 사금 덩이 + 다음 날 대장간 터 → 돈 · 무 · 사금 덩이로 한 번에 고침 → 대장장이(Tab) · 고물 더미 · 크리처 고철 줍기
+	close_all(main)
+	var f_material := GameState.material
+	var hf := HuntGround.new()
+	main.add_child(hf)
+	hf.zone = Config.FORGE_ZONE
+	hf.set_ai(false)
+	var f_boss := hf.spawn_boss()
+	f_boss.hp = 1
+	hf._defeat(f_boss)
+	_check(GameState.material == f_material + 1 and GameState.forge_boss_down, "금사리 대장을 잡으면 %s +1, 대장간 터 예약" % Config.BOSS_MATERIAL_NAME)
+	hf.queue_free()
+	var hf0 := HuntGround.new()
+	main.add_child(hf0)
+	hf0.set_ai(false)
+	var f_boss0 := hf0.spawn_boss()
+	f_boss0.hp = 1
+	hf0._defeat(f_boss0)
+	_check(GameState.material == f_material + 1, "분원농협 대장은 %s을 주지 않음" % Config.BOSS_MATERIAL_NAME)
+	hf0.queue_free()
+	main.next_day()
+	_check(main.forge != null and GameState.forge_state == 1 and main.forge.texture == preload("res://assets/props/forge_ruin.png"), "다음 날 아침 무너진 대장간 터")
+	var f_blocked := true
+	for fc: Vector2i in main.forage.herbs:
+		f_blocked = f_blocked and not Config.FORGE_RECT.has_point(fc)
+	_check(f_blocked, "대장간 터 자리에는 들나물이 돋지 않음")
+	main._set_active(main.farmer)
+	GameState.hunter_unlocked = true
+	main.switch_character()
+	main.switch_character()
+	_check(main.active == main.farmer, "고치기 전에는 Tab 이 농부 ↔ 사냥꾼만")
+	GameState.money = 0
+	GameState.crops = 0
+	GameState.material = 0
+	_check(not main.restore_forge() and GameState.forge_state == 1, "모자라면 못 고침")
+	GameState.money = Config.FORGE_COST_MONEY + 1000
+	GameState.crops = Config.FORGE_COST_CROPS + 10
+	GameState.material = Config.FORGE_COST_MATERIAL
+	main.farmer.position = Farm.center_of(Config.FORGE_RECT.position + Vector2i(1, Config.FORGE_RECT.size.y))
+	main.interact()
+	_check(main.menu_open and main.menu_kind == &"forge", "대장간 터에서 F → 복구 창")
+	main.menu_confirm()
+	_check(GameState.forge_state == 2 and not main.menu_open, "다 모았으면 한 번에 고침")
+	_check(GameState.money == 1000 and GameState.crops == 10 and GameState.material == 0, "돈 · 무 · %s을 냄" % Config.BOSS_MATERIAL_NAME)
+	_check(main.smith.visible and main.scrap_heap != null and GameState.scrap_pile == Config.SCRAP_PER_DAY, "대장장이와 고물 더미가 생김")
+	_check(CreatureJobs.SCRAP in CreatureJobs.jobs(), "R 일 목록에 고철 줍기")
+	main.switch_character()
+	main.switch_character()
+	_check(main.active == main.smith, "Tab: 농부 → 사냥꾼 → 대장장이")
+	main.switch_character()
+	_check(main.active == main.farmer, "대장장이 다음은 농부")
+	# 크리처 고철 줍기: 땅속성이 빠르다
+	var fs: Creature = main._hatch(CreatureCatalog.SLIME, Vector2i(14, 12))
+	fs.data.set_element(load("res://data/creatures/elements/earth.tres"))
+	fs.auto_work = false
+	while fs.job != CreatureJobs.SCRAP:
+		fs.next_job()
+	_check(is_equal_approx(fs.data.work_speed(CreatureJobs.SCRAP), fs.data.work_speed(CreatureJobs.WATER) * 1.5), "땅속성은 고철 줍기 1.5배")
+	GameState.scrap = 0
+	_check(fs.work_once(), "고철 줍기 크리처가 고물 더미로")
+	Engine.time_scale = 20.0
+	while fs._busy:
+		await get_tree().process_frame
+	Engine.time_scale = 1.0
+	_check(GameState.scrap == 1 and GameState.scrap_pile == Config.SCRAP_PER_DAY - 1, "고철 하나를 주워 옴")
+	GameState.scrap_pile = 0
+	_check(fs.work_once() and fs._busy, "더미가 비면 제자리로 돌아감")
+	Engine.time_scale = 20.0
+	while fs._busy:
+		await get_tree().process_frame
+	Engine.time_scale = 1.0
+	_check(not fs.work_once(), "제자리에서 쉼")
+	main.next_day()
+	_check(GameState.scrap_pile == Config.SCRAP_PER_DAY, "아침마다 고물 더미가 다시 쌓임")
+	main.farmer.position = Farm.center_of(Creature.scrap_spot())
+	main.interact()
+	_check(GameState.scrap == 2, "농부가 F로 고철을 손으로 주움")
+	# 제작: 대장장이만 모루에서
+	GameState.scrap = 20
+	GameState.money = 1000
+	forge_f(main, main.farmer)
+	_check(not main.menu_open, "농부는 모루를 못 씀")
+	forge_f(main, main.smith)
+	_check(main.menu_open and main.menu_kind == &"craft", "대장장이가 모루에서 F → 제작 창")
+	var f_cost: Array = Config.CRAFT_COSTS[&"work_cap"]
+	var f_serial := GameState.gear_serial
+	main.menu_confirm()
+	var f_id := StringName("gear_%d" % GameState.gear_serial)
+	_check(GameState.gear_serial == f_serial + 1 and Wearables.rarity(f_id) == &"crafted", "작업 모자를 만듦 (등급 제작)")
+	_check(GameState.scrap == 20 - f_cost[0] and GameState.money == 1000 - f_cost[1], "고철 %d · %d원을 씀" % [f_cost[0], f_cost[1]])
+	var f_it := Wearables.item(f_id)
+	_check(f_it.who == &"farmer" and f_id in (GameState.bag[&"farmer"] + Wearables.worn_by(&"farmer")), "농부 것으로 들어감 (입었거나 가방)")
+	_check((f_it.affixes as Array).size() >= 1 and (f_it.affixes as Array).size() <= 3, "옵션 1~3개 (%s)" % f_it.effect)
+	main.close_menu()
+	# 옵션은 주인 것만: 농부 제작품 = 걷기 · 씨앗 칸 · 괭이 칸, 사냥꾼 것과 사냥터 장비에는 농부 옵션이 없음
+	var f_rng := RandomNumberGenerator.new()
+	f_rng.seed = 3
+	var f_ok_farm := true
+	var f_ok_hunt := true
+	var f_counts := {}
+	for i in 200:
+		var rf := Wearables.roll_crafted(f_rng, &"rain_suit")
+		f_counts[rf.affixes.size()] = f_counts.get(rf.affixes.size(), 0) + 1
+		for fa: Dictionary in rf.affixes:
+			f_ok_farm = f_ok_farm and fa.stat in [&"speed", &"sow", &"reach"]
+		for fa: Dictionary in Wearables.roll_crafted(f_rng, &"hard_hat").affixes + Wearables.roll_gear(f_rng).affixes:
+			f_ok_hunt = f_ok_hunt and not fa.stat in [&"sow", &"reach"]
+	_check(f_ok_farm and f_ok_hunt, "농부 제작품은 농부 옵션만, 사냥꾼 것에는 농부 옵션 없음")
+	_check(f_counts.has(1) and f_counts.has(2) and f_counts.has(3), "옵션 수 1 · 2 · 3 모두 나옴 %s" % f_counts)
+	# 괭이 · 물뿌리개 칸 + 옵션이 실제 칸 수에 들어감
+	var f_reach: int = main.tool_cells(Farm.Work.TILL).size()
+	GameState.gear_serial += 1
+	var f_rid := StringName("gear_%d" % GameState.gear_serial)
+	GameState.gear[f_rid] = {base = &"work_boots", rarity = &"crafted", name = "손 긴 작업 장화", affixes = [{stat = &"reach", value = 1}]}
+	var f_old_shoes: StringName = GameState.worn[&"farmer"].get(&"shoes", &"")
+	GameState.worn[&"farmer"][&"shoes"] = f_rid
+	_check(main.tool_cells(Farm.Work.TILL).size() == f_reach + 1, "괭이 칸 +1 옵션 (%d → %d칸)" % [f_reach, main.tool_cells(Farm.Work.TILL).size()])
+	if f_old_shoes != &"":
+		GameState.worn[&"farmer"][&"shoes"] = f_old_shoes
+	else:
+		GameState.worn[&"farmer"].erase(&"shoes")
+	_check(not (&"work_cap" in Wearables.shop_items()), "제작품은 공급함에서 팔지 않음")
+	GameState.scrap = 0
+	_check(main.craft(&"hard_hat") == &"", "고철이 모자라면 못 만듦")
+	GameState.bag[&"farmer"].append(f_rid)
+	main._set_active(main.farmer)
+	_check(&"sell_gear" in main.supply_options(), "농부도 공급함에서 제작품을 팜")
+	GameState.bag[&"farmer"].erase(f_rid)
+	main._set_active(main.smith)
+	main.open_inventory()
+	_check(not main.inventory.visible, "대장장이는 가방이 없음")
+	main._set_active(main.farmer)
+
 	print("SMOKE TEST: %s (%d failures)" % ["PASS" if _failures == 0 else "FAIL", _failures])
 	get_tree().quit(1 if _failures > 0 else 0)
+
+
+## c 로 대장간 앞에 서서 F
+func forge_f(main: Node2D, c: Character) -> void:
+	main._set_active(c)
+	c.position = Farm.center_of(Config.FORGE_RECT.position + Vector2i(1, Config.FORGE_RECT.size.y))
+	main.interact()
+
+
+## 열린 선택창 · 가방 창을 닫는다
+func close_all(main: Node2D) -> void:
+	main.close_menu()
+	main.close_inventory()
+	if main.hunt:
+		main.leave_hunt()
 
 
 func _check(ok: bool, what: String) -> void:
