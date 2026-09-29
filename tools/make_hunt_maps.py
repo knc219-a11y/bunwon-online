@@ -16,6 +16,7 @@ data/hunt_maps/<이름>.txt 의 칸 지도를 읽어 assets/hunt/<이름>_ground
   x  추수한 논 그루터기   r  밭 이랑   %  콘크리트 마당   m  멍석 (벼 말리기)
   h  볏짚 더미 (막힘)   w  곤포 볏짚 (흰 비닐, 막힘)   s  쌀 포대 더미 (막힘)
   H  창고 (막힘, 칸 덩어리 하나가 창고 한 채)   F  철망 울타리 (막힘)
+  도마리 (나무꾼 벌목터): G 장작 쌓인 비닐하우스 (막힘, 칸 덩어리 하나가 한 동)   l 장작더미 (막힘)   u 그루터기 (막힘)
 
 실행: python3 tools/make_hunt_maps.py [지도.txt ...] [--out 폴더]  (Pillow, numpy 필요)
 """
@@ -30,7 +31,7 @@ ROOT = os.path.join(os.path.dirname(__file__), "..")
 T = 24
 tiles = np.array(Image.open(os.path.join(ROOT, "assets/tiles/farm_tiles.png")).convert("RGB")).astype(float)
 ## 구역 풀빛 (Config.HUNT_ZONES ground_tint 와 같게). 파일 이름 앞부분으로 고른다.
-GRASS_TINTS = {"geumsa": np.array([0.9, 0.86, 0.72]), "nonghyup": np.array([0.82, 0.9, 0.8]), "gwangdong": np.array([0.92, 0.88, 0.74])}
+GRASS_TINTS = {"geumsa": np.array([0.9, 0.86, 0.72]), "nonghyup": np.array([0.82, 0.9, 0.8]), "gwangdong": np.array([0.92, 0.88, 0.74]), "doma": np.array([0.78, 0.86, 0.7])}
 
 PATH_D = np.array((188, 162, 124)); PATH_DD = np.array((160, 134, 104))
 WET = np.array((176, 150, 116))
@@ -355,12 +356,62 @@ def render(path):
                 wrapped(img, cx, cy)
             elif k == "s":
                 sacks(img, cx, cy)
+            elif k == "l":
+                log_pile(img, cx, cy)
+            elif k == "u":
+                tree_stump(img, cx, cy)
+    for box in blocks(grid, "G"):
+        vinyl_house(img, *box)
     for box in blocks(grid, "H"):
         warehouse(img, *box)
     out = os.path.join(OUT or os.path.join(ROOT, "assets", "hunt"), name + "_ground.png")
     os.makedirs(os.path.dirname(out), exist_ok=True)
     Image.fromarray(np.clip(img, 0, 255).astype(np.uint8)).save(out)
     print(out, w, h)
+
+
+def vinyl_house(img, x0, y0, x1, y1):
+    """도마리: 장작을 쌓아 둔 비닐하우스 (칸 덩어리 하나 = 한 동). 위는 둥근 비닐 지붕, 아래 앞면은 열려서 장작 단면이 보임."""
+    X0, Y0, X1, Y1 = x0 * T, y0 * T, (x1 + 1) * T, (y1 + 1) * T
+    front = Y1 - 30
+    roof = img[Y0:front, X0:X1]
+    roof[:] = roof * 0.25 + np.array((232, 238, 236)) * 0.75
+    for xx in range(X0 + 6, X1, 12):
+        img[Y0:front, xx] = (150, 156, 160)
+    hh = front - Y0
+    for i in range(hh):
+        sh = 0.82 + 0.3 * np.sin(i / hh * np.pi)
+        img[Y0 + i, X0:X1] = img[Y0 + i, X0:X1] * min(sh, 1.08)
+    img[Y0:Y0 + 2, X0:X1] = (170, 176, 180)
+    img[front:Y1, X0:X1] = (70, 56, 46)
+    for cy in range(front + 5, Y1 - 2, 8):
+        for cx in range(X0 + 5 + (cy // 8 % 2) * 4, X1 - 4, 8):
+            for dy in range(-3, 4):
+                for dx in range(-3, 4):
+                    if dx * dx + dy * dy <= 10:
+                        img[cy + dy, cx + dx] = (214, 184, 134) if dx * dx + dy * dy <= 3 else (150, 108, 72)
+    img[front:Y1, X0:X0 + 3] = (150, 156, 160)
+    img[front:Y1, X1 - 3:X1] = (150, 156, 160)
+    img[front - 2:front, X0:X1] = (120, 126, 130)
+
+
+def log_pile(img, cx, cy):
+    for i, (dx, dy) in enumerate(((-6, 4), (0, 4), (6, 4), (-3, -2), (3, -2), (0, -8))):
+        for yy in range(-3, 4):
+            for xx in range(-3, 4):
+                if xx * xx + yy * yy <= 10:
+                    img[cy + dy + yy, cx + dx + xx] = (214, 184, 134) if xx * xx + yy * yy <= 3 else (140, 100, 66)
+
+
+def tree_stump(img, cx, cy):
+    for yy in range(-5, 6):
+        for xx in range(-7, 8):
+            if (xx / 7) ** 2 + (yy / 4) ** 2 <= 1:
+                img[cy + yy + 3, cx + xx] = (110, 80, 56)
+    for yy in range(-3, 4):
+        for xx in range(-6, 7):
+            if (xx / 6) ** 2 + (yy / 3) ** 2 <= 1:
+                img[cy + yy, cx + xx] = (222, 196, 150) if (xx / 6) ** 2 + (yy / 3) ** 2 > 0.3 else (186, 150, 108)
 
 
 args = sys.argv[1:]

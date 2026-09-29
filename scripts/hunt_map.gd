@@ -5,10 +5,10 @@ extends RefCounted
 ## 막힘 · 여울 느려짐 · 몬스터가 설 수 있는 곳을 칸으로 판정한다. 바닥 그림은 같은 지도로 만든 PNG.
 
 const T := Config.TILE
-## 사냥꾼이 못 들어가는 칸: 깊은 물 · 바위 · 덤불 · 나무 · 창고 · 울타리 · 볏짚 더미 · 곤포 · 쌀 포대
-const HUNTER_BLOCK := "~RBTHFhws"
+## 사냥꾼이 못 들어가는 칸: 깊은 물 · 바위 · 덤불 · 나무 · 창고 · 울타리 · 볏짚 더미 · 곤포 · 쌀 포대 · 비닐하우스 · 장작더미 · 그루터기
+const HUNTER_BLOCK := "~RBTHFhwsGlu"
 ## 몬스터가 못 들어가는 칸: 위 + 징검다리 (몬스터는 냇물을 여울로만 건넌다)
-const MONSTER_BLOCK := "~RBTHFhwso"
+const MONSTER_BLOCK := "~RBTHFhwsoGlu"
 
 var rows: PackedStringArray = []
 var size := Vector2i.ZERO
