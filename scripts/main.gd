@@ -40,6 +40,8 @@ const HATCH_CELL := Vector2i(16, 5)
 const DOOR_CELL := Vector2i(22, 12)
 ## 아침 카드 기본 크기 (글이 많으면 세로로 늘어난다)
 const MORNING_CARD_SIZE := Vector2(300, 150)
+## 선택창에 한 번에 보이는 항목 수 (크리처 훈련처럼 길어질 때)
+const MENU_VISIBLE_ROWS := 14
 
 var farm: Farm
 var farmer: Character
@@ -461,6 +463,8 @@ func supply_options() -> Array[StringName]:
 	if GameState.crops > 0:
 		options.append(&"display_crops")
 	options.append(&"buy_seeds")
+	if not creatures.is_empty():
+		options.append(&"train")
 	if Farm.next_plot() >= 0:
 		options.append(&"expand_field")
 	for id: StringName in TOOL_UPGRADES:
@@ -483,6 +487,8 @@ func supply_option_text(id: StringName) -> String:
 			return "무 진열하기 (%d개, 밤사이 %d원)" % [GameState.crops, GameState.crops * Config.CROP_PRICE]
 		&"buy_seeds":
 			return "씨앗 %d개 사기 (%d원)" % [Config.SEED_PACK_SIZE, Config.SEED_PACK_PRICE]
+		&"train":
+			return "크리처 훈련 (%d마리) ▶" % creatures.size()
 		&"expand_field":
 			var i := Farm.next_plot()
 			return "밭 넓히기: %s (%d원)" % [Config.FIELD_PLOT_NAMES[i], Config.FIELD_PLOT_PRICES[i]]
@@ -538,6 +544,20 @@ func menu_confirm() -> void:
 			return
 		_pending_zone = String(id).trim_prefix("zone_").to_int()
 		_open_companion_or_enter()
+		return
+	if menu_kind == &"train":
+		if id == &"back":
+			menu_kind = &"supply"
+			menu_index = 0
+		else:
+			var pick := train_from_option(id)
+			train(pick[0], pick[1])
+		_rebuild_menu()
+		return
+	if id == &"train":
+		menu_kind = &"train"
+		menu_index = 0
+		_rebuild_menu()
 		return
 	if id == &"close":
 		close_menu()
@@ -670,6 +690,82 @@ func _on_wear_changed() -> void:
 	GameState.touch()
 
 
+# --- 크리처 훈련 (2026-09-29 사용자 선택 A, 돈 쓸 곳 2단계) ---------------
+
+const TRAIN_STATS: Array[StringName] = [&"radius", &"speed"]
+
+
+## 훈련 선택창 항목: 크리처마다 &"train_<번호>_radius" · &"train_<번호>_speed" (다 올린 것은 빠짐), 마지막에 뒤로
+func train_options() -> Array[StringName]:
+	var options: Array[StringName] = []
+	for i in creatures.size():
+		for stat in TRAIN_STATS:
+			if train_level(creatures[i], stat) < Config.TRAIN_PRICES.size():
+				options.append(StringName("train_%d_%s" % [i, stat]))
+	options.append(&"back")
+	return options
+
+
+## 항목 → [크리처, 능력]. 못 찾으면 [null, &""]
+func train_from_option(id: StringName) -> Array:
+	var parts := String(id).split("_")
+	if parts.size() != 3 or parts[0] != "train":
+		return [null, &""]
+	var i := parts[1].to_int()
+	return [creatures[i] if i < creatures.size() else null, StringName(parts[2])]
+
+
+func train_level(s: Creature, stat: StringName) -> int:
+	return s.data.radius_level if stat == &"radius" else s.data.speed_level
+
+
+## 다음 단계 값. 다 올렸으면 -1
+func train_price(s: Creature, stat: StringName) -> int:
+	var lv := train_level(s, stat)
+	return Config.TRAIN_PRICES[lv] if lv < Config.TRAIN_PRICES.size() else -1
+
+
+func train_option_text(id: StringName) -> String:
+	if id == &"back":
+		return "뒤로"
+	var pick := train_from_option(id)
+	var s: Creature = pick[0]
+	var stat: StringName = pick[1]
+	var who := "%s %s · %s" % [s.data.element_names(), s.data.species.display_name, CreatureJobs.display_name(s.job)]
+	if stat == &"radius":
+		var r := s.data.work_radius()
+		return "%s   범위 %d → %d (%d원)" % [who, r, r + Config.TRAIN_RADIUS_STEP, train_price(s, stat)]
+	var job := s.job if s.job != CreatureJobs.REST else CreatureJobs.WATER
+	var now := s.data.work_speed(job)
+	var next := now / s.data.train_speed_mult() * (s.data.train_speed_mult() + Config.TRAIN_SPEED_STEP)
+	return "%s   속도 %.2f → %.2f (%d원)" % [who, now, next, train_price(s, stat)]
+
+
+## 크리처 하나의 범위(&"radius") 또는 속도(&"speed")를 한 단계 올린다. 선택창과 테스트가 함께 쓴다.
+func train(s: Creature, stat: StringName) -> bool:
+	if s == null or stat not in TRAIN_STATS:
+		return false
+	var price := train_price(s, stat)
+	var stat_name := "범위" if stat == &"radius" else "속도"
+	if price < 0:
+		GameState.notify("%s %s 훈련은 다 끝냈다." % [s.data.species.display_name, stat_name])
+		return false
+	if GameState.money < price:
+		GameState.notify("돈이 모자라다. %s 훈련 %d원 (가진 돈 %d원)." % [stat_name, price, GameState.money])
+		return false
+	GameState.money -= price
+	if stat == &"radius":
+		s.data.radius_level += 1
+	else:
+		s.data.speed_level += 1
+	s.queue_redraw()
+	var lv := train_level(s, stat)
+	var next := train_price(s, stat)
+	GameState.notify("%s %s 훈련 %d단계! -%d원. %s" % [s.data.species.display_name, stat_name, lv, price,
+		("다음 단계는 %d원." % next) if next > 0 else "이 능력은 다 올렸다."])
+	return true
+
+
 # --- 사냥터 입구 동행 고르기 (2026-09-27 결정 A. 따라오는 동료) -----------
 
 ## 동행 선택창 항목: 크리처마다 &"companion_<번호>", 마지막에 &"solo" (혼자 가기)
@@ -718,14 +814,31 @@ func waypoint_option_text(id: StringName) -> String:
 func _rebuild_menu() -> void:
 	var companion := menu_kind == &"companion"
 	var waypoint := menu_kind == &"waypoint"
-	_menu_options = companion_options() if companion else (waypoint_options() if waypoint else supply_options())
+	var training := menu_kind == &"train"
+	if training:
+		_menu_options = train_options()
+	else:
+		_menu_options = companion_options() if companion else (waypoint_options() if waypoint else supply_options())
 	menu_index = clampi(menu_index, 0, _menu_options.size() - 1)
 	var head := "사냥터 입구 · 누구랑 갈까?" if companion else ("사냥터 입구 · 어디서 시작할까?" if waypoint else "마을 공급함   가진 돈 %d원" % GameState.money)
+	if training:
+		head = "크리처 훈련   가진 돈 %d원" % GameState.money
 	var lines: Array[String] = [head]
-	for i in _menu_options.size():
+	# 항목이 많으면 고른 줄 둘레만 보인다 (화면 밖으로 나가지 않게)
+	var first := clampi(menu_index - MENU_VISIBLE_ROWS / 2, 0, maxi(0, _menu_options.size() - MENU_VISIBLE_ROWS))
+	var last := mini(_menu_options.size(), first + MENU_VISIBLE_ROWS)
+	if first > 0:
+		lines.append("   ▲")
+	for i in range(first, last):
 		var o := _menu_options[i]
 		var text := companion_option_text(o) if companion else (waypoint_option_text(o) if waypoint else supply_option_text(o))
+		if training:
+			text = train_option_text(o)
 		lines.append(("▶ " if i == menu_index else "   ") + text)
+	if last < _menu_options.size():
+		lines.append("   ▼")
+	if training:
+		lines.append("크리처마다 따로 · 단계마다 값 두 배 (%s원)" % " → ".join(Config.TRAIN_PRICES.map(func(p: int) -> String: return str(p))))
 	if companion:
 		lines.append("데려간 크리처는 돌아오면 제자리에서 다시 일한다")
 	if waypoint:

@@ -10,6 +10,9 @@ extends Resource
 ## 부화 때 굴린 기본 능력치 (속성·Trait 배율 적용 전)
 @export var base_work_speed := 1.0
 @export var base_radius := 1
+## 크리처 훈련 단계 (2026-09-29 사용자 선택 A). 공급함에서 돈으로 올린다.
+@export var radius_level := 0
+@export var speed_level := 0
 
 
 static func hatch(from_species: CreatureSpecies, rng: RandomNumberGenerator) -> CreatureData:
@@ -48,7 +51,17 @@ func work_speed(job: StringName) -> float:
 	var s := base_work_speed * aptitude(job)
 	if creature_trait:
 		s *= creature_trait.work_speed_mult
-	return s
+	return s * train_speed_mult()
+
+
+## 속도 훈련 배율
+func train_speed_mult() -> float:
+	return 1.0 + Config.TRAIN_SPEED_STEP * speed_level
+
+
+## 훈련 단계 합 (겉에 ★로 보인다)
+func train_total() -> int:
+	return radius_level + speed_level
 
 
 func move_speed() -> float:
@@ -61,7 +74,7 @@ func move_speed() -> float:
 
 
 func work_radius() -> int:
-	return base_radius + (creature_trait.radius_bonus if creature_trait else 0)
+	return base_radius + (creature_trait.radius_bonus if creature_trait else 0) + radius_level * Config.TRAIN_RADIUS_STEP
 
 
 ## 최저 능력치 보장 (첫 슬라임 등). 더 높게 나온 값은 그대로 둔다.
