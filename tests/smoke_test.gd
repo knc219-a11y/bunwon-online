@@ -1913,6 +1913,15 @@ func _ready() -> void:
 		dh.tick(0.05)
 	_check(dh.hearts == 10, "옆으로 비키면 통나무에 안 맞음")
 	d_ch.ai_enabled = false
+	# 대장은 몸에 닿기만 해선 안 다침 (예고 패턴으로만)
+	d_ch._recover = 1.0
+	d_ch.position = main.hunter.feet()
+	dh.hearts = 10
+	dh._invulnerable = 0.0
+	for i in 5:
+		dh.tick(0.05)
+	_check(dh.hearts == 10, "대장 몸에 닿기만 해선 하트가 안 줆")
+	d_ch.position = main.hunter.feet() + Vector2(0, -120)
 	# 하나만 쓰러뜨리면 보상 없음, 둘 다 쓰러뜨리면 대장 알 (확률 고정)
 	HuntGround.egg_roll = 0.0
 	dh.drops.clear()

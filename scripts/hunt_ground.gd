@@ -363,7 +363,9 @@ func tick(delta: float) -> void:
 		popped = popped or (was_buried and not s.buried)
 		if knocked:
 			return
-		if _invulnerable <= 0.0 and not s.buried and not s.flyer and not s.stunned() and not s.airborne() and s.position.distance_to(feet) <= Config.WILD_SLIME_TOUCH_DISTANCE * s.scale.x:
+		# 대장은 몸에 닿아도 안 다친다 (2026-09-29 사용자: "보스몬스터에 부딪히기만 해도 체력이 감소하는건 근거리를 좋아하는 유저에겐 힘들거같아").
+		# 대장은 예고가 있는 패턴(내려찍기 · 혀 · 짚단 · 통나무)으로만 다치게 한다.
+		if _invulnerable <= 0.0 and not s.boss and not s.buried and not s.flyer and not s.stunned() and not s.airborne() and s.position.distance_to(feet) <= Config.WILD_SLIME_TOUCH_DISTANCE * s.scale.x:
 			_hurt(s.position, s.damage, s.title)
 	if popped:
 		_pack_pop()
