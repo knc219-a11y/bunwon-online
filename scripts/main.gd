@@ -1194,6 +1194,9 @@ func next_day() -> Array[String]:
 	var gold := gather_gold_dust()
 	if gold > 0:
 		lines.append("금두꺼비가 밭에서 사금을 주웠다. 돈통에 +%d원" % gold)
+	var seeds := gather_seeds()
+	if seeds > 0:
+		lines.append("아기 참새가 벌판에서 낟알을 물어 왔다. 씨앗 +%d" % seeds)
 	if GameState.hunter_unlocked and GameState.hunts_today > 0:
 		lines.append("사냥꾼이 다시 사냥을 나갈 수 있다.")
 	GameState.hunts_today = 0
@@ -1224,6 +1227,17 @@ func gather_gold_dust() -> int:
 		if r.y > 0 and c.job != CreatureJobs.REST:
 			total += _rng.randi_range(r.x, r.y)
 	GameState.money += total
+	return total
+
+
+## 낟알 줍기 (아기 참새, 2026-09-29 광동리 B): 일을 맡은 개체마다 종의 daily_seeds 범위만큼 씨앗을 물어 온다. 쉬는 중이면 없음.
+func gather_seeds() -> int:
+	var total := 0
+	for c in creatures:
+		var r := c.data.species.daily_seeds
+		if r.y > 0 and c.job != CreatureJobs.REST:
+			total += _rng.randi_range(r.x, r.y)
+	GameState.seeds += total
 	return total
 
 

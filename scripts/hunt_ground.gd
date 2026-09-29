@@ -156,6 +156,7 @@ func _fill_zone() -> void:
 		s.terrain = map
 		s.position = spots[i % spots.size()] if map else Farm.center_of(SLIME_CELLS[i % SLIME_CELLS.size()])
 		s.ai_enabled = _ai_on
+		s.swooped.connect(_on_swooped.bind(s))
 		add_child(s)
 		slimes.append(s)
 	for tree in _trees + _map_trees:
@@ -179,7 +180,7 @@ func _fill_zone() -> void:
 		sign_node.offset = Vector2(-24, -64)
 		sign_node.position = map.spot("J") + Vector2(0, 10) if map else SIGN_AT
 		sign_node.z_index = int(sign_node.position.y)
-		sign_node.draw.connect(_draw_sign.bind(z.sign))
+		sign_node.draw.connect(_draw_sign.bind(sign_node, z.sign))
 		add_child(sign_node)
 	_ground.queue_redraw()
 
@@ -353,7 +354,7 @@ func tick(delta: float) -> void:
 		popped = popped or (was_buried and not s.buried)
 		if knocked:
 			return
-		if _invulnerable <= 0.0 and not s.buried and not s.stunned() and not s.airborne() and s.position.distance_to(feet) <= Config.WILD_SLIME_TOUCH_DISTANCE * s.scale.x:
+		if _invulnerable <= 0.0 and not s.buried and not s.flyer and not s.stunned() and not s.airborne() and s.position.distance_to(feet) <= Config.WILD_SLIME_TOUCH_DISTANCE * s.scale.x:
 			_hurt(s.position, s.damage, s.title)
 	if popped:
 		_pack_pop()
@@ -415,7 +416,7 @@ func _tick_companion(delta: float) -> void:
 				companion.move_toward_point(behind, delta)
 			else:
 				companion.move_toward_point(companion.position, delta)
-	if target == null or _companion_cooldown > 0.0 or target.airborne():
+	if target == null or _companion_cooldown > 0.0 or (target.airborne() and companion.style != HuntCompanion.Style.PECK):
 		return
 	if companion.position.distance_to(target.position) > companion.reach():
 		return
@@ -428,6 +429,8 @@ func companion_attack(target: WildSlime) -> void:
 	companion.play_attack(target.position)
 	if target.hit(companion.position):
 		_defeat(target)
+	elif companion.style == HuntCompanion.Style.PECK:
+		pass
 	elif companion.style == HuntCompanion.Style.PULL:
 		# 혀 당기기: 동행 바로 앞까지 끌어와 잠깐 멈춘다 (사냥꾼 칼 앞으로 데려옴)
 		var toward := (target.position - companion.position).normalized()
@@ -467,8 +470,10 @@ func _defeat(s: WildSlime) -> void:
 	if not s.boss and (not GameState.first_egg_done or _egg_roll() < z.get("egg_chance", 0.0)):
 		# 게임 전체 첫 처치는 알을 반드시 떨어뜨린다 (첫 사냥에서 막히지 않게). 그 뒤로는 드물게.
 		GameState.first_egg_done = true
+		# 구역마다 일반 알 종 (광동리 = 아기 참새). 없으면 슬라임 알.
 		var table := CreatureCatalog.HUNT_TABLE
-		drops.append({at = _reachable(s.position), species = table[randi() % table.size()]})
+		var sp: CreatureSpecies = load(z.egg) if z.has("egg") and GameState.first_egg_done else table[randi() % table.size()]
+		drops.append({at = _reachable(s.position), species = sp})
 		GameState.notify("%s을(를) 쓰러뜨리자 알이 떨어졌다!" % s.title)
 	elif s.boss and zone + 1 < Config.HUNT_ZONES.size():
 		GameState.notify("%s을(를) 쓰러뜨렸다! 위쪽 길이 열렸다. 길에서 F로 %d구역 %s, 아래 입구 F로 마을.%s" % [s.title, zone + 2, Config.HUNT_ZONES[zone + 1].name, material_text])
@@ -518,6 +523,8 @@ func spawn_boss() -> WildSlime:
 	b.ai_enabled = _ai_on
 	b.slammed.connect(_on_slammed)
 	b.lashed.connect(_on_lashed)
+	b.bale_landed.connect(_on_bale_landed)
+	b.called.connect(_on_called)
 	add_child(b)
 	slimes.append(b)
 	return b
@@ -558,6 +565,47 @@ func _on_slammed(at: Vector2) -> void:
 		add_child(m)
 		slimes.append(m)
 	GameState.touch()
+
+
+## 참새가 내려꽂았다: 그림자 원 안이면 다친다.
+func _on_swooped(at: Vector2, s: WildSlime) -> void:
+	if _in_circle(at, Config.SWOOP_RADIUS) and _invulnerable <= 0.0 and not knocked:
+		_hurt(at, s.damage, s.title, "%s이(가) 내려꽂았다!" % s.title)
+
+
+## 허수아비 장수의 짚단이 떨어졌다: 원 안이면 다친다.
+func _on_bale_landed(at: Vector2) -> void:
+	var boss := _boss()
+	if boss and _in_circle(at, Config.STRAW_RADIUS) and _invulnerable <= 0.0 and not knocked:
+		_hurt(at, boss.damage, boss.title, "%s이(가) 던진 짚단에 맞았다!" % boss.title)
+
+
+## 허수아비 장수가 참새를 불렀다 (최대 SLAM_MINION_MAX 마리, 알·드롭 없음)
+func _on_called(at: Vector2) -> void:
+	if knocked:
+		return
+	var minions := slimes.filter(func(o: WildSlime) -> bool: return o.minion).size()
+	for i in mini(Config.STRAW_CALL, Config.SLAM_MINION_MAX - minions):
+		var m := WildSlime.new()
+		m.setup_zone(zone)
+		m.make_minion()
+		m.area = monster_area()
+		m.terrain = map
+		m.position = (at + Vector2(-40 if i == 0 else 40, -20)).clamp(m.area.position, m.area.end)
+		m.ai_enabled = _ai_on
+		m.swooped.connect(_on_swooped.bind(m))
+		add_child(m)
+		m._fly = 1.0
+		slimes.append(m)
+	GameState.notify("허수아비 장수가 깃발을 흔들자 참새가 몰려왔다!")
+	GameState.touch()
+
+
+## 사냥꾼 발이 at 둘레 원(3/4 시점 납작한 원) 안인지
+func _in_circle(at: Vector2, radius: float) -> bool:
+	var d := hunter.feet() - at
+	d.y *= 2.0
+	return d.length() <= radius
 
 
 ## 금두꺼비가 혀를 뻗었다: 선 위면 다치고, 혀가 지나간 자리에 금가루가 남는다.
@@ -665,25 +713,29 @@ func _draw() -> void:
 			draw_circle(p + r, 1.2, Color(1.0, 0.9, 0.45, a))
 	# 몬스터 공격 예고: 붉은 띠 (달려들기·혀) · 그림자 원 (내려찍기). 찰수록 진해진다.
 	for s in slimes:
-		var tg := s.telegraph()
-		if tg.is_empty():
-			continue
-		var fill := Color(1, 0.25, 0.2, 0.15 + 0.25 * tg.progress)
-		var edge := Color(1, 0.35, 0.3, 0.9)
-		if tg.kind == &"lane":
-			var from: Vector2 = tg.from
-			var to: Vector2 = tg.to
-			var side: Vector2 = (to - from).normalized().orthogonal() * tg.width / 2.0
-			var poly := PackedVector2Array([from + side, to + side, to - side, from - side])
-			draw_colored_polygon(poly, fill)
-			poly.append(from + side)
-			draw_polyline(poly, edge, 1.0)
-		else:
-			draw_set_transform(tg.at, 0.0, Vector2(1.0, 0.5))
-			draw_circle(Vector2.ZERO, tg.radius, fill)
-			draw_arc(Vector2.ZERO, tg.radius, 0, TAU, 40, edge, 1.5)
-			draw_arc(Vector2.ZERO, tg.radius * tg.progress, 0, TAU, 40, Color(1, 0.35, 0.3, 0.6), 1.0)
-			draw_set_transform(Vector2.ZERO)
+		for tg: Dictionary in s.telegraphs():
+			var fill := Color(1, 0.25, 0.2, 0.15 + 0.25 * tg.progress)
+			var edge := Color(1, 0.35, 0.3, 0.9)
+			if tg.kind == &"lane":
+				var from: Vector2 = tg.from
+				var to: Vector2 = tg.to
+				var side: Vector2 = (to - from).normalized().orthogonal() * tg.width / 2.0
+				var poly := PackedVector2Array([from + side, to + side, to - side, from - side])
+				draw_colored_polygon(poly, fill)
+				poly.append(from + side)
+				draw_polyline(poly, edge, 1.0)
+			else:
+				draw_set_transform(tg.at, 0.0, Vector2(1.0, 0.5))
+				draw_circle(Vector2.ZERO, tg.radius, fill)
+				draw_arc(Vector2.ZERO, tg.radius, 0, TAU, 40, edge, 1.5)
+				draw_arc(Vector2.ZERO, tg.radius * tg.progress, 0, TAU, 40, Color(1, 0.35, 0.3, 0.6), 1.0)
+				draw_set_transform(Vector2.ZERO)
+			if tg.get("bale", false):
+				# 날아오는 짚단: 떨어질수록 낮아진다
+				var p: Vector2 = tg.at + Vector2(0, -60.0 * (1.0 - tg.progress))
+				draw_circle(p, 6.0, Color(0.72, 0.58, 0.31))
+				draw_circle(p + Vector2(-1, -1), 5.0, Color(0.89, 0.76, 0.44))
+				draw_line(p + Vector2(-5, 0), p + Vector2(5, 0), Color(0.6, 0.45, 0.25), 1.0)
 	for d in drops:
 		var p: Vector2 = d.at
 		draw_set_transform(p + Vector2(0, 6), 0.0, Vector2(1.0, 0.4))
@@ -726,7 +778,8 @@ func _draw() -> void:
 
 
 ## 마을 표지 글씨: 항아리 몸통에 검정 글씨 (사용자: "금사리(구터)", 구조물은 회색 · 글씨는 검정)
-func _draw_sign(text: String) -> void:
+## n: 그 표지 노드 (구역을 옮겨 sign_node 가 비워진 뒤 지워지기 전에 한 번 더 그려질 수 있어 따로 받는다)
+func _draw_sign(n: Sprite2D, text: String) -> void:
 	var font := ThemeDB.fallback_font
 	var i := text.find("(")
 	var lines := [text.substr(0, i), text.substr(i)] if i > 0 else [text]
@@ -734,7 +787,7 @@ func _draw_sign(text: String) -> void:
 	for line: String in lines:
 		var size := 9 if line == lines[0] else 7
 		var w := font.get_string_size(line, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
-		sign_node.draw_string(font, Vector2(-w / 2, y), line, HORIZONTAL_ALIGNMENT_LEFT, -1, size, Color(0.08, 0.08, 0.08))
+		n.draw_string(font, Vector2(-w / 2, y), line, HORIZONTAL_ALIGNMENT_LEFT, -1, size, Color(0.08, 0.08, 0.08))
 		y += size + 3
 
 

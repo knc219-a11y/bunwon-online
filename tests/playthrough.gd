@@ -52,6 +52,12 @@ var craft_spent := 0
 var gross: Array[int] = []
 var spent_today := 0
 var scrap_creature: Creature = null
+## 광동리 (2026-09-29 선택 B): 처음 도착한 날 · 광동리에서 사냥한 날 수 · 거기서 맞은 횟수 · 쓰러진 횟수 · 날마다 끝 돈
+var gwang_day := -1
+var gwang_hunts := 0
+var gwang_hurt := 0
+var gwang_knocked := 0
+var money_by_day := {}
 
 
 func _ready() -> void:
@@ -84,6 +90,13 @@ func _ready() -> void:
 	var scrap_by_creature := scrap_creature.scraps if scrap_creature else 0
 	_log("\n대장간: 터 %s · 복구 %s · 복구비를 모으느라 안 산 날 %s · 장비 제작 %d번 (%d원) · 크리처가 주운 고철 %d · 마지막 7일 하루 벌이 평균 %.0f원 · 끝에 남은 돈 %d원 = 하루 벌이의 %.1f배" % [
 		"%d일" % site_day if site_day > 0 else "없음", "%d일" % restore_day if restore_day > 0 else "없음", held_days, crafted, craft_spent, scrap_by_creature, avg, GameState.money, GameState.money / maxf(avg, 1.0)])
+	var money_at := []
+	for d in [30, 35, 40]:
+		if money_by_day.has(d):
+			money_at.append("%d일 %d원" % [d, money_by_day[d]])
+	_log("\n광동리: 첫 도착 %s · 첫 대장 처치 %s · 광동리 사냥 %d번 · 거기서 맞은 횟수 %d (한 번에 %.1f) · 쓰러짐 %d번 · 끝 돈 %s · 아기 참새 %d마리" % [
+		"%d일" % gwang_day if gwang_day > 0 else "없음", cleared_day.get(Config.HUNT_ZONES[2].name, "없음"), gwang_hunts, gwang_hurt,
+		float(gwang_hurt) / maxi(gwang_hunts, 1), gwang_knocked, money_at, main.creatures.filter(func(c: Creature) -> bool: return c.data.species == CreatureCatalog.SPARROW).size()])
 	_log("입은 장비: 농부 %s · 사냥꾼 %s" % [_worn_text(&"farmer"), _worn_text(&"hunter")])
 	_log("\n최종: %d일째, 돈 %d원, 씨앗 %d, 크리처 %d (훈련 단계 합 %d), 밭 구역 %d, 웨이포인트 %s" % [GameState.day, GameState.money, GameState.seeds, main.creatures.size(), trained, GameState.open_plots, GameState.waypoints])
 	var out := OS.get_environment("OUT")
@@ -182,6 +195,7 @@ func play_day() -> void:
 	_log("밤 → 아침 카드: %s" % " / ".join(lines))
 	total_water_bonus += main.forage.bonus_today
 	gross.append(GameState.money - money0 + spent_today)
+	money_by_day[GameState.day - 1] = GameState.money
 	_log("하루 수입 %+d원 · 부화 기다리는 알 %d개 (농부 %d · 공급함 %d)" % [GameState.money - money0, GameState.farmer_eggs.size() + GameState.village_eggs.size(), GameState.farmer_eggs.size(), GameState.village_eggs.size()])
 
 
@@ -196,13 +210,14 @@ func place_new_creatures() -> void:
 	for s: Creature in main.creatures:
 		if farmers >= GameState.open_plots:
 			break
-		if s.home != main.HATCH_CELL and s.job == CreatureJobs.FORAGE and s != scrap_creature:
+		if s.home != main.HATCH_CELL and s.job == CreatureJobs.FORAGE and s != scrap_creature and s.data.species != CreatureCatalog.SPARROW:
 			_assign(s, CreatureJobs.FARM, farmers)
 			farmers += 1
 	for s: Creature in main.creatures:
 		if s.home != main.HATCH_CELL:
 			continue
-		if farmers < GameState.open_plots:
+		# 아기 참새는 채집 재능이라 채집 전담 (플레이어가 할 법한 배치)
+		if farmers < GameState.open_plots and s.data.species != CreatureCatalog.SPARROW:
 			_assign(s, CreatureJobs.FARM, farmers)
 			farmers += 1
 		else:
@@ -211,7 +226,7 @@ func place_new_creatures() -> void:
 	if GameState.forge_state >= 2 and scrap_creature == null and not main.creatures.is_empty():
 		var pick: Creature = null
 		for s: Creature in main.creatures:
-			if s.home == main.HATCH_CELL or s.job != CreatureJobs.FORAGE:
+			if s.home == main.HATCH_CELL or s.job != CreatureJobs.FORAGE or s.data.species == CreatureCatalog.SPARROW:
 				continue
 			if pick == null or (s.has_element(&"earth") and not pick.has_element(&"earth")):
 				pick = s
@@ -469,6 +484,14 @@ func hunt_day() -> void:
 	if zone == knocked_zone and zone > 0:
 		# 어제 여기서 쓰러졌으면 한 구역 아래부터 (사람이라면 그럴 것)
 		zone = GameState.waypoints.filter(func(z: int) -> bool: return z < knocked_zone).max()
+	# 대장간을 아직 못 고쳤으면 사금 덩이(금사리 금두꺼비)를 모으러 금사리 웨이포인트부터 걸어간다 (광동리로 건너뛰지 않음)
+	if GameState.forge_state < 2 and zone > Config.FORGE_ZONE and Config.FORGE_ZONE in GameState.waypoints:
+		zone = Config.FORGE_ZONE
+	# 광동리 참새는 날아다녀서 혀 · 박치기가 안 닿는다: 광동리로 가면 아기 참새를 데려간다
+	if GameState.waypoints.max() >= 2 or zone >= 1:
+		for s: Creature in main.creatures:
+			if s.data.species == CreatureCatalog.SPARROW and (pick == null or pick.data.species != CreatureCatalog.SPARROW):
+				pick = s
 	main.enter_hunt(pick, zone)
 	var h: HuntGround = main.hunt
 	h.set_process(false)
@@ -486,7 +509,15 @@ func hunt_day() -> void:
 	var zone_t := 0.0
 	var seen := {}
 	var dodges := 0
+	var gwang_hurt0 := -1
+	## 가방 · 창고가 차서 못 주운 드롭 자리 (이번 사냥에선 다시 가지 않음. 안 그러면 한 걸음 떨어졌다 돌아가기를 되풀이)
+	var full_at := {}
 	while t < 900.0:
+		if h.zone == 2 and gwang_hurt0 < 0:
+			gwang_hurt0 = hurt
+			gwang_hunts += 1
+			if gwang_day < 0:
+				gwang_day = GameState.day
 		if h.knocked:
 			break
 		if t + 2 * DT >= 900.0 and t < 900.0 - DT:
@@ -507,29 +538,37 @@ func hunt_day() -> void:
 		for d in h.drops:
 			pickups.append(d.at)
 		for d in h.loot:
-			if not d.has("full"):
+			if d.has("full"):
+				full_at[d.at] = true
+			elif not full_at.has(d.at):
 				pickups.append(d.at)
 		var nearest_s: WildSlime = h._nearest_slime(feet)
+		# 나는 참새는 칼이 안 닿으니 땅에 앉은 것부터 노린다 (다 날고 있으면 가장 가까운 것을 따라감)
+		var grounded := h.slimes.filter(func(o: WildSlime) -> bool: return not o.airborne())
+		if not grounded.is_empty() and nearest_s != null and nearest_s.airborne():
+			grounded.sort_custom(func(a: WildSlime, b: WildSlime) -> bool: return a.position.distance_to(feet) < b.position.distance_to(feet))
+			nearest_s = grounded[0]
 		# 공격 예고: REACT 초가 지나야 알아채고, 그 안에 서 있으면 비켜선다
 		var escape := Vector2.ZERO
 		for s: WildSlime in h.slimes:
-			var tg := s.telegraph()
-			if tg.is_empty():
+			var tgs := s.telegraphs()
+			if tgs.is_empty():
 				seen.erase(s)
 				continue
 			seen[s] = seen.get(s, 0.0) + DT
 			if seen[s] < REACT:
 				continue
-			if tg.kind == &"lane":
-				var near := Geometry2D.get_closest_point_to_segment(feet, tg.from, tg.to)
-				if near.distance_to(feet) <= tg.width / 2.0 + 6.0:
-					var axis: Vector2 = (tg.to - tg.from).normalized()
-					var side := axis.orthogonal()
-					escape += side * (1.0 if (feet - tg.from).dot(side) >= 0.0 else -1.0)
-			else:
-				var d: Vector2 = feet - tg.at
-				if Vector2(d.x, d.y * 2.0).length() <= tg.radius + 8.0:
-					escape += d.normalized() if d != Vector2.ZERO else Vector2.DOWN
+			for tg: Dictionary in tgs:
+				if tg.kind == &"lane":
+					var near := Geometry2D.get_closest_point_to_segment(feet, tg.from, tg.to)
+					if near.distance_to(feet) <= tg.width / 2.0 + 6.0:
+						var axis: Vector2 = (tg.to - tg.from).normalized()
+						var side := axis.orthogonal()
+						escape += side * (1.0 if (feet - tg.from).dot(side) >= 0.0 else -1.0)
+				else:
+					var d: Vector2 = feet - tg.at
+					if Vector2(d.x, d.y * 2.0).length() <= tg.radius + 8.0:
+						escape += d.normalized() if d != Vector2.ZERO else Vector2.DOWN
 		if escape != Vector2.ZERO:
 			dodges += 1
 			var mult: float = (h.map.speed_at(feet) if h.map else 1.0) * Wearables.speed_mult(&"hunter") * hunter.slow_mult
@@ -602,6 +641,9 @@ func hunt_day() -> void:
 	hunt_hurt += hurt
 	hunt_knocked += int(knocked)
 	knocked_zone = h.zone if knocked else -1
+	if gwang_hurt0 >= 0:
+		gwang_hurt += hurt - gwang_hurt0
+		gwang_knocked += int(knocked and h.zone == 2)
 	if h.boss_spawned and h._boss() == null:
 		_cleared(h.zone)
 	var comp := h.companion.display_name() if h.companion else "혼자"

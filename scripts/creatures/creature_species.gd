@@ -21,11 +21,14 @@ extends Resource
 @export_group("사냥 동행")
 ## 동행 공격 방식. 비우면 첫 속성으로 정한다 (물 = 멀리서 물총, 그 밖 = 붙어서 박치기).
 ## &"pull" = 혀 당기기 (멀리 있는 몬스터를 끌어와 잠깐 멈춤, 금두꺼비)
+## &"peck" = 날아가 쪼기 (물·벽 너머, 날고 있는 몬스터도. 날던 참새는 떨어짐, 아기 참새)
 @export var companion_style: StringName = &""
 
 @export_group("특기")
 ## 사금 줍기 (금두꺼비): 밭에서 일하는 개체가 밤마다 주워 오는 돈 범위. (0, 0)이면 없음.
 @export var daily_gold := Vector2i.ZERO
+## 낟알 줍기 (아기 참새, 2026-09-29 광동리 B): 채집을 맡은 개체가 아침마다 벌판에서 물어 오는 씨앗 범위. (0, 0)이면 없음.
+@export var daily_seeds := Vector2i.ZERO
 
 @export_group("그래픽")
 ## 속성 id → 스프라이트 시트 (규격은 docs/sprites.md). 시트가 없으면 color 로 도형을 그린다.
