@@ -26,6 +26,8 @@ var carried_by: Character = null
 var auto_work := true
 
 var _farm: Farm
+## 채집 일(CreatureJobs.FORAGE)에서 쓰는 마을 풀밭. main 이 부화 때 넣어 준다.
+var forage: Forage
 var _timer := 0.0
 var _busy := false
 var _bob := 0.0
@@ -81,7 +83,11 @@ func place(at_cell: Vector2i) -> void:
 
 ## 한 번 일한다. 할 일이 있으면 그 칸으로 이동해서 수행하고 true.
 func work_once() -> bool:
-	if not CreatureJobs.FARM_WORK.has(job) or carried_by != null or _busy:
+	if carried_by != null or _busy:
+		return false
+	if job == CreatureJobs.FORAGE:
+		return _forage_once()
+	if not CreatureJobs.FARM_WORK.has(job):
 		return false
 	var work: Farm.Work = CreatureJobs.FARM_WORK[job]
 	var target: Variant = _farm.find_work(work, home, data.work_radius(), [], position)
@@ -100,12 +106,60 @@ func work_once() -> bool:
 	return true
 
 
+## 속성 id 가 있는지 (땅 = 도라지 뿌리, 물 = 풀밭 물주기)
+func has_element(id: StringName) -> bool:
+	return data.elements.any(func(e: CreatureElement) -> bool: return e.id == id)
+
+
+## 채집 한 번 (2026-09-29 사용자 선택 B 속성별 채집): 밭 범위와 상관없이 마을 풀밭에서 가장 가까운 들나물로 가서 캐고
+## 공급함에 바로 진열한다. 땅속성은 도라지 뿌리도 캐고, 물속성은 캔 자리에 물을 준다. 할 게 없으면 제자리로 돌아간다.
+func _forage_once() -> bool:
+	if forage == null:
+		return false
+	var dig := has_element(&"earth")
+	var target: Variant = forage.nearest_target(position, dig)
+	if target == null:
+		if position.distance_to(Farm.center_of(home)) > 1.0:
+			_hop_to(Farm.center_of(home), func() -> void: pass)
+			return true
+		return false
+	forage.claimed[target] = true
+	_hop_to(Farm.center_of(target), func() -> void:
+		forage.claimed.erase(target)
+		if forage.herbs.has(target):
+			forage.pick(target)
+			GameState.displayed_herbs += 1
+			if has_element(&"water"):
+				forage.water(target)
+		elif forage.roots.has(target):
+			forage.dig_root(target)
+			GameState.displayed_roots += 1
+		GameState.touch())
+	return true
+
+
+## 여러 칸을 깡충깡충 건너가 일 동작을 하고 done 을 부른다. 멀수록 오래 걸린다.
+func _hop_to(to: Vector2, done: Callable) -> void:
+	_busy = true
+	_play(Anim.HOP)
+	var tiles := maxf(position.distance_to(to) / Config.TILE, 1.0)
+	var tw := create_tween()
+	tw.tween_property(self, "position", to, hop_time() * tiles)
+	tw.tween_callback(_play.bind(Anim.WORK))
+	tw.tween_interval(Config.CREATURE_WORK_ANIM_TIME)
+	tw.tween_callback(func() -> void:
+		done.call()
+		_busy = false
+		_play(Anim.IDLE))
+
+
 ## 시트에서 지금 보여 줄 열
 func frame_column() -> int:
 	match _anim:
 		Anim.HOP:
+			# 여러 칸을 건너가면(채집) 깡충 동작을 칸마다 되풀이한다
 			var i := int(_anim_time / hop_time() * HOP_COLUMNS.size())
-			return HOP_COLUMNS[mini(i, HOP_COLUMNS.size() - 1)]
+			return HOP_COLUMNS[i % HOP_COLUMNS.size()]
 		Anim.WORK:
 			# 급수 외의 일(파종·수확)은 아직 전용 동작이 없어 대기 동작을 빠르게 재생
 			var columns := WATER_COLUMNS if job == CreatureJobs.WATER else IDLE_COLUMNS
@@ -175,7 +229,8 @@ func _draw() -> void:
 	if data.train_total() > 0:
 		label += " ★%d" % data.train_total()
 	draw_string(ThemeDB.fallback_font, Vector2(-24, -26), label, HORIZONTAL_ALIGNMENT_CENTER, 48, 9)
-	if carried_by == null:
+	# 채집은 범위 없이 마을 풀밭 전체를 돌므로 범위 네모를 그리지 않는다
+	if carried_by == null and job != CreatureJobs.FORAGE:
 		# 작업 범위 표시
 		var radius := data.work_radius()
 		var r := Rect2(Vector2((home - Vector2i(radius, radius)) * Config.TILE), Vector2.ONE * (radius * 2 + 1) * Config.TILE)

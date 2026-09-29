@@ -117,6 +117,8 @@ func _ready() -> void:
 
 	_build_hud()
 	GameState.changed.connect(_refresh_hud)
+	# 채집 크리처가 진열하면 공급함 표시도 바뀐다
+	GameState.changed.connect(_refresh_props)
 	GameState.message.connect(func(t: String) -> void: _message.text = t)
 	_refresh_props()
 	GameState.notify("농부로 밭을 가꿔 보자. 마을 공급함에 알이 하나 있다. 풀밭의 들나물은 F로 캔다.")
@@ -334,6 +336,8 @@ func _farmer_interact() -> void:
 		var herb := forage.pick(forage.nearest(farmer.feet()))
 		GameState.herbs += 1
 		GameState.notify("%s%s 캤다! (들나물 %d) 공급함에 진열하면 밤사이 한 포기 %d원." % [herb, Forage.object_particle(herb), GameState.herbs, Config.HERB_PRICE])
+	elif forage.nearest_root(farmer.feet()) != null:
+		GameState.notify("땅속 깊이 %s 뿌리가 있다. 손으로는 못 캔다. 땅속성 크리처에게 채집(R)을 맡기면 캐 온다." % Config.ROOT_NAME)
 	elif _near_stash():
 		open_inventory(true)
 	elif _near(supply_box):
@@ -965,8 +969,16 @@ func next_day() -> Array[String]:
 		GameState.money += earned
 		lines.append("공급함의 들나물 %d포기가 팔렸다. 돈통에 +%d원" % [GameState.displayed_herbs, earned])
 		GameState.displayed_herbs = 0
+	if GameState.displayed_roots > 0:
+		var earned := GameState.displayed_roots * Config.ROOT_PRICE
+		GameState.money += earned
+		lines.append("공급함의 %s %d뿌리가 팔렸다. 돈통에 +%d원" % [Config.ROOT_NAME, GameState.displayed_roots, earned])
+		GameState.displayed_roots = 0
 	forage.sprout(_rng)
-	lines.append("밭 밖 풀밭에 들나물 %d포기가 돋았다." % forage.herbs.size())
+	var herb_line := "밭 밖 풀밭에 들나물 %d포기가 돋았다." % forage.herbs.size()
+	if forage.bonus_today > 0:
+		herb_line += " (물 준 풀밭 +%d)" % forage.bonus_today
+	lines.append(herb_line)
 	var grown := farm.advance_day()
 	if grown > 0:
 		lines.append("밤사이 작물 %d개가 자랐다." % grown)
@@ -1021,6 +1033,7 @@ func _hatch(species: CreatureSpecies, at_cell: Vector2i) -> Creature:
 		# 튼튼한 사냥칼 (2026-09-27 후보 A 첫 조각): 좋은 알을 골라 오므로 첫 크리처만큼 바닥 보장
 		data.guarantee_minimum(Config.FIRST_CREATURE_MIN_WORK_SPEED, Config.FIRST_CREATURE_MIN_RADIUS)
 	add_child(s)
+	s.forage = forage
 	s.setup(farm, data, at_cell)
 	creatures.append(s)
 	return s
@@ -1062,6 +1075,10 @@ func _refresh_props() -> void:
 		shelf.append("알 %d" % GameState.village_eggs.size())
 	if GameState.displayed_crops > 0:
 		shelf.append("무 %d 진열" % GameState.displayed_crops)
+	if GameState.displayed_herbs > 0:
+		shelf.append("나물 %d" % GameState.displayed_herbs)
+	if GameState.displayed_roots > 0:
+		shelf.append("%s %d" % [Config.ROOT_NAME, GameState.displayed_roots])
 	supply_box.set_badge(" · ".join(shelf))
 
 

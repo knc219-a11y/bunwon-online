@@ -1410,6 +1410,73 @@ func _ready() -> void:
 	main._process(5.0)
 	_check(is_equal_approx(GameState.minutes, c_min + 5.0 * Config.CLOCK_MINUTES_PER_SECOND), "닫으면 다시 흐름 (실제 1초 = 게임 %s분)" % Config.CLOCK_MINUTES_PER_SECOND)
 
+	# 33) 크리처 채집 (2026-09-29 사용자 선택 B 속성별 채집): 채집 크리처가 풀밭 나물을 캐서 공급함에 바로 진열.
+	#     땅속성은 손으로 못 캐는 도라지 뿌리도 캐고, 물속성은 캔 자리에 물을 줘서 다음 날 나물이 더 돋는다.
+	var f_forage: Forage = main.forage
+	var f_bad: Array[Vector2i] = []
+	for spot in Config.ROOT_SPOTS:
+		var stand := Farm.center_of(spot) - Vector2(0, main.farmer.FEET_Y)
+		var f_inside: bool = main.farm.get_cell(spot) != null or main.farm._path.has(spot) or main.farm._fence.has(spot) or spot.y < 1 or spot.y > 12 or spot in Config.HERB_SPOTS
+		for p: Prop in main.props:
+			if p.footprint_rect().has_point(Farm.center_of(spot) - p.position):
+				f_inside = true
+		if f_inside or not main.farm.is_free(main.farmer.feet_rect(stand)):
+			f_bad.append(spot)
+	_check(f_bad.is_empty(), "도라지 자리는 모두 들나물 자리와 겹치지 않는 풀밭 %s" % [f_bad])
+	for s: Creature in main.creatures:
+		s.queue_free()
+	main.creatures.clear()
+	main.next_day()
+	var f_roots := f_forage.roots.size()
+	_check(f_roots >= Config.ROOTS_PER_DAY.x and f_roots <= Config.ROOTS_PER_DAY.y, "아침마다 땅속에 도라지 %d~%d뿌리 (%d)" % [Config.ROOTS_PER_DAY.x, Config.ROOTS_PER_DAY.y, f_roots])
+	main._set_active(main.farmer)
+	var f_root_cell: Vector2i = f_forage.roots.keys()[0]
+	main.farmer.position = Farm.center_of(f_root_cell) - Vector2(0, main.farmer.FEET_Y) + Vector2(10, 0)
+	for f_cell: Vector2i in f_forage.herbs.keys():
+		if Farm.center_of(f_cell).distance_to(main.farmer.feet()) <= Config.INTERACT_DISTANCE:
+			f_forage.herbs.erase(f_cell)
+	main.interact()
+	_check(f_forage.roots.has(f_root_cell) and main._message.text.contains("손으로는 못 캔다"), "농부는 도라지를 손으로 못 캠 (알려 줌)")
+	_check(CreatureJobs.FARM_JOBS.has(CreatureJobs.FORAGE) and CreatureJobs.display_name(CreatureJobs.FORAGE) == "채집", "크리처 일 목록(R)에 채집")
+	var f_water: Creature = main._hatch(CreatureCatalog.SLIME, Vector2i(3, 12))
+	f_water.data.set_element(load("res://data/creatures/elements/water.tres"))
+	var f_earth: Creature = main._hatch(CreatureCatalog.SLIME, Vector2i(8, 12))
+	f_earth.data.set_element(load("res://data/creatures/elements/earth.tres"))
+	for s: Creature in [f_water, f_earth]:
+		s.auto_work = false
+		while s.job != CreatureJobs.FORAGE:
+			s.next_job()
+	f_earth.queue_redraw()
+	var f_herbs := f_forage.herbs.size()
+	GameState.displayed_herbs = 0
+	GameState.displayed_roots = 0
+	Engine.time_scale = 20.0
+	for i in 400:
+		var f_any := false
+		for s: Creature in [f_water, f_earth]:
+			if s._busy or s.work_once():
+				f_any = true
+		if not f_any:
+			break
+		await get_tree().process_frame
+	Engine.time_scale = 1.0
+	_check(f_forage.herbs.is_empty() and GameState.displayed_herbs == f_herbs, "채집 크리처 둘이 나물 %d포기를 모두 캐서 공급함에 진열" % f_herbs)
+	_check(f_forage.roots.is_empty() and GameState.displayed_roots == f_roots, "땅속성은 도라지 %d뿌리도 캠" % f_roots)
+	_check(f_forage.claimed.is_empty() and f_water.position.distance_to(Farm.center_of(f_water.home)) < 1.0, "할 일이 없으면 제자리로 돌아감")
+	_check(not f_forage.watered.is_empty(), "물속성은 캔 자리 풀밭에 물을 줌 (%d칸)" % f_forage.watered.size())
+	main._refresh_props()
+	_check(main.supply_box.badge.contains("도라지 %d" % f_roots) and main.supply_box.badge.contains("나물 %d" % f_herbs), "공급함 표시에 진열한 나물·도라지")
+	var f_bonus := mini(f_forage.watered.size(), Config.HERB_WATER_BONUS_MAX)
+	var f_money := GameState.money
+	var f_lines: Array[String] = main.next_day()
+	var f_text := " ".join(f_lines)
+	_check(GameState.money - f_money >= f_herbs * Config.HERB_PRICE + f_roots * Config.ROOT_PRICE and f_text.contains("도라지 %d뿌리가 팔렸다" % f_roots), "밤사이 나물·도라지가 팔림 (도라지 한 뿌리 %d원)" % Config.ROOT_PRICE)
+	_check(f_forage.bonus_today == f_bonus and f_forage.herbs.size() >= Config.HERBS_PER_DAY.x + f_bonus and f_text.contains("물 준 풀밭 +%d" % f_bonus), "물 준 풀밭 덕분에 다음 날 나물 +%d포기" % f_bonus)
+	_check(f_forage.watered.is_empty(), "물 준 표시는 하루 지나면 사라짐")
+	# 쉬는 중이면 채집하지 않음
+	f_earth.job = CreatureJobs.REST
+	_check(not f_earth.work_once(), "쉬는 크리처는 채집하지 않음")
+
 	print("SMOKE TEST: %s (%d failures)" % ["PASS" if _failures == 0 else "FAIL", _failures])
 	get_tree().quit(1 if _failures > 0 else 0)
 

@@ -30,6 +30,13 @@ var hand_sec := 0.0
 var creature_sec := 0.0
 var hunt_sec := 0.0
 var clock_ends: Array[String] = []
+## 크리처 채집 (2026-09-29 사용자 선택 B): 들나물을 누가 캤는지, 도라지 뿌리, 손일 합계
+var total_manual := 0
+var total_hand_herbs := 0
+var total_creature_herbs := 0
+var total_roots := 0
+## 채집 크리처가 사는 자리 (밭이 아니라 공급함 옆 풀밭)
+const FORAGE_HOME := Vector2i(15, 7)
 
 
 func _ready() -> void:
@@ -52,6 +59,7 @@ func _ready() -> void:
 		trained += s.data.train_total()
 	_log("\n사냥: %d번 · 맞은 횟수 %d (하루 평균 %.1f) · 쓰러짐 %d번 · 대장 처음 쓰러뜨린 날 %s" % [hunt_days, hunt_hurt, float(hunt_hurt) / maxi(hunt_days, 1), hunt_knocked, cleared_day])
 	_log("\n하루 끝 시각 (봇 · 사람 어림 x%.0f, 6시 시작, 실제 1초 = 게임 %s분): %s" % [HUMAN_MULT, Config.CLOCK_MINUTES_PER_SECOND, ", ".join(clock_ends)])
+	_log("\n들나물·채집 (14일 합계): 손일 %d번 · 들나물 손으로 %d포기 · 크리처가 %d포기 · 도라지 %d뿌리 (%d원)" % [total_manual, total_hand_herbs, total_creature_herbs, total_roots, total_roots * Config.ROOT_PRICE])
 	_log("\n최종: %d일째, 돈 %d원, 씨앗 %d, 크리처 %d (훈련 단계 합 %d), 밭 구역 %d, 웨이포인트 %s" % [GameState.day, GameState.money, GameState.seeds, main.creatures.size(), trained, GameState.open_plots, GameState.waypoints])
 	var out := OS.get_environment("OUT")
 	if out != "":
@@ -71,6 +79,7 @@ func play_day() -> void:
 	creature_sec = 0.0
 	hunt_sec = 0.0
 	var money0 := GameState.money
+	var herbs0 := GameState.displayed_herbs
 	_log("\n## %d일째 (시작 돈 %d, 씨앗 %d, 작물 %d)" % [GameState.day, GameState.money, GameState.seeds, GameState.crops])
 	main._set_active(main.farmer)
 	await place_new_creatures()
@@ -89,6 +98,13 @@ func play_day() -> void:
 	await let_creatures_work()
 	incubate()
 	_log("농부: 손으로 한 도구질 %d번 %s · 공급함: %s" % [manual_actions, farm_counts, bought])
+	var creature_herbs := GameState.displayed_herbs - herbs0 - herbs
+	if creature_herbs > 0 or GameState.displayed_roots > 0:
+		_log("크리처 채집: 들나물 %d포기 · %s %d뿌리 진열 (내일 물 준 풀밭 %d칸)" % [creature_herbs, Config.ROOT_NAME, GameState.displayed_roots, main.forage.watered.size()])
+	total_manual += manual_actions
+	total_hand_herbs += herbs
+	total_creature_herbs += creature_herbs
+	total_roots += GameState.displayed_roots
 	var planted := 0
 	var watered := 0
 	for c: Vector2i in farm._cells:
@@ -130,15 +146,24 @@ func place_new_creatures() -> void:
 		if s.home != main.HATCH_CELL:
 			continue
 		# 첫 슬라임은 급수. 다음부터는 수확 → 파종 → 새 구역 급수 순으로 채운다 (플레이어가 할 법한 순서)
+		# 채집 (2026-09-29 선택 B): 첫 땅속성은 도라지를 캐러 채집, 밭 일이 다 차면 남는 크리처도 채집
 		var want: StringName = s.job
 		if s.job == CreatureJobs.REST:
-			for j in [CreatureJobs.HARVEST, CreatureJobs.SOW, CreatureJobs.WATER]:
-				if jobs_have.get(j, 0) < GameState.open_plots:
-					want = j
-					break
+			var earth := s.has_element(&"earth")
+			if earth and jobs_have.get(CreatureJobs.FORAGE, 0) == 0:
+				want = CreatureJobs.FORAGE
+			else:
+				for j in [CreatureJobs.HARVEST, CreatureJobs.SOW, CreatureJobs.WATER]:
+					if jobs_have.get(j, 0) < GameState.open_plots:
+						want = j
+						break
+				if want == CreatureJobs.REST:
+					want = CreatureJobs.FORAGE
 		var plot_i := clampi(jobs_have.get(want, 0), 0, GameState.open_plots - 1)
 		var plot := Config.FIELD_PLOTS[plot_i]
 		var at := plot.position + Vector2i(plot.size.x / 2, plot.size.y / 2)
+		if want == CreatureJobs.FORAGE:
+			at = FORAGE_HOME
 		main.farmer.position = Farm.center_of(s.home)
 		main.interact()
 		main.farmer.position = Farm.center_of(at)
@@ -146,7 +171,7 @@ func place_new_creatures() -> void:
 		while s.job != want:
 			s.next_job()
 		jobs_have[want] = jobs_have.get(want, 0) + 1
-		_log("크리처 배치: %s → %s 칸 %s" % [s.describe(), Config.FIELD_PLOT_NAMES[plot_i], at])
+		_log("크리처 배치: %s → %s 칸 %s" % [s.describe(), "풀밭" if want == CreatureJobs.FORAGE else Config.FIELD_PLOT_NAMES[plot_i], at])
 
 
 func let_creatures_work() -> void:
@@ -159,6 +184,8 @@ func let_creatures_work() -> void:
 			if s._busy:
 				busy = true
 			elif CreatureJobs.FARM_WORK.has(s.job) and farm.find_work(CreatureJobs.FARM_WORK[s.job], s.home, s.data.work_radius(), [], s.position) != null:
+				busy = true
+			elif s.job == CreatureJobs.FORAGE and main.forage.nearest_target(s.position, s.has_element(&"earth")) != null:
 				busy = true
 		if not busy:
 			break

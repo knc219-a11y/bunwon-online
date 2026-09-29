@@ -8,16 +8,19 @@ const REST := &"rest"
 const SOW := &"sow"
 const WATER := &"water"
 const HARVEST := &"harvest"
+## 들나물 채집 (2026-09-29 사용자 선택 B): 밭이 아니라 마을 풀밭 전체에서 일한다 (Creature._forage_once)
+const FORAGE := &"forage"
 
 const NAMES := {
 	REST: "쉬는 중",
 	SOW: "파종",
 	WATER: "급수",
 	HARVEST: "수확",
+	FORAGE: "채집",
 }
 
 ## 농장에서 R 키로 돌아가며 고르는 일
-const FARM_JOBS: Array[StringName] = [REST, SOW, WATER, HARVEST]
+const FARM_JOBS: Array[StringName] = [REST, SOW, WATER, HARVEST, FORAGE]
 
 ## 농장 일 id → 밭 작업
 const FARM_WORK := {
