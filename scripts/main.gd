@@ -424,6 +424,8 @@ func leave_hunt() -> void:
 	GameState.hunter_eggs.append_array(eggs)
 	hunt.queue_free()
 	hunt = null
+	# 금가루에 느려진 채로 마을에 돌아오지 않게
+	hunter.slow_mult = 1.0
 	for n in _village_nodes:
 		n.visible = true
 	_village_nodes.clear()
@@ -808,7 +810,10 @@ func waypoint_option_text(id: StringName) -> String:
 	var z := String(id).trim_prefix("zone_").to_int()
 	if z == 0:
 		return "1구역 %s부터 걸어가기" % Config.HUNT_ZONES[0].name
-	return "%d구역 %s 웨이포인트 (%s)" % [z + 1, Config.HUNT_ZONES[z].name, Config.HUNT_ZONES[z].monster]
+	var text := "%d구역 %s 웨이포인트 (%s)" % [z + 1, Config.HUNT_ZONES[z].name, Config.HUNT_ZONES[z].monster]
+	if Config.HUNT_ZONES[z].has("advice"):
+		text += " · " + Config.HUNT_ZONES[z].advice
+	return text
 
 
 func _rebuild_menu() -> void:

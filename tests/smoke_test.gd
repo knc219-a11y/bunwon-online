@@ -1232,6 +1232,121 @@ func _ready() -> void:
 	_check(fast < comp_t.attack_interval() or is_equal_approx(fast, comp_t.attack_interval()), "속도 훈련은 동행 공격 간격도 줄임 (최대 두 배 제한 안에서)")
 	comp_t.free()
 
+	# 30) 사냥 난이도 (2026-09-29 사용자: 후보 A·B·C 셋 다). A 달려들기 · B 금사리 세기 · C 대장 패턴
+	if main.hunt:
+		main.leave_hunt()
+	main.close_menu()
+	main._set_active(main.hunter)
+	GameState.hunts_today = 0
+	if not 1 in GameState.waypoints:
+		GameState.waypoints.append(1)
+	main.enter_hunt(null, 0)
+	var d_dh: HuntGround = main.hunt
+	d_dh.set_ai(false)
+	var d_hf: Vector2 = main.hunter.feet()
+	var d_lw: WildSlime = d_dh.slimes[0]
+	for o: WildSlime in d_dh.slimes:
+		o.position = d_hf + Vector2(0, 300)
+	d_lw.position = d_hf + Vector2(40, 0)
+	d_lw.ai_enabled = true
+	var d_h0 := d_dh.hearts
+	d_dh.tick(0.05)
+	var d_tg := d_lw.telegraph()
+	_check(not d_tg.is_empty() and d_tg.kind == &"lane" and d_dh.hearts == d_h0, "A. 가까이 오면 웅크리고 붉은 띠로 예고 (아직 안 맞음)")
+	d_dh.swing(Vector2.RIGHT)
+	_check(not d_lw.telegraph().is_empty(), "A. 웅크리는 중엔 맞아도 달려들기가 멈추지 않음")
+	for i in 30:
+		d_dh.tick(1.0 / 30.0)
+	_check(d_dh.hearts == d_h0 - 1 and d_lw.recovering(), "A. 띠 위에 서 있으면 돌진에 맞고, 몬스터는 헐떡임 (하트 %d → %d)" % [d_h0, d_dh.hearts])
+	# 비켜서면 안 맞는다
+	d_dh._invulnerable = 0.0
+	d_lw.hp = 99
+	for i in 60:
+		d_dh.tick(1.0 / 30.0)
+		if not d_lw.telegraph().is_empty():
+			break
+	d_lw.position = main.hunter.feet() + Vector2(40, 0)
+	d_lw._lunge_dir = Vector2.LEFT
+	var d_h1 := d_dh.hearts
+	main.hunter.position += Vector2(0, 40)
+	for i in 25:
+		d_dh.tick(1.0 / 30.0)
+	_check(d_dh.hearts == d_h1, "A. 예고를 보고 옆으로 비키면 안 맞음")
+	main.leave_hunt()
+	# B. 금사리: 하트 -2, 무리로 튀어나옴
+	GameState.hunts_today = 0
+	main.enter_hunt(null, 1)
+	var d_gh: HuntGround = main.hunt
+	d_gh.set_ai(false)
+	var d_z2d: Dictionary = Config.HUNT_ZONES[1]
+	_check(d_z2d.damage == 2 and d_gh.slimes[0].damage == 2 and d_gh.slimes[0].hp == d_z2d.hp and d_z2d.hp > Config.HUNT_ZONES[0].hp, "B. 금사리는 체력 %d · 하트 -%d" % [d_z2d.hp, d_z2d.damage])
+	_check(main.waypoint_option_text(&"zone_1").contains(d_z2d.advice), "B. 웨이포인트 메뉴에 권장 준비")
+	var d_gf: Vector2 = main.hunter.feet()
+	for o: WildSlime in d_gh.slimes:
+		o.buried = true
+		o.position = d_gf + Vector2(0, 400)
+	var d_pa: WildSlime = d_gh.slimes[0]
+	var d_pb: WildSlime = d_gh.slimes[1]
+	d_pa.position = d_gf + Vector2(50, 0)
+	d_pb.position = d_gf + Vector2(50 + Config.WILD_PACK_DISTANCE - 10, 0)
+	d_gh.tick(0.01)
+	_check(not d_pa.buried and not d_pb.buried and d_gh.slimes[2].buried, "B. 하나가 튀어나오면 근처 모래게도 무리로 튀어나옴 (먼 것은 그대로)")
+	var d_h2 := d_gh.hearts
+	d_pa.position = d_gf
+	d_gh.tick(0.01)
+	_check(d_gh.hearts == d_h2 - 2, "B. 모래게에 부딪히면 하트 -2")
+	# C. 금두꺼비 혀 채찍 + 금가루
+	d_gh._invulnerable = 0.0
+	d_gh.hearts = d_gh.max_hearts()
+	for o: WildSlime in d_gh.slimes.duplicate():
+		o.hp = 1
+		d_gh._defeat(o)
+	var d_toad_b: WildSlime = d_gh._boss()
+	_check(d_toad_b != null and d_toad_b.pattern == &"tongue" and d_toad_b.hp == d_z2d.boss_hp, "C. 금두꺼비 대장 (혀 채찍, 체력 %d)" % d_z2d.boss_hp)
+	d_toad_b.ai_enabled = true
+	d_toad_b._pattern_cd = 0.0
+	main.hunter.position = d_toad_b.position + Vector2(60, 0) - Vector2(0, main.hunter.feet().y - main.hunter.position.y)
+	var d_h3 := d_gh.hearts
+	d_gh.tick(0.02)
+	_check(not d_toad_b.telegraph().is_empty() and d_gh.hearts == d_h3, "C. 혀 채찍 예고 (직선 띠)")
+	for i in int(Config.TONGUE_WINDUP * 30) + 3:
+		d_gh.tick(1.0 / 30.0)
+	_check(d_gh.hearts == d_h3 - d_z2d.damage and d_gh.dust.size() == 3, "C. 혀에 맞으면 하트 -%d, 지나간 자리에 금가루 3곳" % d_z2d.damage)
+	main.hunter.position += d_gh.dust[0].at - main.hunter.feet()
+	d_gh.tick(0.01)
+	_check(is_equal_approx(main.hunter.slow_mult, Config.GOLD_DUST_SLOW), "C. 금가루를 밟으면 느려짐")
+	main.leave_hunt()
+	_check(is_equal_approx(main.hunter.slow_mult, 1.0), "C. 사냥터를 나오면 빠르기 원래대로")
+	# C. 대장 슬라임 내려찍기 + 새끼
+	GameState.hunts_today = 0
+	main.enter_hunt(null, 0)
+	var d_bh2: HuntGround = main.hunt
+	d_bh2.set_ai(false)
+	for o: WildSlime in d_bh2.slimes.duplicate():
+		o.hp = 1
+		d_bh2._defeat(o)
+	var d_sb: WildSlime = d_bh2._boss()
+	d_sb.ai_enabled = true
+	d_sb._pattern_cd = 0.0
+	main.hunter.position = d_sb.position + Vector2(0, 80)
+	var d_h4 := d_bh2.hearts
+	d_bh2.tick(0.02)
+	_check(d_sb.airborne() and d_sb.telegraph().kind == &"circle", "C. 대장 슬라임이 뛰어올라 사냥꾼 발밑에 그림자 원")
+	var d_sb_hp := d_sb.hp
+	d_sb.position = main.hunter.feet() + Vector2(0, -8 - Config.SWING_REACH)
+	d_bh2._cooldown = 0.0
+	d_bh2.swing(Vector2.UP)
+	_check(d_sb.hp == d_sb_hp, "C. 공중에 뜬 대장은 칼에 안 맞음")
+	for i in int(Config.SLAM_AIR_TIME * 30) + 3:
+		d_bh2.tick(1.0 / 30.0)
+	var d_minions := d_bh2.slimes.filter(func(o: WildSlime) -> bool: return o.minion)
+	_check(d_bh2.hearts == d_h4 - 1 and d_minions.size() == Config.SLAM_MINIONS and d_sb.recovering(), "C. 쿵! 원 안이면 하트 -1, 새끼 %d마리, 대장은 헐떡임" % Config.SLAM_MINIONS)
+	var d_drops_before := d_bh2.drops.size() + d_bh2.loot.size()
+	d_minions[0].hp = 1
+	d_bh2._defeat(d_minions[0])
+	_check(d_bh2.drops.size() + d_bh2.loot.size() == d_drops_before and d_bh2._boss() == d_sb, "C. 새끼는 알·드롭을 남기지 않음")
+	main.leave_hunt()
+
 	print("SMOKE TEST: %s (%d failures)" % ["PASS" if _failures == 0 else "FAIL", _failures])
 	get_tree().quit(1 if _failures > 0 else 0)
 

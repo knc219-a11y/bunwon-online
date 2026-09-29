@@ -78,6 +78,40 @@ const WILD_SLIME_HOP_TIME := 0.35
 const WILD_SLIME_HOP_DISTANCE := 20.0
 const WILD_SLIME_CHASE_DISTANCE := 90.0
 
+## 사냥 난이도 (2026-09-29 사용자: 후보 A·B·C "셋 다 필요한 기능같아"). 값은 전부 임시.
+## A. 달려들기: 몬스터가 가까이 오면 웅크리고(! + 바닥 붉은 띠) 예고한 뒤 그 방향으로 돌진, 돌진 뒤 헐떡임 = 때릴 틈.
+## 웅크리는 시간은 구역마다 windup (금사리가 더 짧음). 웅크리는 동안 맞아도 멈추지 않는다.
+const LUNGE_TRIGGER := 56.0
+const LUNGE_DISTANCE := 64.0
+const LUNGE_TIME := 0.22
+## 띠 너비 = 몸 닿는 거리 x2 (띠 밖이면 안 맞음)
+const LUNGE_WIDTH := 28.0
+const LUNGE_RECOVER := 0.8
+## 헐떡임이 끝난 뒤 다시 달려들 수 있을 때까지 (초)
+const LUNGE_COOLDOWN := 1.6
+## C. 대장 패턴
+## 대장 슬라임 내려찍기: 높이 뛰어 사냥꾼 발밑에 그림자 원 → SLAM_AIR_TIME 뒤 쿵 (원 안이면 하트 -피해), 새끼 SLAM_MINIONS 마리
+const SLAM_RANGE := 150.0
+const SLAM_AIR_TIME := 1.0
+const SLAM_RADIUS := 32.0
+const SLAM_COOLDOWN := 3.5
+const SLAM_RECOVER := 0.9
+const SLAM_MINIONS := 2
+## 새끼가 이보다 많으면 더 안 나온다
+const SLAM_MINION_MAX := 4
+const MINION_SCALE := 0.65
+## 금두꺼비 혀 채찍: 직선 예고 TONGUE_WINDUP 뒤 쭉 (선 위면 하트 -피해), 혀가 지나간 자리에 금가루
+const TONGUE_RANGE := 120.0
+const TONGUE_WINDUP := 0.7
+const TONGUE_LASH_TIME := 0.25
+const TONGUE_WIDTH := 14.0
+const TONGUE_COOLDOWN := 2.6
+const TONGUE_RECOVER := 0.7
+## 금가루: 밟고 있으면 사냥꾼 걷기 빠르기 x GOLD_DUST_SLOW, GOLD_DUST_TIME 초 뒤 사라짐
+const GOLD_DUST_RADIUS := 16.0
+const GOLD_DUST_TIME := 6.0
+const GOLD_DUST_SLOW := 0.5
+
 ## 초당 약 3.4타일
 const CHARACTER_SPEED := 82.0
 const INTERACT_DISTANCE := 30.0
@@ -175,6 +209,8 @@ const HUNT_ZONES: Array[Dictionary] = [
 		labels = [[Vector2(10.5, 21.3), "분원농협"], [Vector2(40, 20.3), "분원농협 2창고"], [Vector2(22, 18.3), "농기계"], [Vector2(19.5, 9.3), "곳간"]],
 		sheet = "res://assets/creatures/slime_earth.png", boss_sheet = "res://assets/creatures/slime_earth.png", burrow = false,
 		count = WILD_SLIME_COUNT, hp = WILD_SLIME_HP, speed = 1.0, boss_hp = BOSS_HP,
+		## B. 구역 세기 (2026-09-29): 부딪히면 잃는 하트 · 맞았을 때 밀려나는 거리(px) · 달려들기 예고(초) · 무리(하나가 튀어나오면 근처도 같이)
+		damage = 1, knockback = 14.0, windup = 0.6, pack = false, boss_pattern = &"slam",
 		loot = HUNT_LOOT_WEIGHTS, rarity = GEAR_RARITY_WEIGHTS, boss_rarity = BOSS_RARITY_WEIGHTS,
 		money = [HUNT_MONEY_MIN, HUNT_MONEY_MAX], boss_money = [BOSS_MONEY_MIN, BOSS_MONEY_MAX],
 		## 대장 슬라임도 가끔 슬라임 알을 남긴다 (임시)
@@ -192,7 +228,11 @@ const HUNT_ZONES: Array[Dictionary] = [
 		boss_egg = "res://data/creatures/species/gold_toad.tres",
 		egg_chance = 0.03, boss_egg_chance = 0.25,
 		## 넓은 맵이라 모래톱마다 한 마리씩 (임시)
-		count = 6, hp = 3, speed = 1.25, boss_hp = 6,
+		count = 6, hp = 5, speed = 1.25, boss_hp = 9,
+		## 금사리부터 확 세다 (2026-09-29 B): 체력 3→5, 하트 -2, 덜 밀림, 모래게가 무리로 튀어나옴. 대장 체력 6→9
+		damage = 2, knockback = 6.0, windup = 0.4, pack = true, boss_pattern = &"tongue",
+		## 입구 메뉴·들어올 때 보여 주는 권장 준비
+		advice = "권장: 하트 7 · 사냥칼",
 		loot = {&"money": 38, &"potion": 25, &"junk": 19, &"gear": 18},
 		rarity = {&"normal": 50, &"magic": 38, &"rare": 12}, boss_rarity = {&"normal": 20, &"magic": 55, &"rare": 25},
 		money = [20, 45], boss_money = [45, 80],
@@ -205,3 +245,5 @@ const HUNT_FORD_SPEED := 0.6
 const HUNT_PADDY_SPEED := 0.6
 ## 숨은 몬스터가 튀어나오는 거리 (px)
 const WILD_BURROW_POP_DISTANCE := 60.0
+## 무리(pack) 구역에서 하나가 튀어나오면 이 거리 안의 숨은 몬스터도 같이 튀어나온다 (px)
+const WILD_PACK_DISTANCE := 110.0

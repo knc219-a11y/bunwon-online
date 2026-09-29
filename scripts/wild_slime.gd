@@ -47,6 +47,38 @@ var _pull_to := Vector2.ZERO
 ## 멈춘 남은 시간 (금두꺼비 혀 당기기). 멈춘 동안은 움직이지 않고 부딪혀도 다치지 않는다.
 var _stun := 0.0
 
+## 부딪히면 잃는 하트 · 맞았을 때 밀려나는 거리 · 달려들기 예고 시간 (구역마다, Config.HUNT_ZONES)
+var damage := 1
+var knockback := 14.0
+var windup_time := 0.6
+## 대장 패턴 (&"slam" 내려찍기 · &"tongue" 혀 채찍), 대장만
+var pattern := &""
+## 대장 내려찍기 때 튀어나온 새끼 (알·드롭 없음)
+var minion := false
+
+## 달려들기 (A): 웅크림 남은 시간(-1 = 아님) → 돌진(0~1) → 헐떡임
+var _windup := -1.0
+var _lunge_dir := Vector2.ZERO
+var _lunge_t := -1.0
+var _lunge_from := Vector2.ZERO
+var _recover := 0.0
+var _lunge_cd := 0.0
+## 대장 패턴 (C)
+var _pattern_cd := 1.5
+## 내려찍기: 공중에 뜬 진행(0~1, -1 = 아님), 뛰는 곳 · 떨어질 곳
+var _air_t := -1.0
+var _air_from := Vector2.ZERO
+var _air_to := Vector2.ZERO
+## 혀 채찍: 예고 남은 시간(-1 = 아님), 뻗은 채 남은 시간
+var _aim := -1.0
+var _lash := 0.0
+var _tongue_to := Vector2.ZERO
+
+## 대장이 내려찍었다 (떨어진 곳). HuntGround 가 받아 원 안의 사냥꾼을 다치게 하고 새끼를 놓는다.
+signal slammed(at: Vector2)
+## 대장이 혀를 뻗었다 (입 → 혀끝). HuntGround 가 받아 선 위의 사냥꾼을 다치게 하고 금가루를 뿌린다.
+signal lashed(from: Vector2, to: Vector2)
+
 
 func _ready() -> void:
 	_sprite = Sprite2D.new()
@@ -69,6 +101,9 @@ func setup_zone(zone: int) -> void:
 	_tint = z.monster_tint
 	sheet = load(z.sheet)
 	buried = z.burrow
+	damage = z.get("damage", 1)
+	knockback = z.get("knockback", 14.0)
+	windup_time = z.get("windup", 0.6)
 
 
 ## 대장으로 만든다 (트리에 넣기 전후 모두 가능)
@@ -82,6 +117,9 @@ func make_boss(zone := 0) -> void:
 	scale = Vector2.ONE * Config.BOSS_SCALE
 	_tint = z.boss_tint
 	buried = false
+	damage = z.get("damage", 1)
+	knockback = z.get("knockback", 14.0)
+	pattern = z.get("boss_pattern", &"")
 	sheet = load(z.boss_sheet)
 	if _sprite:
 		_sprite.texture = sheet
@@ -92,7 +130,17 @@ func sort_y() -> float:
 	return position.y + BOTTOM_Y
 
 
-## 한 대 맞는다. 쓰러지면 true.
+## 대장 내려찍기 때 튀어나오는 새끼로 만든다 (트리에 넣기 전에, setup_zone 뒤에)
+func make_minion() -> void:
+	minion = true
+	hp = 1
+	max_hp = 1
+	title = "새끼 " + title
+	scale = Vector2.ONE * Config.MINION_SCALE
+	_lunge_cd = 1.0
+
+
+## 한 대 맞는다. 쓰러지면 true. 웅크리는 중이면 밀려나도 달려들기는 멈추지 않는다.
 func hit(from: Vector2) -> bool:
 	buried = false
 	hp -= 1
@@ -100,15 +148,43 @@ func hit(from: Vector2) -> bool:
 	var away := (position - from).normalized()
 	if away == Vector2.ZERO:
 		away = Vector2.UP
-	position = _stand(position + away * 14.0)
+	if _air_t < 0.0:
+		position = _stand(position + away * knockback)
 	_hop_t = -1.0
 	_rest = Config.WILD_SLIME_REST_TIME
 	return hp <= 0
 
 
+## 공중에 떠 있어 칼·몸이 닿지 않는다 (대장 내려찍기)
+func airborne() -> bool:
+	return _air_t >= 0.0
+
+
+## 헐떡이는 중 (달려들기·대장 패턴 뒤, 때릴 틈)
+func recovering() -> bool:
+	return _recover > 0.0
+
+
 func stun(time: float) -> void:
 	_stun = maxf(_stun, time)
 	_hop_t = -1.0
+	# 돌진 중이었으면 거기서 멈춘다. 웅크림·예고는 멈춤이 풀리면 이어진다 (멈춤이 달려들기를 지워 주지는 않음)
+	if _lunge_t >= 0.0:
+		_lunge_t = -1.0
+		_recover = Config.LUNGE_RECOVER
+		_lunge_cd = Config.LUNGE_COOLDOWN
+
+
+## 바닥 예고 (사냥꾼 봇·그리기용). {} 이면 없음.
+## lane: from → to 띠 (width), circle: at 둘레 radius, progress 는 예고가 얼마나 찼는지 (0~1)
+func telegraph() -> Dictionary:
+	if _windup >= 0.0:
+		return {kind = &"lane", from = position, to = position + _lunge_dir * Config.LUNGE_DISTANCE, width = Config.LUNGE_WIDTH * scale.x, progress = 1.0 - _windup / windup_time}
+	if _air_t >= 0.0:
+		return {kind = &"circle", at = _air_to, radius = Config.SLAM_RADIUS, progress = _air_t}
+	if _aim >= 0.0:
+		return {kind = &"lane", from = position, to = _tongue_to, width = Config.TONGUE_WIDTH, progress = 1.0 - _aim / Config.TONGUE_WINDUP}
+	return {}
 
 
 ## 혀에 끌려 to 까지 짧게 미끄러진다 (금두꺼비 혀 당기기). 멈춤과 함께 쓴다.
@@ -138,6 +214,8 @@ func tick(delta: float, target: Vector2) -> void:
 			_pull_t = -1.0
 	if buried or _stun > 0.0:
 		pass
+	elif ai_enabled and _tick_attack(delta, target):
+		pass
 	elif ai_enabled:
 		if _hop_t >= 0.0:
 			_hop_t += delta * speed / Config.WILD_SLIME_HOP_TIME
@@ -149,13 +227,88 @@ func tick(delta: float, target: Vector2) -> void:
 			_rest -= delta
 			if _rest <= 0.0:
 				_start_hop(target)
-	var hopping := _hop_t >= 0.0
+	# 돌진·내려찍기도 깡충 그림을 쓴다
+	var hop_t := maxf(_hop_t, maxf(_lunge_t, _air_t))
+	var hopping := hop_t >= 0.0
 	var cols := BURIED_COLUMNS if buried else (HOP_COLUMNS if hopping else IDLE_COLUMNS)
-	var col: int = HOP_COLUMNS[mini(int(_hop_t * 4), 3)] if hopping else cols[int(_anim_time * 2.0) % 2]
+	var col: int = HOP_COLUMNS[mini(int(hop_t * 4), 3)] if hopping else cols[int(_anim_time * 2.0) % 2]
 	_sprite.frame = col
+	# 내려찍기: 공중에서 그림을 위로 띄운다 (그림자는 제자리)
+	var lift := sin(_air_t * PI) * 60.0 / scale.y if _air_t >= 0.0 else 0.0
+	_sprite.position = Vector2(-FRAME_SIZE / 2.0, BOTTOM_Y - FRAME_SIZE - lift)
+	# 웅크림: 납작해졌다가 튀어나간다
+	_sprite.scale = Vector2(1.15, 0.85) if _windup >= 0.0 or _aim >= 0.0 else Vector2.ONE
 	_sprite.modulate = Color(1, 1, 1) * 2.0 if _flash > 0.0 and int(_flash * 20) % 2 == 0 else _tint
 	z_index = int(sort_y())
 	queue_redraw()
+
+
+## 달려들기·대장 패턴을 한 틱 진행한다. 이번 틱에 공격 동작 중이었으면 true (깡충 뛰기는 쉼).
+func _tick_attack(delta: float, target: Vector2) -> bool:
+	_lunge_cd = maxf(_lunge_cd - delta, 0.0)
+	_pattern_cd = maxf(_pattern_cd - delta, 0.0)
+	if _recover > 0.0:
+		_recover -= delta
+		return true
+	if _windup >= 0.0:
+		_windup -= delta
+		if _windup < 0.0:
+			_lunge_from = position
+			_lunge_t = 0.0
+		return true
+	if _lunge_t >= 0.0:
+		_lunge_t = minf(_lunge_t + delta / Config.LUNGE_TIME, 1.0)
+		var to := _stand(_lunge_from + _lunge_dir * Config.LUNGE_DISTANCE * _lunge_t)
+		var blocked := to == position and _lunge_t < 1.0
+		position = to
+		if _lunge_t >= 1.0 or blocked:
+			_lunge_t = -1.0
+			_recover = Config.LUNGE_RECOVER
+			_lunge_cd = Config.LUNGE_COOLDOWN
+		return true
+	if _air_t >= 0.0:
+		_air_t = minf(_air_t + delta / Config.SLAM_AIR_TIME, 1.0)
+		position = _air_from.lerp(_air_to, _air_t)
+		if _air_t >= 1.0:
+			_air_t = -1.0
+			position = _stand(_air_to)
+			_recover = Config.SLAM_RECOVER
+			_pattern_cd = Config.SLAM_COOLDOWN
+			slammed.emit(position)
+		return true
+	if _aim >= 0.0:
+		_aim -= delta
+		if _aim < 0.0:
+			_lash = Config.TONGUE_LASH_TIME
+			lashed.emit(position, _tongue_to)
+		return true
+	if _lash > 0.0:
+		_lash -= delta
+		if _lash <= 0.0:
+			_recover = Config.TONGUE_RECOVER
+			_pattern_cd = Config.TONGUE_COOLDOWN
+		return true
+	if _hop_t >= 0.0:
+		return false
+	var d := position.distance_to(target)
+	if boss:
+		if pattern == &"slam" and _pattern_cd <= 0.0 and d <= Config.SLAM_RANGE:
+			_air_from = position
+			_air_to = _stand(target)
+			_air_t = 0.0
+			return true
+		if pattern == &"tongue" and _pattern_cd <= 0.0 and d <= Config.TONGUE_RANGE:
+			_tongue_to = position + (target - position).normalized() * Config.TONGUE_RANGE
+			_aim = Config.TONGUE_WINDUP
+			return true
+		return false
+	if _lunge_cd <= 0.0 and d <= Config.LUNGE_TRIGGER:
+		_lunge_dir = (target - position).normalized()
+		if _lunge_dir == Vector2.ZERO:
+			_lunge_dir = Vector2.DOWN
+		_windup = windup_time
+		return true
+	return false
 
 
 ## to 로 옮길 수 있으면 to, 못 서는 곳(물 등)이면 지금 자리. 영역 밖은 안으로 당긴다.
@@ -196,6 +349,16 @@ func _draw() -> void:
 		for i in 3:
 			var a := _anim_time * 6.0 + i * TAU / 3.0
 			draw_circle(Vector2(cos(a) * 8.0, -22 + sin(a) * 2.0), 2.0, Color(1.0, 0.92, 0.45))
+	# 달려들기·혀 채찍 예고: 머리 위 느낌표
+	if _windup >= 0.0 or _aim >= 0.0:
+		draw_circle(Vector2(0, -30), 6.0, Color(1.0, 0.92, 0.5))
+		draw_arc(Vector2(0, -30), 6.0, 0, TAU, 16, Color(0.6, 0.15, 0.1), 1.0)
+		draw_string(ThemeDB.fallback_font, Vector2(-2.5, -25), "!", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.85, 0.15, 0.1))
+	# 혀 채찍: 뻗은 혀 (입 → 혀끝, 크기 배율을 되돌려 월드 길이로)
+	if _lash > 0.0:
+		var tip := (_tongue_to - position) / scale.x
+		draw_line(Vector2(0, -4), tip, Color(0.95, 0.45, 0.55), 3.0 / scale.x)
+		draw_circle(tip, 3.0 / scale.x, Color(0.95, 0.45, 0.55))
 	# 대장 이름표 (디아블로2 챔피언처럼 금색)
 	if boss:
 		var font := ThemeDB.fallback_font
