@@ -305,9 +305,18 @@ func near_next() -> bool:
 	return path_open and next_area().has_point(hunter.position)
 
 
+## 끊어진 쇠다리 (2026-09-29 사용자 선택 "대장간과 묶기"): 금사리 대장을 잡아도 윗길(광동리 쪽)의 쇠다리가 끊겨 있어
+## 대장간을 고쳐야 대장장이가 다리를 이어 준다. 2막이 1막 목표(약 20일)보다 일찍 열리던 것과 사금 덩이를 건너뛰던 것을 막는다.
+func bridge_broken() -> bool:
+	return zone == Config.FORGE_ZONE and GameState.forge_state < 2
+
+
 ## 위쪽 길로 다음 구역에 들어간다 (같은 날, 하트 그대로). 땅에 남은 것은 챙겨 간다.
 func advance() -> bool:
 	if not path_open or zone + 1 >= Config.HUNT_ZONES.size():
+		return false
+	if bridge_broken():
+		GameState.notify("쇠다리가 끊겨 있어 건널 수 없다. 대장간을 고치면 대장장이가 이어 줄 것 같다.")
 		return false
 	for d in drops:
 		picked.append(d.species)
@@ -475,6 +484,8 @@ func _defeat(s: WildSlime) -> void:
 		var sp: CreatureSpecies = load(z.egg) if z.has("egg") and GameState.first_egg_done else table[randi() % table.size()]
 		drops.append({at = _reachable(s.position), species = sp})
 		GameState.notify("%s을(를) 쓰러뜨리자 알이 떨어졌다!" % s.title)
+	elif s.boss and bridge_broken():
+		GameState.notify("%s을(를) 쓰러뜨렸다! 위쪽 길이 보이지만 %d구역 %s로 가는 쇠다리가 끊겨 있다. 대장간을 고치면 이어질 것 같다.%s" % [s.title, zone + 2, Config.HUNT_ZONES[zone + 1].name, material_text])
 	elif s.boss and zone + 1 < Config.HUNT_ZONES.size():
 		GameState.notify("%s을(를) 쓰러뜨렸다! 위쪽 길이 열렸다. 길에서 F로 %d구역 %s, 아래 입구 F로 마을.%s" % [s.title, zone + 2, Config.HUNT_ZONES[zone + 1].name, material_text])
 	elif s.boss:
@@ -795,6 +806,8 @@ func _draw_ground(n: Node2D) -> void:
 	if map:
 		n.draw_texture(map.ground, Vector2.ZERO)
 		_draw_labels(n)
+		if zone == Config.FORGE_ZONE:
+			_draw_bridge(n)
 		_draw_waypoint(n)
 		return
 	var tiles: Texture2D = preload("res://assets/tiles/farm_tiles.png")
@@ -808,6 +821,28 @@ func _draw_ground(n: Node2D) -> void:
 		for y in range(top, CLEARING.end.y + 3 if x >= 11 and x <= 13 else CLEARING.end.y):
 			n.draw_texture_rect_region(tiles, Rect2(x * T, y * T, T, T), Rect2(4 * T, 0, T, T))
 	_draw_waypoint(n)
+
+
+## 금사리 윗길 쇠다리 (임시 그림): 대장간을 고치기 전엔 가운데가 끊겨 있다
+func _draw_bridge(n: Node2D) -> void:
+	var p := map.spot("N") + Vector2(0, T * 0.5)
+	var broken := bridge_broken()
+	var rail := Color(0.42, 0.44, 0.5)
+	var plank := Color(0.55, 0.57, 0.62)
+	for i in 5:
+		var y := p.y - T * 0.5 + i * 6.0
+		if broken and i >= 2 and i <= 3:
+			continue
+		n.draw_rect(Rect2(p.x - 18, y, 36, 4), plank)
+	for sx in [-20.0, 18.0]:
+		if broken:
+			n.draw_rect(Rect2(p.x + sx, p.y - T * 0.5 - 2, 2, 12), rail)
+			n.draw_rect(Rect2(p.x + sx, p.y + 8, 2, 10), rail)
+		else:
+			n.draw_rect(Rect2(p.x + sx, p.y - T * 0.5 - 2, 2, 32), rail)
+	if broken:
+		n.draw_line(p + Vector2(-16, 0), p + Vector2(-8, 5), Color(0.3, 0.25, 0.22), 1.0)
+		n.draw_line(p + Vector2(10, 1), p + Vector2(16, 6), Color(0.3, 0.25, 0.22), 1.0)
 
 
 ## 창고 벽 간판 (구역 데이터 labels: 칸 자리 + 글씨)
@@ -855,6 +890,8 @@ func _draw_hud() -> void:
 	_draw_minimap()
 	if path_open:
 		var pt := "▲ 위쪽 길: %d구역 %s (F)" % [zone + 2, Config.HUNT_ZONES[zone + 1].name]
+		if bridge_broken():
+			pt = "▲ 위쪽 길: 쇠다리가 끊김 (대장간을 고치면 이어짐)"
 		var pw := font.get_string_size(pt, HORIZONTAL_ALIGNMENT_LEFT, -1, 9).x
 		_hud.draw_rect(Rect2(13 * T - pw / 2 - 3, 2 * T - 10, pw + 6, 13), Color(0, 0, 0, 0.55))
 		_hud.draw_string(font, Vector2(13 * T - pw / 2, 2 * T), pt, HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(1.0, 0.9, 0.35))

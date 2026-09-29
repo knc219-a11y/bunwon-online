@@ -902,7 +902,14 @@ func _ready() -> void:
 	_check(toad_eggs.size() == 1, "대장 금두꺼비는 알 확률에 걸리면 금두꺼비 알을 남김")
 	sh.drops.clear()
 	main.hunter.position = sh.next_area().get_center()
+	# 끊어진 쇠다리 (2026-09-29 "대장간과 묶기"): 대장간을 고치기 전엔 광동리로 못 건넘
+	var br_state := GameState.forge_state
+	GameState.forge_state = 1
+	_check(sh.bridge_broken() and not sh.advance() and sh.zone == 1, "대장간을 고치기 전엔 금사리 쇠다리가 끊겨 광동리로 못 감")
+	GameState.forge_state = 2
+	_check(not sh.bridge_broken(), "대장간을 고치면 쇠다리가 이어짐")
 	_check(sh.advance() and sh.zone == 2 and 2 in GameState.waypoints and sh.slimes[0].title == "참새", "위쪽 길로 3구역 광동리 (웨이포인트 켜짐, 참새)")
+	GameState.forge_state = br_state
 	main.hunter.position = sh.exit_area().get_center()
 	main.interact()
 	_check(main.hunt == null, "아래 입구 F로 마을로")
@@ -1819,6 +1826,15 @@ func _ready() -> void:
 	var g_seeds := GameState.seeds
 	var g_got: int = main.gather_seeds()
 	_check(g_got >= 2 and g_got <= 4 * main.creatures.filter(func(c: Creature) -> bool: return c.data.species == CreatureCatalog.SPARROW and c.job != CreatureJobs.REST).size() and GameState.seeds == g_seeds + g_got, "아침마다 씨앗 %d" % g_got)
+	# 씨앗 넘침: 씨앗이 넉넉하면 남는 낟알은 공급함에서 돈으로
+	var g_old_seeds := GameState.seeds
+	GameState.seeds = Config.GRAIN_SEED_CAP
+	var g_money := GameState.money
+	var g_kept: int = main.gather_seeds()
+	var g_sold := GameState.money - g_money
+	_check(g_kept == 0 and GameState.seeds == Config.GRAIN_SEED_CAP and g_sold >= 2 * Config.GRAIN_PRICE and g_sold % Config.GRAIN_PRICE == 0, "씨앗 %d개부터 낟알은 팔림 (+%d원)" % [Config.GRAIN_SEED_CAP, g_sold])
+	GameState.seeds = g_old_seeds
+	GameState.money = g_money
 	GameState.hunts_today = 0
 	main.next_day()
 	main.enter_hunt(g_c, 2)

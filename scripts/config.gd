@@ -34,6 +34,9 @@ const START_MONEY := 0
 const CROP_PRICE := 50
 const SEED_PACK_SIZE := 5
 const SEED_PACK_PRICE := 100
+## 아기 참새 낟알: 씨앗이 이만큼 있으면 더 물어 온 낟알은 씨앗 대신 공급함에서 개당 GRAIN_PRICE원에 팔린다 (임시)
+const GRAIN_SEED_CAP := 30
+const GRAIN_PRICE := 5
 
 ## 들나물 캐기 (2026-09-29 사용자 선택 A, 핵심 루프 점검 5번 "2~3일째 농부 할 일이 없다"): 아침마다 밭 밖 풀밭에 돋는다.
 ## 농부가 F로 캐서 공급함에 진열하면 밤사이 팔린다 (무와 같은 방식). 값·수·자리는 전부 임시.

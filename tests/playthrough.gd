@@ -590,7 +590,7 @@ func hunt_day() -> void:
 		elif nearest_s != null:
 			target = nearest_s.position
 			goal = &"fight"
-		elif h.path_open and h.hearts >= 3:
+		elif h.path_open and not h.bridge_broken() and h.hearts >= 3:
 			target = h.next_area().get_center()
 			goal = &"next"
 		else:

@@ -880,7 +880,7 @@ func restore_forge() -> bool:
 	smith.visible = true
 	smith.position = Farm.center_of(Config.SMITH_CELL)
 	_refresh_props()
-	GameState.notify("대장간을 고쳤다! 대장장이가 왔다 (Tab). 고물 더미의 고철로 모루에서 장비를 만든다. 크리처에게 고철 줍기(R)도 맡길 수 있다.")
+	GameState.notify("대장간을 고쳤다! 대장장이가 왔다 (Tab). 고물 더미의 고철로 모루에서 장비를 만든다. 크리처에게 고철 줍기(R)도 맡길 수 있다. 금사리 윗길 쇠다리도 이어 줘서 이제 광동리로 건너갈 수 있다.")
 	return true
 
 
@@ -1194,9 +1194,13 @@ func next_day() -> Array[String]:
 	var gold := gather_gold_dust()
 	if gold > 0:
 		lines.append("금두꺼비가 밭에서 사금을 주웠다. 돈통에 +%d원" % gold)
+	var grain_money := GameState.money
 	var seeds := gather_seeds()
+	grain_money = GameState.money - grain_money
 	if seeds > 0:
 		lines.append("아기 참새가 벌판에서 낟알을 물어 왔다. 씨앗 +%d" % seeds)
+	if grain_money > 0:
+		lines.append("씨앗이 넉넉해서 남는 낟알은 공급함에서 팔렸다. +%d원" % grain_money)
 	if GameState.hunter_unlocked and GameState.hunts_today > 0:
 		lines.append("사냥꾼이 다시 사냥을 나갈 수 있다.")
 	GameState.hunts_today = 0
@@ -1231,14 +1235,18 @@ func gather_gold_dust() -> int:
 
 
 ## 낟알 줍기 (아기 참새, 2026-09-29 광동리 B): 일을 맡은 개체마다 종의 daily_seeds 범위만큼 씨앗을 물어 온다. 쉬는 중이면 없음.
+## 씨앗 넘침 (2026-09-29 4구역 스레드, Claude 기본값): 씨앗이 GRAIN_SEED_CAP 개를 넘으면 넘는 낟알은 씨앗 대신
+## 공급함에서 밤에 팔린다 (개당 GRAIN_PRICE원). 돌려주는 값은 씨앗으로 들어온 수.
 func gather_seeds() -> int:
 	var total := 0
 	for c in creatures:
 		var r := c.data.species.daily_seeds
 		if r.y > 0 and c.job != CreatureJobs.REST:
 			total += _rng.randi_range(r.x, r.y)
-	GameState.seeds += total
-	return total
+	var kept := clampi(Config.GRAIN_SEED_CAP - GameState.seeds, 0, total)
+	GameState.seeds += kept
+	GameState.money += (total - kept) * Config.GRAIN_PRICE
+	return kept
 
 
 func _hatch(species: CreatureSpecies, at_cell: Vector2i) -> Creature:
