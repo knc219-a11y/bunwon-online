@@ -388,7 +388,6 @@ func enter_hunt(companion: Creature = null, zone := 0) -> bool:
 	if GameState.hunts_today >= Config.HUNTS_PER_DAY:
 		GameState.notify("오늘은 이미 사냥을 다녀왔다. 자고 나면 다시 갈 수 있다.")
 		return false
-	var first_today := GameState.hunts_today == 0
 	GameState.hunts_today += 1
 	_village_nodes.clear()
 	for n in get_children():
@@ -398,7 +397,7 @@ func enter_hunt(companion: Creature = null, zone := 0) -> bool:
 	hunt = HuntGround.new()
 	add_child(hunt)
 	hunter.farm = null
-	hunt.start(hunter, first_today, zone)
+	hunt.start(hunter, zone)
 	_pending_zone = 0
 	hunt.knocked_out.connect(leave_hunt)
 	if companion:

@@ -42,6 +42,8 @@ var potions := 0
 var junk := 0
 ## 사냥꾼 조작 해금 여부. 첫 슬라임을 밭에 배치하면 열린다 (임시 조건).
 var hunter_unlocked := false
+## 게임 전체에서 첫 알을 이미 얻었는지. 첫 알 하나만 보장하고, 그 뒤로는 확률 (2026-09-29).
+var first_egg_done := false
 
 
 func _ready() -> void:
@@ -86,6 +88,7 @@ func reset() -> void:
 	potions = 0
 	junk = 0
 	hunter_unlocked = false
+	first_egg_done = false
 	changed.emit()
 
 

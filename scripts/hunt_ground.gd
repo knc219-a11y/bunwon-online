@@ -2,7 +2,7 @@ class_name HuntGround
 extends Node2D
 ## 사냥터 한 화면 (2026-09-27 결정 A. 실시간 한 화면, 첫 조각).
 ## 숲 공터에 야생 슬라임이 돌아다닌다. 사냥꾼은 걸어 다니며 휘둘러 쓰러뜨린다.
-## 그날 처음 쓰러뜨린 슬라임은 알을 반드시 떨어뜨린다. 하트가 0이 되면 쓰러져 마을로 돌아가고, 주운 것은 그대로 가진다.
+## 알은 게임 전체 첫 처치만 반드시 떨어지고, 그 뒤로는 구역 확률 (2026-09-29 사용자 요청으로 낮춤). 하트가 0이 되면 쓰러져 마을로 돌아가고, 주운 것은 그대로 가진다.
 ## 그림은 마을 그림을 다시 쓴 임시 배치 (사냥터 전용 그림은 다음 단계).
 ## 스테이지 (2026-09-28 사용자 선택 B + 웨이포인트): 구역(Config.HUNT_ZONES)을 앞으로 걸어간다.
 ## 대장을 쓰러뜨리면 위쪽 길이 열리고, 그 길에서 F로 같은 날 다음 구역으로 이어서 간다 (하트는 그대로).
@@ -15,8 +15,10 @@ extends Node2D
 
 signal knocked_out
 
-## false 면 드롭표를 굴리지 않는다 (알 보장만). 드롭과 상관없는 테스트에서 끈다.
+## false 면 드롭표를 굴리지 않는다 (알은 그대로 굴림). 드롭과 상관없는 테스트에서 끈다.
 static var loot_enabled := true
+## 0 이상이면 알 확률 굴림 대신 이 값을 쓴다 (0 = 늘 나옴, 1 = 안 나옴). 테스트에서 쓴다.
+static var egg_roll := -1.0
 
 const T := Config.TILE
 ## 사냥꾼이 걸을 수 있는 공터 (캐릭터 위치 기준, px)
@@ -52,8 +54,6 @@ var slimes: Array[WildSlime] = []
 var drops: Array[Dictionary] = []
 ## 이번 사냥에서 주운 알
 var picked: Array[CreatureSpecies] = []
-## 이번 사냥에서 알 보장을 이미 썼는지 (그날 첫 사냥에서 처음 쓰러뜨린 슬라임)
-var egg_guaranteed := true
 ## 땅에 떨어진 드롭 (HuntLoot 사전 + at)
 var loot: Array[Dictionary] = []
 var loot_rng := RandomNumberGenerator.new()
@@ -181,11 +181,10 @@ func _fill_zone() -> void:
 	_ground.queue_redraw()
 
 
-## 사냥꾼을 사냥터로 데려온다. first_today 면 처음 쓰러뜨린 슬라임이 알을 반드시 떨어뜨린다.
+## 사냥꾼을 사냥터로 데려온다.
 ## start_zone 은 사냥터 입구에서 고른 웨이포인트 구역 (0 = 숲 공터부터).
-func start(h: Character, first_today: bool, start_zone := 0) -> void:
+func start(h: Character, start_zone := 0) -> void:
 	hunter = h
-	egg_guaranteed = not first_today
 	if start_zone != zone:
 		zone = start_zone
 		_fill_zone()
@@ -410,7 +409,7 @@ func _tick_companion(delta: float) -> void:
 	companion_attack(target)
 
 
-## 동행 크리처가 한 번 공격한다 (1 피해). 쓰러뜨리면 사냥꾼이 쓰러뜨린 것과 똑같이 친다 (알 보장 포함).
+## 동행 크리처가 한 번 공격한다 (1 피해). 쓰러뜨리면 사냥꾼이 쓰러뜨린 것과 똑같이 친다 (알 확률 포함).
 func companion_attack(target: WildSlime) -> void:
 	_companion_cooldown = companion.attack_interval()
 	companion.play_attack(target.position)
@@ -438,12 +437,13 @@ func _nearest_slime(from: Vector2) -> WildSlime:
 
 func _defeat(s: WildSlime) -> void:
 	slimes.erase(s)
-	if not egg_guaranteed:
-		# 그날 첫 사냥에서 처음 쓰러뜨린 슬라임은 알을 반드시 떨어뜨린다 (운 때문에 막히지 않게)
-		egg_guaranteed = true
+	var z: Dictionary = Config.HUNT_ZONES[zone]
+	if not s.boss and (not GameState.first_egg_done or _egg_roll() < z.get("egg_chance", 0.0)):
+		# 게임 전체 첫 처치는 알을 반드시 떨어뜨린다 (첫 사냥에서 막히지 않게). 그 뒤로는 드물게.
+		GameState.first_egg_done = true
 		var table := CreatureCatalog.HUNT_TABLE
 		drops.append({at = s.position, species = table[randi() % table.size()]})
-		GameState.notify("야생 슬라임을 쓰러뜨리자 알이 떨어졌다!")
+		GameState.notify("%s을(를) 쓰러뜨리자 알이 떨어졌다!" % s.title)
 	elif s.boss and zone + 1 < Config.HUNT_ZONES.size():
 		GameState.notify("%s을(를) 쓰러뜨렸다! 위쪽 길이 열렸다. 길에서 F로 %d구역 %s, 아래 입구 F로 마을." % [s.title, zone + 2, Config.HUNT_ZONES[zone + 1].name])
 	elif s.boss:
@@ -454,12 +454,13 @@ func _defeat(s: WildSlime) -> void:
 		GameState.notify("모두 쓰러뜨렸다. 아래 입구에서 F로 마을로 돌아가자.")
 	else:
 		GameState.notify("%s을(를) 쓰러뜨렸다. 남은 %d마리." % [s.title, slimes.size()])
-	var boss_egg: String = Config.HUNT_ZONES[zone].get("boss_egg", "")
-	if s.boss and boss_egg != "":
-		# 금사리 대장 금두꺼비는 알을 반드시 남긴다 (2026-09-28 사용자 선택: 아기 금두꺼비)
+	var boss_egg: String = z.get("boss_egg", "")
+	if s.boss and boss_egg != "" and _egg_roll() < z.get("boss_egg_chance", 0.0):
+		# 대장은 가끔 알을 남긴다 (금사리 금두꺼비 → 아기 금두꺼비 알, 2026-09-29 반드시 → 확률로 낮춤)
 		var sp: CreatureSpecies = load(boss_egg)
 		drops.append({at = s.position + Vector2(-10, 4), species = sp})
-		GameState.notify("%s이(가) 금빛 알을 남겼다! 부화하면 %s." % [s.title, sp.display_name])
+		GameState.first_egg_done = true
+		GameState.notify("%s이(가) 알을 남겼다! 부화하면 %s." % [s.title, sp.display_name])
 	if s.boss and zone + 1 < Config.HUNT_ZONES.size():
 		path_open = true
 		_ground.queue_redraw()
@@ -477,6 +478,10 @@ func _defeat(s: WildSlime) -> void:
 
 
 ## 야생 슬라임을 다 쓰러뜨리면 공터 가운데에 대장 슬라임이 나온다 (디아블로2 챔피언처럼).
+func _egg_roll() -> float:
+	return egg_roll if egg_roll >= 0.0 else loot_rng.randf()
+
+
 func spawn_boss() -> WildSlime:
 	boss_spawned = true
 	var b := WildSlime.new()

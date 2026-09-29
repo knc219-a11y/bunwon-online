@@ -39,7 +39,7 @@
 - `daily_gold`: 사금 줍기. 밭에서 일을 맡은 개체가 밤마다 이 범위의 돈을 주워 온다 (쉬는 중이면 없음)
 - `egg_color`, `egg_spot_color`: 사냥터에 떨어진 알 색
 
-사냥터 구역의 `boss_egg`(`Config.HUNT_ZONES`)에 종 경로를 넣으면 그 구역 대장이 그 알을 반드시 남긴다.
+사냥터 구역의 `boss_egg`(`Config.HUNT_ZONES`)에 종 경로를 넣으면 그 구역 대장이 `boss_egg_chance` 확률로 그 알을 남긴다 (몬스터 한 마리는 `egg_chance`).
 
 ## 새 몬스터 추가하기
 
