@@ -129,6 +129,9 @@ func _ready() -> void:
 	GameState.message.connect(func(t: String) -> void: _message.text = t)
 	_refresh_props()
 	GameState.notify("농부로 밭을 가꿔 보자. 마을 공급함에 알이 하나 있다. 풀밭의 들나물은 F로 캔다.")
+	# 테스트용 시작 지점 (2026-09-29): 개발용 빌드에서 게임으로 켰을 때만 (테스트 장면 안에서는 안 뜸)
+	if OS.is_debug_build() and get_parent() == get_tree().root:
+		open_menu(&"start")
 
 
 func _add_prop(label: String, texture: Texture2D, rect: Rect2i, block := Rect2(), fade := false) -> Prop:
@@ -229,6 +232,12 @@ func _unhandled_input(event: InputEvent) -> void:
 			GameState.notify("사냥 중에는 캐릭터를 바꿀 수 없다. 아래 입구에서 F로 돌아가자.")
 		return
 	if menu_open:
+		if menu_kind == &"start" and event is InputEventKey and event.pressed and event.physical_keycode >= KEY_1 and event.physical_keycode <= KEY_9:
+			var n: int = event.physical_keycode - KEY_1
+			if n < _menu_options.size():
+				menu_index = n
+				menu_confirm()
+			return
 		if event.is_action_pressed("move_up"):
 			menu_move(-1)
 		elif event.is_action_pressed("move_down"):
@@ -602,6 +611,10 @@ func menu_move(step: int) -> void:
 
 func menu_confirm() -> void:
 	var id := _menu_options[menu_index]
+	if menu_kind == &"start":
+		close_menu()
+		TestStarts.apply(self, id)
+		return
 	if menu_kind == &"companion":
 		var pick := companion_from_option(id)
 		close_menu()
@@ -1053,7 +1066,10 @@ func _rebuild_menu() -> void:
 	var waypoint := menu_kind == &"waypoint"
 	var training := menu_kind == &"train"
 	var forging := menu_kind == &"forge" or menu_kind == &"craft"
-	if forging:
+	var starting := menu_kind == &"start"
+	if starting:
+		_menu_options = TestStarts.ids()
+	elif forging:
 		_menu_options = forge_options() if menu_kind == &"forge" else craft_options()
 	elif training:
 		_menu_options = train_options()
@@ -1063,6 +1079,8 @@ func _rebuild_menu() -> void:
 	var head := "사냥터 입구 · 누구랑 갈까?" if companion else ("사냥터 입구 · 어디서 시작할까?" if waypoint else "마을 공급함   가진 돈 %d원" % GameState.money)
 	if training:
 		head = "크리처 훈련   가진 돈 %d원" % GameState.money
+	if starting:
+		head = "테스트용 시작 지점 (개발용 빌드에서만)"
 	if menu_kind == &"forge":
 		head = "무너진 대장간 터"
 	elif menu_kind == &"craft":
@@ -1076,7 +1094,9 @@ func _rebuild_menu() -> void:
 	for i in range(first, last):
 		var o := _menu_options[i]
 		var text := ""
-		if training:
+		if starting:
+			text = TestStarts.option_text(o)
+		elif training:
 			text = train_option_text(o)
 		elif forging:
 			text = forge_option_text(o)
@@ -1096,12 +1116,17 @@ func _rebuild_menu() -> void:
 		lines.append("데려간 크리처는 돌아오면 제자리에서 다시 일한다")
 	if waypoint:
 		lines.append("대장을 쓰러뜨리면 위쪽 길로 더 깊이 갈 수 있다")
+	if starting:
+		lines.append("W/S 고르기 · F 정하기 · 숫자키 바로 · Esc 처음부터")
+		lines.append("그 시점쯤의 상태를 새로 채운다 (저장이 아님)")
 	_menu_text.text = "\n".join(lines)
 	_menu.size = _menu_text.get_minimum_size() + Vector2(16, 10)
 	# 공급함(또는 사냥터 입구) 옆에 띄우되 화면 밖으로 나가지 않게
 	var at := (hunt_gate.position + Vector2(-200, 8)) if companion or waypoint else supply_box.position + Vector2(36, -80)
 	if forging:
 		at = forge.position + Vector2(40, -150)
+	if starting:
+		at = (Vector2(640, 360) - _menu.size) / 2
 	_menu.position = at.clamp(Vector2(4, 32), Vector2(636, 324) - _menu.size)
 	_menu.visible = menu_open
 
@@ -1264,7 +1289,8 @@ func gather_seeds() -> int:
 	return kept
 
 
-func _hatch(species: CreatureSpecies, at_cell: Vector2i) -> Creature:
+## element: 속성을 정해서 낳는다 (테스트 시작 지점). null 이면 부화 때 굴린 대로.
+func _hatch(species: CreatureSpecies, at_cell: Vector2i, element: CreatureElement = null) -> Creature:
 	var data := CreatureData.hatch(species, _rng)
 	var s := Creature.new()
 	if creatures.is_empty():
@@ -1275,6 +1301,8 @@ func _hatch(species: CreatureSpecies, at_cell: Vector2i) -> Creature:
 	elif GameState.hunter_knife:
 		# 튼튼한 사냥칼 (2026-09-27 후보 A 첫 조각): 좋은 알을 골라 오므로 첫 크리처만큼 바닥 보장
 		data.guarantee_minimum(Config.FIRST_CREATURE_MIN_WORK_SPEED, Config.FIRST_CREATURE_MIN_RADIUS)
+	if element:
+		data.set_element(element)
 	add_child(s)
 	s.forage = forage
 	s.setup(farm, data, at_cell)
