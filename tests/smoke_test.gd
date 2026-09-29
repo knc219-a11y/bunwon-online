@@ -2078,6 +2078,44 @@ func _ready() -> void:
 	_check(w_cid != &"" and Wearables.rarity(w_cid) == &"crafted" and Wearables.item(w_cid).weapon.kind == &"bow" and Config.CRAFT_COSTS.has(&"steel_sword"), "대장간에서 쇠뇌 (제작 무기) · 강철 검")
 	_check(Wearables.describe(w_cid).contains("활 · 사거리"), "무기 설명에 종류 · 사거리 %s" % Wearables.describe(w_cid))
 
+	# 38) 테스트용 시작 지점 (2026-09-29 사용자: "매번 처음부터 시작하는게 조금 어려운거같아")
+	_check(not main.menu_open, "테스트 장면 안에서는 시작 지점 창이 안 뜸")
+	main.queue_free()
+	await get_tree().process_frame
+	for sid: StringName in TestStarts.ids():
+		var ts: Node2D = load("res://scenes/main.tscn").instantiate()
+		add_child(ts)
+		await get_tree().process_frame
+		var ok := TestStarts.apply(ts, sid)
+		var spec := TestStarts.find(sid)
+		var want_creatures: int = spec.get("creatures", []).size()
+		var farmers: int = ts.creatures.filter(func(x: Creature) -> bool: return x.job == CreatureJobs.FARM).size()
+		var ts_w: Dictionary = Wearables.weapon()
+		var weapons: Array = spec.get("weapons", [])
+		var weapon_ok: bool = weapons.is_empty() or ts_w.name.contains(Wearables.ITEMS[weapons[0]].name)
+		var gear_n := 0
+		for who: StringName in [&"farmer", &"hunter"]:
+			gear_n += Wearables.worn_by(who).size() + GameState.bag[who].size()
+		var want_gear: int = weapons.size() + spec.get("armor", []).size() + spec.get("crafted", []).size() + spec.get("shop", []).size()
+		_check(ok and GameState.day == spec.get("day", 1) and GameState.money == spec.get("money", Config.START_MONEY)
+			and ts.creatures.size() == want_creatures and GameState.waypoints == Array(spec.get("waypoints", [0]), TYPE_INT, "", null)
+			and GameState.forge_state == spec.get("forge", 0) and weapon_ok and gear_n == want_gear,
+			"시작 지점 %s: %d일 · 돈 %d · 크리처 %d (농사 %d) · 웨이포인트 %s · 대장간 %d · 무기 %s · 장비 %d/%d" % [
+				sid, GameState.day, GameState.money, ts.creatures.size(), farmers, GameState.waypoints, GameState.forge_state, ts_w.name, gear_n, want_gear])
+		if sid == &"forge_ready":
+			_check(ts.restore_forge() and ts.smith.visible, "대장간 고치기 직전: 바로 고칠 수 있음")
+		if sid != &"fresh":
+			_check(GameState.hunter_unlocked and GameState.village_eggs.is_empty() and ts.farm.get_cell(Config.FIELD_PLOTS[0].position).planted, "%s: 사냥꾼 열림 · 밭 심어 둠" % sid)
+			# 가장 깊은 웨이포인트에서 바로 사냥 들어가기
+			var deepest: int = GameState.waypoints.max()
+			ts.hunter.position = ts.hunt_gate.position
+			_check(ts.enter_hunt(null, deepest) and ts.hunt != null, "%s: %s 웨이포인트로 사냥 들어감" % [sid, Config.HUNT_ZONES[deepest].name])
+			ts.leave_hunt()
+			ts.next_day()
+			_check(GameState.day == spec.day + 1, "%s: 하루 넘기기" % sid)
+		ts.queue_free()
+		await get_tree().process_frame
+
 	print("SMOKE TEST: %s (%d failures)" % ["PASS" if _failures == 0 else "FAIL", _failures])
 	get_tree().quit(1 if _failures > 0 else 0)
 
