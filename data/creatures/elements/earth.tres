@@ -8,6 +8,7 @@ id = &"earth"
 display_name = "땅"
 color = Color(0.72, 0.62, 0.38, 1)
 job_aptitude = {
+&"scrap": 1.5,
 &"sow": 1.5
 }
 move_speed_mult = 0.9

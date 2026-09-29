@@ -38,22 +38,40 @@ const ITEMS := {
 		"sheet": preload("res://assets/wear/hunter_jerkin.png")},
 	&"leather_shoes": {"name": "사냥꾼 가죽 신", "who": &"hunter", "slot": &"shoes", "from": &"hunt", "base": true, "effect": "",
 		"sheet": preload("res://assets/wear/leather_shoes.png")},
+	# 대장간 제작품 (2026-09-29 사용자 선택 A): 대장장이가 고철 + 돈으로 만드는 현대풍 장비 (from: forge).
+	# 만들 때마다 옵션 1~3개를 굴린다 (디아블로2 제작처럼, 등급 이름 "제작"). 공급함에서는 팔지 않는다.
+	&"work_cap": {"name": "작업 모자", "who": &"farmer", "slot": &"hat", "from": &"forge", "base": true, "effect": "",
+		"sheet": preload("res://assets/wear/work_cap.png")},
+	&"rain_suit": {"name": "방수 작업복", "who": &"farmer", "slot": &"clothes", "from": &"forge", "base": true, "effect": "",
+		"sheet": preload("res://assets/wear/rain_suit.png")},
+	&"work_boots": {"name": "작업 장화", "who": &"farmer", "slot": &"shoes", "from": &"forge", "base": true, "effect": "",
+		"sheet": preload("res://assets/wear/work_boots.png")},
+	&"hard_hat": {"name": "안전모", "who": &"hunter", "slot": &"hat", "from": &"forge", "base": true, "effect": "",
+		"sheet": preload("res://assets/wear/hard_hat.png")},
+	&"hiking_vest": {"name": "등산 조끼", "who": &"hunter", "slot": &"clothes", "from": &"forge", "base": true, "effect": "",
+		"sheet": preload("res://assets/wear/hiking_vest.png")},
+	&"safety_shoes": {"name": "안전화", "who": &"hunter", "slot": &"shoes", "from": &"forge", "base": true, "effect": "",
+		"sheet": preload("res://assets/wear/safety_shoes.png")},
 }
 
 ## 옵션 (디아블로2 접두·접미). 첫 조각은 효과가 이미 있는 것만. 수치는 전부 임시.
 ## stat: hearts 하트 + · speed 걷기 +% · swing 휘두르기 반지름 + · money 돈 드롭 +% · find 드롭 확률 +%p
 ## prefix: 마법 이름 앞말, suffix: 옵션이 둘일 때 맨 앞에 붙는 말
+## who: 그 옵션이 붙는 장비 주인 (&"" = 둘 다). 사냥터 장비는 사냥꾼 것이라 농부 옵션은 대장간 제작품에만 붙는다.
+## sow 씨앗 뿌리는 칸 + · reach 괭이 · 물뿌리개 앞 칸 + (2026-09-29 대장간 제작, 농부용)
 const AFFIXES := {
-	&"hearts": {"min": 1, "max": 1, "prefix": "튼튼한", "suffix": "생명의"},
-	&"speed": {"min": 10, "max": 20, "prefix": "날랜", "suffix": "바람의"},
-	&"swing": {"min": 2, "max": 6, "prefix": "넓게 베는", "suffix": "회오리의"},
-	&"money": {"min": 20, "max": 50, "prefix": "황금빛", "suffix": "행운의"},
-	&"find": {"min": 2, "max": 5, "prefix": "보물 찾는", "suffix": "보물의"},
+	&"hearts": {"min": 1, "max": 1, "prefix": "튼튼한", "suffix": "생명의", "who": &"hunter"},
+	&"speed": {"min": 10, "max": 20, "prefix": "날랜", "suffix": "바람의", "who": &""},
+	&"swing": {"min": 2, "max": 6, "prefix": "넓게 베는", "suffix": "회오리의", "who": &"hunter"},
+	&"money": {"min": 20, "max": 50, "prefix": "황금빛", "suffix": "행운의", "who": &"hunter"},
+	&"find": {"min": 2, "max": 5, "prefix": "보물 찾는", "suffix": "보물의", "who": &"hunter"},
+	&"sow": {"min": 1, "max": 1, "prefix": "씨 잘 뿌리는", "suffix": "풍년의", "who": &"farmer"},
+	&"reach": {"min": 1, "max": 1, "prefix": "손 긴", "suffix": "일꾼의", "who": &"farmer"},
 }
 ## 레어 이름 (무작위 두 단어, 뒤 단어는 칸마다)
 const RARE_WORDS := ["이끼", "도토리", "달빛", "여우", "안개", "참나무", "반딧불", "들꽃"]
 const RARE_TAILS := {&"hat": ["관", "두건", "투구"], &"clothes": ["외투", "망토", "가죽"], &"shoes": ["발굽", "걸음", "장화"]}
-const RARITY_NAMES := {&"normal": "일반", &"magic": "마법", &"rare": "레어", &"set": "세트"}
+const RARITY_NAMES := {&"normal": "일반", &"magic": "마법", &"rare": "레어", &"set": "세트", &"crafted": "제작"}
 const RARITIES: Array[StringName] = [&"normal", &"magic", &"rare"]
 
 ## 세트: 조각을 모두 입으면 보너스 (디아블로2 세트 장비처럼)
@@ -86,6 +104,10 @@ static func item(id: StringName) -> Dictionary:
 				out.money = out.get("money", 0) + a.value
 			&"find":
 				out.find = out.get("find", 0) + a.value
+			&"sow":
+				out.sow_add = out.get("sow_add", 0) + a.value
+			&"reach":
+				out.reach_add = out.get("reach_add", 0) + a.value
 	if speed != 1.0:
 		out.speed = speed
 	out.effect = affix_text(roll.affixes)
@@ -118,6 +140,10 @@ static func affix_line(a: Dictionary) -> String:
 			return "휘두르기 범위 +%d" % a.value
 		&"money":
 			return "돈 드롭 +%d%%" % a.value
+		&"sow":
+			return "씨앗 칸 +%d" % a.value
+		&"reach":
+			return "괭이 · 물뿌리개 칸 +%d" % a.value
 		_:
 			return "드롭 확률 +%d%%p" % a.value
 
@@ -134,22 +160,48 @@ static func affix_text(affixes: Array) -> String:
 static func roll_gear(rng: RandomNumberGenerator, force_rarity := &"", weights := {}) -> Dictionary:
 	var bases: Array[StringName] = []
 	for id: StringName in ITEMS:
-		if ITEMS[id].get("base", false):
+		if ITEMS[id].get("base", false) and ITEMS[id].get("from", &"") == &"hunt":
 			bases.append(id)
 	var base := bases[rng.randi() % bases.size()]
 	var r: StringName = force_rarity if force_rarity != &"" else pick_rarity(rng.randf() * 100.0, weights)
 	var count_range: Array = Config.GEAR_AFFIX_COUNT[r]
-	var stats: Array = AFFIXES.keys()
-	# 섞어서 앞에서부터 (한 장비에 같은 옵션은 한 번만)
+	var affixes := roll_affixes(rng, ITEMS[base].who, count_range)
+	return {base = base, rarity = r, name = gear_name(rng, base, r, affixes), affixes = affixes}
+
+
+## who 에게 붙을 수 있는 옵션 중 count_range [최소, 최대] 개를 굴린다 (한 장비에 같은 옵션은 한 번만)
+static func roll_affixes(rng: RandomNumberGenerator, who: StringName, count_range: Array) -> Array[Dictionary]:
+	var stats: Array = AFFIXES.keys().filter(func(k: StringName) -> bool: return AFFIXES[k].who in [&"", who])
+	# 섞어서 앞에서부터
 	for i in range(stats.size() - 1, 0, -1):
 		var j := rng.randi() % (i + 1)
 		var t = stats[i]
 		stats[i] = stats[j]
 		stats[j] = t
 	var affixes: Array[Dictionary] = []
-	for i in rng.randi_range(count_range[0], count_range[1]):
+	for i in mini(rng.randi_range(count_range[0], count_range[1]), stats.size()):
 		var def: Dictionary = AFFIXES[stats[i]]
 		affixes.append({stat = stats[i], value = rng.randi_range(def.min, def.max)})
+	return affixes
+
+
+## 대장간 제작 (2026-09-29 사용자 선택 A): 기본 장비 하나에 옵션 1~3개를 굴린다 (Config.CRAFT_AFFIX_WEIGHTS).
+## 이름은 마법 장비처럼 앞말 (+ 옵션이 둘 이상이면 뒷말). 아직 가진 것에 넣지 않은 정보만 돌려준다.
+static func roll_crafted(rng: RandomNumberGenerator, base: StringName) -> Dictionary:
+	var roll := rng.randf() * 100.0
+	var count := 1
+	var acc := 0.0
+	for n: int in Config.CRAFT_AFFIX_WEIGHTS:
+		acc += Config.CRAFT_AFFIX_WEIGHTS[n]
+		count = n
+		if roll < acc:
+			break
+	var affixes := roll_affixes(rng, ITEMS[base].who, [count, count])
+	return {base = base, rarity = &"crafted", name = gear_name(rng, base, &"magic", affixes), affixes = affixes}
+
+
+## 등급 장비 이름: 마법 "날랜 가죽 두건" (옵션 둘이면 "바람의 날랜 …"), 레어는 무작위 두 단어, 일반은 기본 이름
+static func gear_name(rng: RandomNumberGenerator, base: StringName, r: StringName, affixes: Array[Dictionary]) -> String:
 	var base_name: String = ITEMS[base].name
 	var name := base_name
 	match r:
@@ -160,7 +212,7 @@ static func roll_gear(rng: RandomNumberGenerator, force_rarity := &"", weights :
 		&"rare":
 			var tails: Array = RARE_TAILS[ITEMS[base].slot]
 			name = "%s %s" % [RARE_WORDS[rng.randi() % RARE_WORDS.size()], tails[rng.randi() % tails.size()]]
-	return {base = base, rarity = r, name = name, affixes = affixes}
+	return name
 
 
 ## 0~100 사이 값으로 등급을 고른다 (무게 순서대로)
@@ -270,18 +322,26 @@ static func sow_reach(who: StringName) -> int:
 	var r := 1
 	for id in worn_by(who):
 		r = maxi(r, item(id).get("sow_reach", 1))
-	return r
+	return r + stat_sum(who, "sow_add")
 
 
 static func is_hunt_drop(id: StringName) -> bool:
 	return item(id).get("from", &"") == &"hunt"
 
 
-## 공급함에서 파는 장비 (사냥터 드롭은 뺀다)
+## 대장간 제작 기본 장비 (Config.CRAFT_COSTS 순서)
+static func craft_bases() -> Array[StringName]:
+	var out: Array[StringName] = []
+	for id: StringName in Config.CRAFT_COSTS:
+		out.append(id)
+	return out
+
+
+## 공급함에서 파는 장비 (사냥터 드롭 · 대장간 제작품은 뺀다)
 static func shop_items() -> Array[StringName]:
 	var out: Array[StringName] = []
 	for id: StringName in ITEMS:
-		if not is_hunt_drop(id):
+		if ITEMS[id].get("from", &"") == &"":
 			out.append(id)
 	return out
 
@@ -413,6 +473,8 @@ static func describe(id: StringName) -> String:
 	if is_rolled(id):
 		# 사냥터 등급 장비는 모두 사냥꾼 것이라 짧게. 레어는 디아블로2처럼 기본 장비 이름도 함께.
 		kind = "%s %s" % [RARITY_NAMES[it.rarity], ITEMS[GameState.gear[id].base].name if it.rarity == &"rare" else SLOT_NAMES[it.slot]]
+		if it.rarity == &"crafted":
+			kind = "제작 · %s %s" % ["농부" if it.who == &"farmer" else "사냥꾼", SLOT_NAMES[it.slot]]
 	var text := "%s (%s) · %s" % [it.name, kind, it.effect]
 	var set_id: StringName = it.get("set", &"")
 	if set_id != &"":

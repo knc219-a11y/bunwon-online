@@ -42,6 +42,16 @@ const FORAGE_HOME := Vector2i(15, 7)
 var full_day := -1
 var total_idle_herbs := 0
 var total_water_bonus := 0
+## 대장간 (2026-09-29 사용자 선택 A): 터가 나타난 날 · 고친 날 · 복구비를 모으느라 무언가를 안 산 날 ·
+## 만든 장비 수 · 크리처가 주운 고철 · 날마다 번 돈(쓰기 전) · 날마다 쓴 돈
+var site_day := -1
+var restore_day := -1
+var held_days: Array[int] = []
+var crafted := 0
+var craft_spent := 0
+var gross: Array[int] = []
+var spent_today := 0
+var scrap_creature: Creature = null
 
 
 func _ready() -> void:
@@ -66,12 +76,29 @@ func _ready() -> void:
 	_log("\n하루 끝 시각 (봇 · 사람 어림 x%.0f, 6시 시작, 실제 1초 = 게임 %s분): %s" % [HUMAN_MULT, Config.CLOCK_MINUTES_PER_SECOND, ", ".join(clock_ends)])
 	_log("\n들나물·채집 (14일 합계): 손일 %d번 · 들나물 손으로 %d포기 · 크리처가 %d포기 · 도라지 %d뿌리 (%d원)" % [total_manual, total_hand_herbs, total_creature_herbs, total_roots, total_roots * Config.ROOT_PRICE])
 	_log("\n크리처 일 배분 (14일 합계): 밭 4구역이 모두 농사로 찬 날 %s · 농사 크리처가 한가할 때 캔 나물·뿌리 %d · 물 준 풀밭 덕분에 더 돋은 나물 %d포기" % ["%d일" % full_day if full_day > 0 else "없음", total_idle_herbs, total_water_bonus])
+	var last := gross.slice(maxi(0, gross.size() - 7))
+	var avg := 0.0
+	for g in last:
+		avg += g
+	avg /= maxf(last.size(), 1)
+	var scrap_by_creature := scrap_creature.scraps if scrap_creature else 0
+	_log("\n대장간: 터 %s · 복구 %s · 복구비를 모으느라 안 산 날 %s · 장비 제작 %d번 (%d원) · 크리처가 주운 고철 %d · 마지막 7일 하루 벌이 평균 %.0f원 · 끝에 남은 돈 %d원 = 하루 벌이의 %.1f배" % [
+		"%d일" % site_day if site_day > 0 else "없음", "%d일" % restore_day if restore_day > 0 else "없음", held_days, crafted, craft_spent, scrap_by_creature, avg, GameState.money, GameState.money / maxf(avg, 1.0)])
+	_log("입은 장비: 농부 %s · 사냥꾼 %s" % [_worn_text(&"farmer"), _worn_text(&"hunter")])
 	_log("\n최종: %d일째, 돈 %d원, 씨앗 %d, 크리처 %d (훈련 단계 합 %d), 밭 구역 %d, 웨이포인트 %s" % [GameState.day, GameState.money, GameState.seeds, main.creatures.size(), trained, GameState.open_plots, GameState.waypoints])
 	var out := OS.get_environment("OUT")
 	if out != "":
 		var f := FileAccess.open(out, FileAccess.WRITE)
 		f.store_string("\n".join(log_lines))
 	get_tree().quit()
+
+
+func _worn_text(who: StringName) -> String:
+	var out: Array[String] = []
+	for id in Wearables.worn_by(who):
+		var it := Wearables.item(id)
+		out.append("%s(%s)" % [it.name, it.effect])
+	return ", ".join(out)
 
 
 func _log(t: String) -> void:
@@ -86,6 +113,9 @@ func play_day() -> void:
 	hunt_sec = 0.0
 	var money0 := GameState.money
 	var herbs0 := GameState.displayed_herbs
+	spent_today = 0
+	if GameState.forge_state >= 1 and site_day < 0:
+		site_day = GameState.day
 	_log("\n## %d일째 (시작 돈 %d, 씨앗 %d, 작물 %d)" % [GameState.day, GameState.money, GameState.seeds, GameState.crops])
 	main._set_active(main.farmer)
 	await place_new_creatures()
@@ -96,7 +126,9 @@ func play_day() -> void:
 	var herbs := forage()
 	if herbs > 0:
 		farm_counts["들나물"] = herbs
+	var m_shop := GameState.money
 	var bought := shop()
+	spent_today += m_shop - GameState.money
 	# 산 뒤(밭을 넓혔거나 씨앗을 샀으면) 한 번 더 심는다
 	var more := farm_by_hand()
 	for k in more:
@@ -149,6 +181,7 @@ func play_day() -> void:
 		main._morning_card.visible = false
 	_log("밤 → 아침 카드: %s" % " / ".join(lines))
 	total_water_bonus += main.forage.bonus_today
+	gross.append(GameState.money - money0 + spent_today)
 	_log("하루 수입 %+d원 · 부화 기다리는 알 %d개 (농부 %d · 공급함 %d)" % [GameState.money - money0, GameState.farmer_eggs.size() + GameState.village_eggs.size(), GameState.farmer_eggs.size(), GameState.village_eggs.size()])
 
 
@@ -163,7 +196,7 @@ func place_new_creatures() -> void:
 	for s: Creature in main.creatures:
 		if farmers >= GameState.open_plots:
 			break
-		if s.home != main.HATCH_CELL and s.job == CreatureJobs.FORAGE:
+		if s.home != main.HATCH_CELL and s.job == CreatureJobs.FORAGE and s != scrap_creature:
 			_assign(s, CreatureJobs.FARM, farmers)
 			farmers += 1
 	for s: Creature in main.creatures:
@@ -174,6 +207,24 @@ func place_new_creatures() -> void:
 			farmers += 1
 		else:
 			_assign(s, CreatureJobs.FORAGE, 0)
+	# 대장간을 고쳤으면 크리처 하나에게 고철 줍기 (땅속성 채집 전담 먼저, 없으면 아무 채집 전담 · 가장 늦게 태어난 크리처)
+	if GameState.forge_state >= 2 and scrap_creature == null and not main.creatures.is_empty():
+		var pick: Creature = null
+		for s: Creature in main.creatures:
+			if s.home == main.HATCH_CELL or s.job != CreatureJobs.FORAGE:
+				continue
+			if pick == null or (s.has_element(&"earth") and not pick.has_element(&"earth")):
+				pick = s
+		if pick == null:
+			pick = main.creatures[-1]
+		scrap_creature = pick
+		main.farmer.position = pick.position
+		main.interact()
+		main.farmer.position = Farm.center_of(Creature.scrap_spot() + Vector2i(0, -1))
+		main.interact()
+		while pick.job != CreatureJobs.SCRAP:
+			pick.next_job()
+		_log("크리처 배치: %s → 고철 줍기" % pick.describe())
 	if farmers >= Config.FIELD_PLOTS.size() and full_day < 0:
 		full_day = GameState.day
 
@@ -205,6 +256,8 @@ func let_creatures_work() -> void:
 			elif s.job == CreatureJobs.FARM and CreatureJobs.FARM_ORDER.any(func(t: StringName) -> bool: return farm.find_work(CreatureJobs.FARM_WORK[t], s.home, s.data.work_radius(), [], Farm.center_of(s.home)) != null):
 				busy = true
 			elif s.job in [CreatureJobs.FARM, CreatureJobs.FORAGE] and main.forage.nearest_target(s.position, s.has_element(&"earth")) != null:
+				busy = true
+			elif s.job == CreatureJobs.SCRAP and (GameState.scrap_pile > 0 or s.position.distance_to(Farm.center_of(s.home)) > 1.0):
 				busy = true
 			elif s.job == CreatureJobs.FARM and s.position.distance_to(Farm.center_of(s.home)) > 1.0:
 				# 채집하고 제자리로 돌아가는 중
@@ -241,6 +294,8 @@ func farm_by_hand() -> Dictionary:
 		var reach := 1
 		if work in [Farm.Work.TILL, Farm.Work.WATER] and GameState.tool_level(work) > 0:
 			reach = Config.TOOL_UPGRADE_REACH
+		if work in [Farm.Work.TILL, Farm.Work.WATER]:
+			reach += Wearables.stat_sum(&"farmer", "reach_add")
 		if work == Farm.Work.SOW:
 			reach = Wearables.sow_reach(&"farmer")
 		var n := 0
@@ -259,9 +314,27 @@ func shop() -> Array[String]:
 	if not GameState.village_eggs.is_empty():
 		main.supply_action(&"take_eggs")
 		did.append("알 받기")
-	if GameState.crops > 0:
-		did.append("무 %d 진열" % GameState.crops)
+	# 대장간 (2026-09-29 선택 A): 사금 덩이가 다 모이면 무 · 돈을 남겨 두고 고친다 (사람이라면 그럴 것)
+	var saving := GameState.forge_state == 1 and GameState.material >= Config.FORGE_COST_MATERIAL
+	if saving and GameState.crops >= Config.FORGE_COST_CROPS and GameState.money >= Config.FORGE_COST_MONEY:
+		main.farmer.position = Farm.center_of(Config.FORGE_RECT.position + Vector2i(1, Config.FORGE_RECT.size.y))
+		if main.restore_forge():
+			restore_day = GameState.day
+			did.append("대장간 복구(%d원 · 무 %d · %s %d)" % [Config.FORGE_COST_MONEY, Config.FORGE_COST_CROPS, Config.BOSS_MATERIAL_NAME, Config.FORGE_COST_MATERIAL])
+			saving = false
+	var keep_crops := mini(GameState.crops, Config.FORGE_COST_CROPS) if saving else 0
+	var reserve := Config.FORGE_COST_MONEY if saving else 0
+	var held := false
+	if GameState.crops > keep_crops:
+		var shown := GameState.crops - keep_crops
+		GameState.crops = shown
+		did.append("무 %d 진열%s" % [shown, (" (복구용 %d 남김)" % keep_crops) if keep_crops > 0 else ""])
 		main.supply_action(&"display_crops")
+		GameState.crops = keep_crops
+	elif keep_crops > 0:
+		did.append("무 %d 복구용으로 남김" % keep_crops)
+	if GameState.forge_state >= 2:
+		craft_day(did)
 	if GameState.herbs > 0:
 		did.append("들나물 %d 진열" % GameState.herbs)
 		main.supply_action(&"display_herbs")
@@ -280,6 +353,9 @@ func shop() -> Array[String]:
 		for id: StringName in [&"expand_field", &"upgrade_can", &"upgrade_hoe", &"buy_knife", &"seed_vest", &"rain_boots", &"hiking_shoes", &"straw_hat", &"ball_cap"]:
 			if main.supply_options().has(id):
 				var m := GameState.money
+				if reserve > 0 and GameState.money - _price_of(id) < reserve:
+					held = true
+					continue
 				if main.supply_action(id):
 					did.append("%s(%d원)" % [id, m - GameState.money])
 					keep = true
@@ -297,12 +373,73 @@ func shop() -> Array[String]:
 			if price < best_price:
 				best = id
 				best_price = price
-		if best != &"" and GameState.money >= best_price:
+		if best != &"" and GameState.money >= best_price and GameState.money - best_price < reserve:
+			held = true
+		elif best != &"" and GameState.money >= best_price:
 			var pick: Array = main.train_from_option(best)
 			main.train(pick[0], pick[1])
 			did.append("훈련 %s(%d원)" % [String(best).trim_prefix("train_"), best_price])
 			keep = true
+	if held:
+		held_days.append(GameState.day)
 	return did
+
+
+## 공급함 물건 값 (복구비를 남겨 둘 때 본다)
+func _price_of(id: StringName) -> int:
+	match id:
+		&"expand_field":
+			return Config.FIELD_PLOT_PRICES[Farm.next_plot()]
+		&"upgrade_can", &"upgrade_hoe":
+			return main.TOOL_UPGRADES[id][1]
+		&"buy_knife":
+			return Config.HUNTER_KNIFE_PRICE
+	return Wearables.ITEMS[id].price if Wearables.ITEMS.has(id) else 0
+
+
+## 대장장이 (2026-09-29 선택 A): 고철이 있는 만큼 돌아가며 장비를 만들고, 옵션이 더 많은 것을 입고 나머지는 판다.
+## 돈은 훈련보다 먼저 쓴다 (새 쓸 곳을 쓰는지 보려고).
+func craft_day(did: Array[String]) -> void:
+	var bases := Wearables.craft_bases()
+	var made: Array[String] = []
+	# 사냥꾼 가방이 사냥터 일반 장비로 차 있으면 제작품이 창고로 가 버리니 먼저 판다 (사람이라면 그럴 것)
+	Wearables.sell_all_normal(&"hunter")
+	while true:
+		var base: StringName = bases[crafted % bases.size()]
+		var cost: Array = Config.CRAFT_COSTS[base]
+		if GameState.scrap < cost[0] or GameState.money < cost[1]:
+			break
+		var id: StringName = main.craft(base)
+		if id == &"":
+			break
+		crafted += 1
+		craft_spent += cost[1]
+		var it := Wearables.item(id)
+		made.append("%s[%s]" % [it.name, it.effect])
+		var who: StringName = it.who
+		var b: Array[StringName] = GameState.bag[who]
+		var i := b.find(id)
+		if i >= 0:
+			var worn: StringName = GameState.worn[who].get(it.slot, &"")
+			if worn == &"" or _score(id) > _score(worn):
+				Wearables.wear_from_bag(who, i)
+		# 가방의 제작품은 판다 (입지 않은 것)
+		for j in range(b.size() - 1, -1, -1):
+			if Wearables.is_rolled(b[j]) and Wearables.rarity(b[j]) == &"crafted":
+				Wearables.sell(who, j)
+		main.farmer.refresh_wear()
+		main.hunter.refresh_wear()
+	if not made.is_empty():
+		did.append("제작 %s" % ", ".join(made))
+
+
+## 장비 점수 (봇이 더 좋은 쪽을 입을 때): 옵션 수, 같으면 수치 합
+func _score(id: StringName) -> float:
+	var it := Wearables.item(id)
+	var sc := 0.0
+	for a: Dictionary in it.get("affixes", []):
+		sc += 1.0 + a.value / 100.0
+	return sc
 
 
 func incubate() -> void:

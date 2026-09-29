@@ -14,6 +14,8 @@ var watered: Dictionary[Vector2i, bool] = {}
 var claimed: Dictionary[Vector2i, bool] = {}
 ## 오늘 아침 물 덕분에 더 돋은 포기 수 (아침 카드에 쓴다)
 var bonus_today := 0
+## 건물이 들어선 곳 (2026-09-29 대장간 터 · 고물 더미). 여기에는 나물 · 뿌리가 돋지 않는다.
+var blocked: Array[Rect2i] = []
 
 
 func _ready() -> void:
@@ -26,7 +28,7 @@ func _ready() -> void:
 func sprout(rng: RandomNumberGenerator) -> void:
 	herbs.clear()
 	claimed.clear()
-	var spots := _shuffled(Config.HERB_SPOTS, rng)
+	var spots := _shuffled(_open_spots(Config.HERB_SPOTS), rng)
 	# 물 준 칸을 앞으로
 	spots.sort_custom(func(a: Vector2i, b: Vector2i) -> bool: return watered.has(a) and not watered.has(b))
 	bonus_today = mini(watered.size(), Config.HERB_WATER_BONUS_MAX)
@@ -35,10 +37,30 @@ func sprout(rng: RandomNumberGenerator) -> void:
 	for i in mini(n, spots.size()):
 		herbs[spots[i]] = rng.randi_range(0, Config.HERB_NAMES.size() - 1)
 	roots.clear()
-	var root_spots := _shuffled(Config.ROOT_SPOTS, rng)
+	var root_spots := _shuffled(_open_spots(Config.ROOT_SPOTS), rng)
 	for i in mini(rng.randi_range(Config.ROOTS_PER_DAY.x, Config.ROOTS_PER_DAY.y), root_spots.size()):
 		roots[root_spots[i]] = true
 	queue_redraw()
+
+
+## 건물이 들어선 자리 (rect) 는 앞으로 쓰지 않는다. 지금 돋아 있는 것도 걷어 낸다.
+func block(rect: Rect2i) -> void:
+	blocked.append(rect)
+	for c: Vector2i in herbs.keys():
+		if rect.has_point(c):
+			herbs.erase(c)
+	for c: Vector2i in roots.keys():
+		if rect.has_point(c):
+			roots.erase(c)
+	queue_redraw()
+
+
+func _open_spots(from: Array[Vector2i]) -> Array[Vector2i]:
+	if blocked.is_empty():
+		return from
+	var out: Array[Vector2i] = []
+	out.assign(from.filter(func(c: Vector2i) -> bool: return not blocked.any(func(r: Rect2i) -> bool: return r.has_point(c))))
+	return out
 
 
 func _shuffled(from: Array[Vector2i], rng: RandomNumberGenerator) -> Array[Vector2i]:

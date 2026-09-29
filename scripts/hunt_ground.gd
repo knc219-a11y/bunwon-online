@@ -456,6 +456,14 @@ func _defeat(s: WildSlime) -> void:
 		s.queue_free()
 		GameState.touch()
 		return
+	# 대장 재료 (2026-09-29 대장간 복구 A): 금두꺼비를 잡을 때마다 사금 덩이 하나, 처음 잡으면 다음 날 마을에 대장간 터
+	var material_text := ""
+	if s.boss and z.get("boss_material", false):
+		GameState.material += 1
+		material_text = " %s을(를) 얻었다 (%d개)." % [Config.BOSS_MATERIAL_NAME, GameState.material]
+		if zone == Config.FORGE_ZONE and not GameState.forge_boss_down:
+			GameState.forge_boss_down = true
+			material_text += " 마을 쪽에서 무언가 무너지는 소리가 들렸다..."
 	if not s.boss and (not GameState.first_egg_done or _egg_roll() < z.get("egg_chance", 0.0)):
 		# 게임 전체 첫 처치는 알을 반드시 떨어뜨린다 (첫 사냥에서 막히지 않게). 그 뒤로는 드물게.
 		GameState.first_egg_done = true
@@ -463,9 +471,9 @@ func _defeat(s: WildSlime) -> void:
 		drops.append({at = _reachable(s.position), species = table[randi() % table.size()]})
 		GameState.notify("%s을(를) 쓰러뜨리자 알이 떨어졌다!" % s.title)
 	elif s.boss and zone + 1 < Config.HUNT_ZONES.size():
-		GameState.notify("%s을(를) 쓰러뜨렸다! 위쪽 길이 열렸다. 길에서 F로 %d구역 %s, 아래 입구 F로 마을." % [s.title, zone + 2, Config.HUNT_ZONES[zone + 1].name])
+		GameState.notify("%s을(를) 쓰러뜨렸다! 위쪽 길이 열렸다. 길에서 F로 %d구역 %s, 아래 입구 F로 마을.%s" % [s.title, zone + 2, Config.HUNT_ZONES[zone + 1].name, material_text])
 	elif s.boss:
-		GameState.notify("%s을(를) 쓰러뜨렸다! 더 깊은 곳은 아직 막혀 있다. 아래 입구에서 F로 마을로 돌아가자." % s.title)
+		GameState.notify("%s을(를) 쓰러뜨렸다! 더 깊은 곳은 아직 막혀 있다. 아래 입구에서 F로 마을로 돌아가자.%s" % [s.title, material_text])
 	elif slimes.is_empty() and not boss_spawned:
 		GameState.notify("다 쓰러뜨리자 대장이 나타났다!")
 	elif slimes.is_empty():

@@ -218,7 +218,7 @@ const GEAR_AFFIX_COUNT := {&"normal": [0, 0], &"magic": [1, 2], &"rare": [3, 4]}
 ## 세트 조각이 아직 남아 있을 때, 장비 드롭 중 세트 조각이 나올 몫
 const SET_PIECE_SHARE := 0.5
 ## 공급함에서 장비를 팔 때 값 (바로 돈)
-const GEAR_SELL_PRICES := {&"normal": 5, &"magic": 20, &"rare": 60}
+const GEAR_SELL_PRICES := {&"normal": 5, &"magic": 20, &"rare": 60, &"crafted": 40}
 
 ## 대장 슬라임 (2026-09-28 사용자 선택 B, 디아블로2 챔피언처럼). 값은 전부 임시.
 ## 야생 슬라임을 다 쓰러뜨리면 공터 가운데에 대장 1마리가 나온다 (사냥 한 번에 한 마리).
@@ -274,6 +274,8 @@ const HUNT_ZONES: Array[Dictionary] = [
 		damage = 2, knockback = 6.0, windup = 0.4, pack = true, boss_pattern = &"tongue",
 		## 입구 메뉴·들어올 때 보여 주는 권장 준비
 		advice = "권장: 하트 7 · 사냥칼",
+		## 대장 재료 (2026-09-29 대장간 복구 A): 대장을 쓰러뜨릴 때마다 하나 (1막 대장 재료 사금 덩이)
+		boss_material = true,
 		loot = {&"money": 38, &"potion": 25, &"junk": 19, &"gear": 18},
 		rarity = {&"normal": 50, &"magic": 38, &"rare": 12}, boss_rarity = {&"normal": 20, &"magic": 55, &"rare": 25},
 		money = [20, 45], boss_money = [45, 80],
@@ -288,3 +290,31 @@ const HUNT_PADDY_SPEED := 0.6
 const WILD_BURROW_POP_DISTANCE := 60.0
 ## 무리(pack) 구역에서 하나가 튀어나오면 이 거리 안의 숨은 몬스터도 같이 튀어나온다 (px)
 const WILD_PACK_DISTANCE := 110.0
+
+## 대장간 복구 · 대장장이 (2026-09-29 사용자 선택 A: 한 번에 복구 + 사람 장비 제작). 본편 첫 조각. 값·자리·그림 전부 임시.
+## 1막 대장(금사리 금두꺼비)을 처음 쓰러뜨린 다음 날 아침, 마을 아래쪽 풀밭에 무너진 대장간 터가 드러난다.
+## 터에서 F → 복구에 드는 것 (돈 · 무 · 1막 대장 재료 사금 덩이)을 다 모았으면 한 번에 고친다.
+## 고치면 대장장이(셋째 캐릭터, Tab)가 열리고, 옆에 고물 더미가 생겨 크리처에게 고철 줍기를 맡길 수 있다.
+## 대장장이는 모루에서 고철 + 돈으로 현대풍 장비를 만든다. 만들 때마다 디아블로2 제작처럼 옵션을 무작위로 굴린다.
+## 자리: 왼쪽 감나무 두 그루 사이 풀밭 (3칸 x 2칸). 고물 더미는 오른쪽 (2칸 x 1칸).
+const FORGE_RECT := Rect2i(3, 11, 3, 2)
+const SCRAP_RECT := Rect2i(9, 12, 2, 1)
+## 대장장이가 처음 서는 칸 (대장간 오른쪽 앞)
+const SMITH_CELL := Vector2i(6, 12)
+## 대장 재료를 주는 구역 (Config.HUNT_ZONES 번호) = 대장간 터를 여는 구역
+const FORGE_ZONE := 1
+const BOSS_MATERIAL_NAME := "사금 덩이"
+## 복구에 드는 것. 복구 속도는 사금 덩이(대장을 잡을 때마다 1개)가 정한다 (봇: 터 → 복구 열흘 남짓).
+## 돈으로 막으면 훈련을 못 사는 날이 생겨서 돈은 무 한 번 판 값쯤으로 둔다.
+## 후보 목업에 있던 슬라임 젤리 10개는 뺐다: 젤리는 처치당 약 4%라 열흘에 두세 개밖에 안 모인다.
+const FORGE_COST_MONEY := 2000
+const FORGE_COST_CROPS := 40
+const FORGE_COST_MATERIAL := 12
+## 고물 더미: 아침마다 이만큼 쌓인다 (안 가져간 것은 그대로 두지 않고 새로 채움). 농부가 F로 하나씩 주워도 된다.
+const SCRAP_PER_DAY := 6
+## 제작 (대장장이 모루 F). 기본 장비마다 고철 · 돈. 옵션 수는 무게로 굴린다 {개수: 무게}.
+const CRAFT_COSTS := {
+	&"work_cap": [3, 200], &"rain_suit": [5, 300], &"work_boots": [4, 250],
+	&"hard_hat": [4, 250], &"hiking_vest": [5, 300], &"safety_shoes": [4, 250],
+}
+const CRAFT_AFFIX_WEIGHTS := {1: 50, 2: 35, 3: 15}

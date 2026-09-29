@@ -6,6 +6,9 @@
   supply_box.png 48 x 44  무인 판매대 모양 공동 선반, 2x1칸
   hunt_gate.png  72 x 56  철망 울타리 문 + 경고판, 뒤로 숲, 3x2칸
   stash.png      24 x 28  공용 창고 (나무 궤짝, 쇠 띠), 1x1칸. 2026-09-28 임시 그림
+  forge_ruin.png 72 x 56  무너진 대장간 터, 3x2칸. 2026-09-29 임시 그림
+  forge.png      72 x 76  고친 대장간 (벽돌 · 함석지붕 · 화덕 · 모루), 3x2칸
+  scrap_pile.png 40 x 26  고물 더미 (녹슨 경운기 바퀴 · 삽 · 파이프), 2x1칸
 그림 맨 아래 줄이 차지하는 칸의 아래 끝(땅). 발밑 그림자는 넣지 않는다 (게임이 그림).
 
 실행: python3 tools/make_village_props.py  (Pillow 필요)
@@ -218,11 +221,119 @@ def stash():
     return c.img
 
 
+# ---------- 대장간 (2026-09-29 사용자 선택 A: 한 번에 복구 + 사람 장비 제작) ----------
+BRICK, BRICK_D, BRICK_L = (186, 104, 84), (146, 78, 66), (214, 138, 112)
+TIN, TIN_D, TIN_L = (120, 150, 170), (90, 116, 138), (160, 188, 204)
+RUST, RUST_D = (170, 104, 70), (126, 76, 56)
+WEED, WEED_D = (104, 160, 88), (76, 124, 70)
+IRON, IRON_D, IRON_L = (84, 88, 100), (58, 60, 72), (130, 136, 150)
+SOOT = (70, 62, 66)
+
+
+def bricks(c, x0, y0, x1, y1):
+    c.rect(x0, y0, x1, y1, BRICK)
+    for y in range(y0, y1 + 1, 4):
+        c.hline(x0, x1, y, BRICK_D)
+        off = 0 if (y - y0) // 4 % 2 == 0 else 4
+        for x in range(x0 + off, x1 + 1, 8):
+            c.vline(x, y, min(y + 3, y1), BRICK_D)
+    c.hline(x0, x1, y0, BRICK_L)
+
+
+def anvil(c, x, y):
+    """y = 바닥"""
+    c.rect(x + 3, y - 4, x + 9, y, IRON_D)
+    c.rect(x + 5, y - 8, x + 7, y - 4, IRON)
+    c.rect(x, y - 11, x + 12, y - 8, IRON)
+    c.rect(x - 3, y - 11, x, y - 9, IRON)
+    c.hline(x - 2, x + 12, y - 11, IRON_L)
+
+
+def forge():
+    """대장간 (3x2칸, 2026-09-29 복구 A): 벽돌 벽 + 함석지붕 + 쇠 연통, 앞이 열려 화덕과 걸린 연장이 보임, 앞에 모루."""
+    c = C(72, 76)
+    # 함석 지붕 (골 무늬)
+    c.rect(2, 14, 69, 30, TIN)
+    for x in range(3, 69, 4):
+        c.vline(x, 14, 30, TIN_D)
+        c.vline(x + 1, 14, 30, TIN_L)
+    c.hline(2, 69, 30, TIN_D)
+    c.hline(0, 71, 31, IRON_D)
+    # 굴뚝 (쇠 연통) + 연기
+    c.rect(52, 0, 57, 16, IRON)
+    c.vline(52, 0, 16, IRON_L)
+    for (x, y, r) in ((58, 2, 3), (63, 0, 2)):
+        c.ell(x - r, y - r + 3, x + r, y + r + 3, (220, 214, 214))
+    # 벽 (벽돌) + 열린 앞 (화덕이 보임)
+    bricks(c, 4, 32, 67, 75)
+    c.rect(12, 42, 42, 75, SOOT)
+    # 화덕
+    bricks(c, 16, 58, 38, 75)
+    c.rect(21, 62, 33, 70, (60, 40, 40))
+    c.rect(22, 64, 32, 70, AMBER_D)
+    c.rect(24, 66, 30, 70, AMBER)
+    c.rect(26, 67, 28, 69, AMBER_L)
+    # 걸린 연장 (현대풍: 스패너 · 삽 · 망치)
+    c.rect(16, 45, 17, 54, METAL_L); c.rect(15, 44, 18, 46, METAL_L)
+    c.rect(24, 45, 25, 55, WOOD); c.rect(22, 52, 27, 56, METAL)
+    c.rect(33, 46, 34, 55, WOOD); c.rect(31, 44, 36, 47, IRON)
+    # 간판
+    c.rect(44, 36, 64, 46, CREAM_L)
+    c.rect(44, 36, 64, 36, WOOD_D)
+    for i, x in enumerate(range(47, 62, 5)):
+        c.rect(x, 39, x + 3, 43, RED_D)
+    # 모루 (앞)
+    anvil(c, 50, 74)
+    return c.img
+
+
+def forge_ruin():
+    """무너진 대장간 터 (3x2칸): 벽돌 밑동 · 쓰러진 함석판 · 반쯤 묻힌 녹슨 모루 · 푯말. 1막 대장을 잡으면 나타남."""
+    c = C(72, 56)
+    # 무너진 벽돌 밑동
+    bricks(c, 4, 38, 14, 55)
+    bricks(c, 4, 46, 30, 55)
+    bricks(c, 56, 42, 67, 55)
+    bricks(c, 44, 50, 67, 55)
+    # 쓰러진 함석판 (녹)
+    c.line(20, 40, 44, 48, TIN_D, 3)
+    c.line(20, 38, 44, 46, RUST, 2)
+    c.line(34, 30, 58, 38, TIN, 3)
+    c.line(34, 28, 58, 36, RUST_D, 1)
+    # 반쯤 묻힌 녹슨 모루
+    c.rect(28, 50, 40, 53, RUST_D)
+    c.rect(30, 47, 38, 50, RUST)
+    # 잡초
+    for x in (2, 16, 26, 42, 52, 69):
+        c.vline(x, 49, 55, WEED); c.px(x - 1, 51, WEED_D); c.px(x + 1, 50, WEED)
+    # 푯말
+    c.rect(46, 14, 47, 40, WOOD_D)
+    c.rect(38, 12, 66, 24, WOOD_L)
+    c.hline(38, 66, 24, WOOD_D)
+    for x in range(41, 64, 5):
+        c.rect(x, 16, x + 3, 20, WOOD_DD)
+    return c.img
+
+
+def scrap_pile():
+    """고철 더미 (1x1~2x1): 녹슨 경운기 바퀴 · 삽날 · 파이프"""
+    c = C(40, 26)
+    c.ell(2, 8, 20, 25, RUST_D); c.ell(6, 12, 16, 21, (0, 0, 0, 0)); c.ell(8, 14, 14, 19, IRON)
+    c.line(14, 24, 38, 14, IRON_L, 2)
+    c.line(18, 25, 36, 22, RUST, 3)
+    c.rect(24, 10, 33, 18, METAL); c.rect(26, 4, 27, 10, WOOD)
+    c.rect(30, 20, 38, 25, RUST_D)
+    return c.img
+
+
 PROPS = {
     "incubator": incubator_b,
     "supply_box": supply_b,
     "hunt_gate": gate_b,
     "stash": stash,
+    "forge_ruin": forge_ruin,
+    "forge": forge,
+    "scrap_pile": scrap_pile,
 }
 
 
