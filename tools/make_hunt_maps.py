@@ -11,7 +11,7 @@ data/hunt_maps/<이름>.txt 의 칸 지도를 읽어 assets/hunt/<이름>_ground
   S  사냥꾼이 들어오는 자리   E  아래 입구 (마을로)   N  위쪽 길 (다음 구역)
   W  웨이포인트   J  마을 표지   K  대장 자리   c  몬스터 자리
   S E N W 는 모래 위, J 는 풀 위, K c 는 이웃 칸 바닥 위.
-  분원농협 (논·들판·창고 마당)
+  분원농협 (논·들판·창고 마당) · 광동리 (추수 벌판 · 짚가리 · 군량 곳간 H · 배수로 ~ 와 나무 다리 b)
   p  논 (물 댄 논, 사냥꾼 걷기 느려짐)   b  나무 다리 (물 위, 모두 건넘)
   x  추수한 논 그루터기   r  밭 이랑   %  콘크리트 마당   m  멍석 (벼 말리기)
   h  볏짚 더미 (막힘)   w  곤포 볏짚 (흰 비닐, 막힘)   s  쌀 포대 더미 (막힘)
@@ -30,7 +30,7 @@ ROOT = os.path.join(os.path.dirname(__file__), "..")
 T = 24
 tiles = np.array(Image.open(os.path.join(ROOT, "assets/tiles/farm_tiles.png")).convert("RGB")).astype(float)
 ## 구역 풀빛 (Config.HUNT_ZONES ground_tint 와 같게). 파일 이름 앞부분으로 고른다.
-GRASS_TINTS = {"geumsa": np.array([0.9, 0.86, 0.72]), "nonghyup": np.array([0.82, 0.9, 0.8])}
+GRASS_TINTS = {"geumsa": np.array([0.9, 0.86, 0.72]), "nonghyup": np.array([0.82, 0.9, 0.8]), "gwangdong": np.array([0.92, 0.88, 0.74])}
 
 PATH_D = np.array((188, 162, 124)); PATH_DD = np.array((160, 134, 104))
 WET = np.array((176, 150, 116))

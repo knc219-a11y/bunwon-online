@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="CreatureSpecies" load_steps=7 format=3]
+
+[ext_resource type="Script" path="res://scripts/creatures/creature_species.gd" id="1"]
+[ext_resource type="Resource" path="res://data/creatures/traits/ordinary.tres" id="2"]
+[ext_resource type="Resource" path="res://data/creatures/traits/diligent.tres" id="3"]
+[ext_resource type="Resource" path="res://data/creatures/traits/keen_eye.tres" id="4"]
+[ext_resource type="Resource" path="res://data/creatures/elements/flying.tres" id="5"]
+[ext_resource type="Texture2D" path="res://assets/creatures/baby_sparrow_flying.png" id="6"]
+
+[resource]
+script = ExtResource("1")
+id = &"sparrow"
+display_name = "아기 참새"
+possible_elements = Array[Resource]([ExtResource("5")])
+job_aptitude = {
+&"forage": 1.5
+}
+work_speed_range = Vector2(0.8, 1.2)
+radius_range = Vector2i(1, 2)
+traits = Array[Resource]([ExtResource("2"), ExtResource("3"), ExtResource("4")])
+companion_style = &"peck"
+daily_seeds = Vector2i(2, 4)
+sprite_sheets = {
+&"flying": ExtResource("6")
+}
+egg_color = Color(0.93, 0.87, 0.74, 1)
+egg_spot_color = Color(0.55, 0.4, 0.28, 1)
+color = Color(0.588, 0.408, 0.275, 1)

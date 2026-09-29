@@ -74,6 +74,25 @@ var _aim := -1.0
 var _lash := 0.0
 var _tongue_to := Vector2.ZERO
 
+## 참새 (광동리 flyer, 2026-09-29 선택 B): 날아다니다 내려꽂는다. 나는 동안 position 은 그림자(땅) 자리이고 그림만 띄운다.
+var flyer := false
+## 맴도는 남은 시간 (-1 = 땅에 있음) · 내려꽂기 예고 남은 시간 · 내려꽂는 진행(0~1)
+var _fly := -1.0
+var _swoop := -1.0
+var _dive_t := -1.0
+var _dive_from := Vector2.ZERO
+var _dive_to := Vector2.ZERO
+var _angle := 0.0
+## 허수아비 장수 짚단 던지기: 떨어질 짚단들 {at, t = 남은 시간}, 던진 횟수 (두 번에 한 번 참새 부르기)
+var _bales: Array[Dictionary] = []
+var _throws := 0
+
+## 참새가 내려꽂았다 (내려앉은 곳). HuntGround 가 받아 원 안의 사냥꾼을 다치게 한다.
+signal swooped(at: Vector2)
+## 짚단이 떨어졌다. HuntGround 가 받아 원 안의 사냥꾼을 다치게 한다.
+signal bale_landed(at: Vector2)
+## 허수아비 장수가 참새를 불렀다 (HuntGround 가 참새를 놓는다)
+signal called(at: Vector2)
 ## 대장이 내려찍었다 (떨어진 곳). HuntGround 가 받아 원 안의 사냥꾼을 다치게 하고 새끼를 놓는다.
 signal slammed(at: Vector2)
 ## 대장이 혀를 뻗었다 (입 → 혀끝). HuntGround 가 받아 선 위의 사냥꾼을 다치게 하고 금가루를 뿌린다.
@@ -104,6 +123,8 @@ func setup_zone(zone: int) -> void:
 	damage = z.get("damage", 1)
 	knockback = z.get("knockback", 14.0)
 	windup_time = z.get("windup", 0.6)
+	flyer = z.get("flyer", false)
+	_angle = randf() * TAU
 
 
 ## 대장으로 만든다 (트리에 넣기 전후 모두 가능)
@@ -117,6 +138,7 @@ func make_boss(zone := 0) -> void:
 	scale = Vector2.ONE * Config.BOSS_SCALE
 	_tint = z.boss_tint
 	buried = false
+	flyer = false
 	damage = z.get("damage", 1)
 	knockback = z.get("knockback", 14.0)
 	pattern = z.get("boss_pattern", &"")
@@ -143,6 +165,17 @@ func make_minion() -> void:
 ## 한 대 맞는다. 쓰러지면 true. 웅크리는 중이면 밀려나도 달려들기는 멈추지 않는다.
 func hit(from: Vector2) -> bool:
 	buried = false
+	if flyer:
+		if in_air():
+			# 날던 참새는 쪼여서 땅에 떨어진다 (아기 참새 동행만 닿음)
+			_fly = -1.0
+			_swoop = -1.0
+			_dive_t = -1.0
+			position = _stand(position)
+			_rest = Config.SWOOP_RECOVER
+		else:
+			# 맞으면 조금만 더 쪼다가 날아오른다
+			_rest = minf(_rest, Config.SWOOP_HIT_RECOVER)
 	hp -= 1
 	_flash = 0.25
 	var away := (position - from).normalized()
@@ -151,13 +184,19 @@ func hit(from: Vector2) -> bool:
 	if _air_t < 0.0:
 		position = _stand(position + away * knockback)
 	_hop_t = -1.0
-	_rest = Config.WILD_SLIME_REST_TIME
+	if not flyer:
+		_rest = Config.WILD_SLIME_REST_TIME
 	return hp <= 0
 
 
 ## 공중에 떠 있어 칼·몸이 닿지 않는다 (대장 내려찍기)
 func airborne() -> bool:
-	return _air_t >= 0.0
+	return _air_t >= 0.0 or in_air()
+
+
+## 참새가 공중에 있다 (맴돌기 · 예고 · 내려꽂는 중)
+func in_air() -> bool:
+	return _fly >= 0.0 or _swoop >= 0.0 or _dive_t >= 0.0
 
 
 ## 헐떡이는 중 (달려들기·대장 패턴 뒤, 때릴 틈)
@@ -178,6 +217,24 @@ func stun(time: float) -> void:
 ## 바닥 예고 (사냥꾼 봇·그리기용). {} 이면 없음.
 ## lane: from → to 띠 (width), circle: at 둘레 radius, progress 는 예고가 얼마나 찼는지 (0~1)
 func telegraph() -> Dictionary:
+	var all := telegraphs()
+	return all[0] if not all.is_empty() else {}
+
+
+## 지금 예고 전부 (짚단은 여러 개). 먼저 떨어지는 것부터.
+func telegraphs() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	if _swoop >= 0.0:
+		out.append({kind = &"circle", at = _dive_to, radius = Config.SWOOP_RADIUS, progress = 1.0 - _swoop / windup_time})
+	for b in _bales:
+		out.append({kind = &"circle", at = b.at, radius = Config.STRAW_RADIUS, progress = clampf(1.0 - b.t / Config.STRAW_WINDUP, 0.0, 1.0), bale = true})
+	var one := _telegraph_one()
+	if not one.is_empty():
+		out.append(one)
+	return out
+
+
+func _telegraph_one() -> Dictionary:
 	if _windup >= 0.0:
 		return {kind = &"lane", from = position, to = position + _lunge_dir * Config.LUNGE_DISTANCE, width = Config.LUNGE_WIDTH * scale.x, progress = 1.0 - _windup / windup_time}
 	if _air_t >= 0.0:
@@ -214,6 +271,8 @@ func tick(delta: float, target: Vector2) -> void:
 			_pull_t = -1.0
 	if buried or _stun > 0.0:
 		pass
+	elif ai_enabled and flyer:
+		_tick_fly(delta, target)
 	elif ai_enabled and _tick_attack(delta, target):
 		pass
 	elif ai_enabled:
@@ -232,9 +291,16 @@ func tick(delta: float, target: Vector2) -> void:
 	var hopping := hop_t >= 0.0
 	var cols := BURIED_COLUMNS if buried else (HOP_COLUMNS if hopping else IDLE_COLUMNS)
 	var col: int = HOP_COLUMNS[mini(int(hop_t * 4), 3)] if hopping else cols[int(_anim_time * 2.0) % 2]
+	if flyer:
+		# 날갯짓 · 낟알 쪼기 (내려앉은 뒤) · 앉아 있기
+		col = HOP_COLUMNS[int(_anim_time * 10.0) % 4] if in_air() else (BURIED_COLUMNS if _rest > 0.0 else IDLE_COLUMNS)[int(_anim_time * 3.0) % 2]
+	elif not _bales.is_empty():
+		col = BURIED_COLUMNS[0]
 	_sprite.frame = col
-	# 내려찍기: 공중에서 그림을 위로 띄운다 (그림자는 제자리)
+	# 내려찍기: 공중에서 그림을 위로 띄운다 (그림자는 제자리). 참새는 나는 동안 FLY_HEIGHT 만큼.
 	var lift := sin(_air_t * PI) * 60.0 / scale.y if _air_t >= 0.0 else 0.0
+	if flyer and in_air():
+		lift = Config.FLY_HEIGHT * (1.0 - maxf(_dive_t, 0.0)) / scale.y
 	_sprite.position = Vector2(-FRAME_SIZE / 2.0, BOTTOM_Y - FRAME_SIZE - lift)
 	# 웅크림: 납작해졌다가 튀어나간다
 	_sprite.scale = Vector2(1.15, 0.85) if _windup >= 0.0 or _aim >= 0.0 else Vector2.ONE
@@ -288,6 +354,19 @@ func _tick_attack(delta: float, target: Vector2) -> bool:
 			_recover = Config.TONGUE_RECOVER
 			_pattern_cd = Config.TONGUE_COOLDOWN
 		return true
+	if not _bales.is_empty():
+		for i in range(_bales.size() - 1, -1, -1):
+			_bales[i].t -= delta
+			if _bales[i].t <= 0.0:
+				bale_landed.emit(_bales[i].at)
+				_bales.remove_at(i)
+		if _bales.is_empty():
+			_recover = Config.STRAW_RECOVER
+			_pattern_cd = Config.STRAW_COOLDOWN
+			_throws += 1
+			if _throws % 2 == 0:
+				called.emit(position)
+		return true
 	if _hop_t >= 0.0:
 		return false
 	var d := position.distance_to(target)
@@ -296,6 +375,13 @@ func _tick_attack(delta: float, target: Vector2) -> bool:
 			_air_from = position
 			_air_to = _stand(target)
 			_air_t = 0.0
+			return true
+		if pattern == &"straw" and _pattern_cd <= 0.0 and d <= Config.STRAW_RANGE:
+			# 짚단 셋: 발밑 → 양옆 (비켜서도 한 번 더 노림)
+			var side := (target - position).normalized().orthogonal() * Config.STRAW_SPREAD
+			var spots := [target, target + side, target - side]
+			for i in Config.STRAW_BALES:
+				_bales.append({at = spots[i % spots.size()], t = Config.STRAW_WINDUP + i * Config.STRAW_GAP})
 			return true
 		if pattern == &"tongue" and _pattern_cd <= 0.0 and d <= Config.TONGUE_RANGE:
 			_tongue_to = position + (target - position).normalized() * Config.TONGUE_RANGE
@@ -309,6 +395,45 @@ func _tick_attack(delta: float, target: Vector2) -> bool:
 		_windup = windup_time
 		return true
 	return false
+
+
+## 참새 한 틱: 땅에서 쪼기 → 날아올라 맴돌기 → 그림자 원 예고 → 내려꽂기 → 다시 쪼기.
+func _tick_fly(delta: float, target: Vector2) -> void:
+	var d := position.distance_to(target)
+	if _dive_t >= 0.0:
+		_dive_t = minf(_dive_t + delta / Config.SWOOP_TIME, 1.0)
+		position = _dive_from.lerp(_dive_to, _dive_t)
+		if _dive_t >= 1.0:
+			_dive_t = -1.0
+			swooped.emit(position)
+			if terrain and not terrain.monster_ok(position + Vector2(0, BOTTOM_Y - 2)):
+				# 물·짚가리 위에는 못 앉으니 곧장 다시 날아오른다
+				_fly = randf_range(Config.FLY_TIME.x, Config.FLY_TIME.y)
+			else:
+				_rest = Config.SWOOP_RECOVER
+		return
+	if _swoop >= 0.0:
+		_swoop -= delta
+		if _swoop < 0.0:
+			_dive_from = position
+			_dive_t = 0.0
+		return
+	if _fly >= 0.0:
+		_fly -= delta
+		_angle += delta * 1.8
+		var goal := target + Vector2(cos(_angle), sin(_angle) * 0.6) * Config.FLY_CIRCLE
+		position = position.move_toward(goal, Config.FLY_SPEED * speed * delta).clamp(area.position, area.end)
+		if d > Config.FLY_NOTICE * 2.0 and (terrain == null or terrain.monster_ok(position + Vector2(0, BOTTOM_Y - 2))):
+			# 사냥꾼이 멀리 가 버리면 내려앉아 다시 쫀다
+			_fly = -1.0
+			_rest = randf_range(0.5, 1.5)
+		elif _fly < 0.0:
+			_swoop = windup_time
+			_dive_to = target.clamp(area.position, area.end)
+		return
+	_rest -= delta
+	if _rest <= 0.0 and d <= Config.FLY_NOTICE:
+		_fly = randf_range(Config.FLY_TIME.x, Config.FLY_TIME.y)
 
 
 ## to 로 옮길 수 있으면 to, 못 서는 곳(물 등)이면 지금 자리. 영역 밖은 안으로 당긴다.

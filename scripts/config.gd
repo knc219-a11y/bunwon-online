@@ -138,6 +138,30 @@ const TONGUE_RECOVER := 0.7
 const GOLD_DUST_RADIUS := 16.0
 const GOLD_DUST_TIME := 6.0
 const GOLD_DUST_SLOW := 0.5
+## 광동리 참새 (flyer, 2026-09-29 선택 B): 땅에서 쪼다가 사냥꾼이 FLY_NOTICE 안에 오면 날아오름 →
+## 사냥꾼 둘레를 FLY_CIRCLE 거리로 FLY_TIME 동안 맴돎 → 발밑에 그림자 원 (예고 = 구역 windup) → 내려꽂기 (원 안이면 하트 -피해)
+## → 땅에서 SWOOP_RECOVER 초 낟알을 쪼음 (이때만 칼에 맞음) → 다시 날아오름. 나는 동안은 물·짚가리·벽을 넘는다.
+const FLY_NOTICE := 120.0
+const FLY_HEIGHT := 26.0
+const FLY_SPEED := 70.0
+const FLY_CIRCLE := 46.0
+const FLY_TIME := Vector2(0.8, 1.6)
+const SWOOP_RADIUS := 22.0
+const SWOOP_TIME := 0.22
+const SWOOP_RECOVER := 1.6
+## 맞으면 이만큼만 더 쪼다가 날아오른다 (맞고 바로 도망)
+const SWOOP_HIT_RECOVER := 0.6
+## 허수아비 장수 짚단 던지기: 사냥꾼 둘레에 짚단 원 STRAW_BALES 개를 차례로 (하나 예고 STRAW_WINDUP, 간격 STRAW_GAP), 원 안이면 하트 -피해.
+## 두 번에 한 번은 참새를 STRAW_CALL 마리 부른다 (최대 SLAM_MINION_MAX)
+const STRAW_RANGE := 170.0
+const STRAW_BALES := 3
+const STRAW_WINDUP := 0.75
+const STRAW_GAP := 0.35
+const STRAW_RADIUS := 20.0
+const STRAW_SPREAD := 34.0
+const STRAW_COOLDOWN := 3.0
+const STRAW_RECOVER := 1.0
+const STRAW_CALL := 2
 
 ## 초당 약 3.4타일
 const CHARACTER_SPEED := 82.0
@@ -192,6 +216,9 @@ const COMPANION_PULL_GAP := 18.0
 const COMPANION_PULL_STUN := 1.0
 ## 끌려오는 데 걸리는 시간 (초). 혀도 이만큼 보인다.
 const COMPANION_PULL_TIME := 0.25
+## 날아가 쪼기 (아기 참새, 2026-09-29 광동리 B): 이 거리 안이면 물·벽 너머 · 날고 있는 몬스터도 쪼음 (피해 1). 날던 참새는 땅에 떨어진다.
+const COMPANION_PECK_RANGE := 120.0
+const COMPANION_PECK_INTERVAL := 1.4
 ## 박치기 크리처가 야생 슬라임을 쫓아가기 시작하는 거리 (사냥꾼에게서 너무 멀어지지 않게)
 const COMPANION_CHASE_DISTANCE := 90.0
 
@@ -280,6 +307,29 @@ const HUNT_ZONES: Array[Dictionary] = [
 		rarity = {&"normal": 50, &"magic": 38, &"rare": 12}, boss_rarity = {&"normal": 20, &"magic": 55, &"rare": 25},
 		money = [20, 45], boss_money = [45, 80],
 		monster_tint = Color.WHITE, boss_tint = Color.WHITE, ground_tint = Color(0.9, 0.86, 0.72), tree_tint = Color(0.72, 0.86, 0.7),
+	},
+	{
+		## 2막 첫 구역 (2026-09-29 사용자: "3구역은 광동리다", 후보 B. 동지벌 군량 벌판 선택).
+		## 광동리 = 광복동(광백이) + 동지벌촌 (광주시 유래: 병자호란 때 군량미를 가장 많이 낸 넓은 벌판 마을).
+		## 추수한 벌판 · 짚가리 · 옛 군량 곳간 · 배수로. 곡식 도둑 참새 떼가 날아다니고, 곳간을 지키던 허수아비 장수가 대장.
+		name = "광동리", monster = "참새", boss_monster = "허수아비 장수", waypoint = true,
+		map = "gwangdong",
+		labels = [[Vector2(26, 4.3), "군량 곳간"]],
+		sheet = "res://assets/creatures/wild_sparrow.png", boss_sheet = "res://assets/creatures/wild_scarecrow.png", burrow = false,
+		## 참새는 날아다닌다 (flyer): 나는 동안 칼·몸이 닿지 않고, 내려꽂기(그림자 원 예고) 뒤 땅에서 낟알을 쪼는 동안만 칼에 맞는다
+		flyer = true,
+		## 알 (구역마다 일반 알 종): 참새 → 아기 참새. 대장도 가끔 같은 알.
+		egg = "res://data/creatures/species/sparrow.tres", boss_egg = "res://data/creatures/species/sparrow.tres",
+		## 참새는 금사리 모래게보다 두 배 넘게 많아서 한 마리 확률은 1% (사냥 한 번에 알 약 15%, 금사리와 비슷하게)
+		egg_chance = 0.01, boss_egg_chance = 0.15,
+		## 2막부터 한 계단 더 (대장간 제작품으로 금사리가 쉬워진 것을 보고, 2026-09-29): 내려꽂기 하트 -2, 대장 체력 26. windup = 내려꽂기 예고(초)
+		count = 15, hp = 4, speed = 1.0, boss_hp = 26,
+		damage = 2, knockback = 4.0, windup = 0.35, pack = false, boss_pattern = &"straw",
+		advice = "권장: 하트 9 · 제작 장비",
+		loot = {&"money": 38, &"potion": 25, &"junk": 19, &"gear": 18},
+		rarity = {&"normal": 40, &"magic": 42, &"rare": 18}, boss_rarity = {&"normal": 15, &"magic": 55, &"rare": 30},
+		money = [30, 60], boss_money = [70, 120],
+		monster_tint = Color.WHITE, boss_tint = Color.WHITE, ground_tint = Color(0.92, 0.88, 0.74), tree_tint = Color(0.74, 0.86, 0.68),
 	},
 ]
 ## 넓은 맵의 여울(얕은 물)에서 걷기 빠르기 배율 (임시)
