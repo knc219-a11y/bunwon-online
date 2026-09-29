@@ -143,6 +143,20 @@ const CREATURE_HOP_TIME := 0.35
 ## 도착한 칸에서 일하는 동작 시간(초). 급수 4프레임 x 8fps
 const CREATURE_WORK_ANIM_TIME := 0.5
 
+## 하루 시계 (2026-09-29 사용자: "체력이나 시간 제한 때문에 노동을 못하는 건 원하지 않는데, 시간을 아주 여유 있게 주고
+## 정말 하루를 넘기고 싶으면 자러 가게"). 시계는 흐르지만 아무것도 막지 않는다. 하루는 잠을 자야만 넘어간다. 값은 전부 임시.
+## 아침 6시에 일어난다 (하루 시작, 분)
+const DAY_START_MINUTE := 6 * 60
+## 실제 1초에 흐르는 게임 분. 2.0 = 게임 10분이 실제 5초, 6시~자정이 실제 9분.
+## 봇 어림 (design/day-time/runs): 사람 속도로 보통 날 일이 오후에, 가장 바쁜 날도 저녁 9시 전에 끝난다. 1.0이면 오전 10시에 끝나 시계가 거의 안 쓰임.
+const CLOCK_MINUTES_PER_SECOND := 2.0
+## 저녁 노을이 지기 시작하는 시각과 다 어두워지는 시각 (분). 어두워도 일은 다 할 수 있다.
+const DUSK_START_MINUTE := 18 * 60
+const DUSK_FULL_MINUTE := 21 * 60
+const DUSK_ALPHA := 0.35
+## 시계는 새벽 2시에서 멈춘다 (쓰러지거나 벌칙 없음, 자러 가면 된다)
+const CLOCK_MAX_MINUTE := 26 * 60
+
 ## 잠자기 (2026-09-27 결정 A②): 현관 F → 밤으로 어두워짐 → 아침 카드 → F로 일어남
 const SLEEP_FADE_TIME := 1.0
 const WAKE_FADE_TIME := 0.4

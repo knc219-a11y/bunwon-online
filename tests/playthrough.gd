@@ -19,6 +19,17 @@ var hunt_days := 0
 var hunt_hurt := 0
 var hunt_knocked := 0
 var cleared_day := {}
+## 하루 시계 (2026-09-29): 봇은 도구질을 순간에 끝내므로 실제 걸릴 시간을 어림한다 (초, 임시 어림값).
+## 손 도구질 한 번 = 휘두르기 + 한 칸 걷기, 들나물 한 포기 = 풀밭까지 걷기, 공급함·부화기·집 오가기 = 하루 한 번에 묶어서.
+const HAND_SEC := 1.0
+const HERB_SEC := 4.0
+const WALK_SEC := 30.0
+## 사람은 봇보다 느리게 움직인다고 보고 두 배로도 적어 둔다
+const HUMAN_MULT := 2.0
+var hand_sec := 0.0
+var creature_sec := 0.0
+var hunt_sec := 0.0
+var clock_ends: Array[String] = []
 
 
 func _ready() -> void:
@@ -29,6 +40,8 @@ func _ready() -> void:
 	add_child(main)
 	await get_tree().process_frame
 	main._rng.seed = rng_seed
+	# 시계는 봇이 어림한 시간으로 돌린다 (크리처를 기다리며 빨리 돌리는 동안 시계가 흐르지 않게)
+	main.clock_running = false
 	farm = main.farm
 	Engine.time_scale = 1.0
 	_log("# 자동 플레이 seed=%d" % rng_seed)
@@ -38,6 +51,7 @@ func _ready() -> void:
 	for s: Creature in main.creatures:
 		trained += s.data.train_total()
 	_log("\n사냥: %d번 · 맞은 횟수 %d (하루 평균 %.1f) · 쓰러짐 %d번 · 대장 처음 쓰러뜨린 날 %s" % [hunt_days, hunt_hurt, float(hunt_hurt) / maxi(hunt_days, 1), hunt_knocked, cleared_day])
+	_log("\n하루 끝 시각 (봇 · 사람 어림 x%.0f, 6시 시작, 실제 1초 = 게임 %s분): %s" % [HUMAN_MULT, Config.CLOCK_MINUTES_PER_SECOND, ", ".join(clock_ends)])
 	_log("\n최종: %d일째, 돈 %d원, 씨앗 %d, 크리처 %d (훈련 단계 합 %d), 밭 구역 %d, 웨이포인트 %s" % [GameState.day, GameState.money, GameState.seeds, main.creatures.size(), trained, GameState.open_plots, GameState.waypoints])
 	var out := OS.get_environment("OUT")
 	if out != "":
@@ -53,6 +67,9 @@ func _log(t: String) -> void:
 
 func play_day() -> void:
 	manual_actions = 0
+	hand_sec = 0.0
+	creature_sec = 0.0
+	hunt_sec = 0.0
 	var money0 := GameState.money
 	_log("\n## %d일째 (시작 돈 %d, 씨앗 %d, 작물 %d)" % [GameState.day, GameState.money, GameState.seeds, GameState.crops])
 	main._set_active(main.farmer)
@@ -79,8 +96,17 @@ func play_day() -> void:
 		planted += int(cell.planted)
 		watered += int(cell.watered)
 	_log("밭: 열린 칸 %d · 심은 칸 %d · 물 준 칸 %d" % [farm._cells.size(), planted, watered])
+	hand_sec += manual_actions * HAND_SEC + farm_counts.get("들나물", 0) * (HERB_SEC - HAND_SEC) + WALK_SEC
 	if GameState.hunter_unlocked:
 		await hunt_day()
+	# 크리처는 농부가 손일하는 동안 같이 일한다 (더 긴 쪽). 사냥은 그 뒤 따로.
+	var bot_sec := maxf(hand_sec, creature_sec) + hunt_sec
+	var human_sec := maxf(hand_sec * HUMAN_MULT, creature_sec) + hunt_sec * HUMAN_MULT
+	main.advance_clock(bot_sec * Config.CLOCK_MINUTES_PER_SECOND)
+	var bot_end := GameState.clock_text(Config.DAY_START_MINUTE + bot_sec * Config.CLOCK_MINUTES_PER_SECOND)
+	var human_end := GameState.clock_text(minf(Config.DAY_START_MINUTE + human_sec * Config.CLOCK_MINUTES_PER_SECOND, Config.CLOCK_MAX_MINUTE))
+	clock_ends.append("%d일 %s · %s" % [GameState.day, bot_end.split(" ")[1] if bot_end.begins_with("오전") else bot_end, human_end])
+	_log("시간: 손일 약 %.0f초 · 크리처 일 %.0f초 · 사냥 %.0f초 → 잠자리 시각 %s (사람 어림 %s)" % [hand_sec, creature_sec, hunt_sec, bot_end, human_end])
 	var lines: Array[String] = main.next_day()
 	var cap := OS.get_environment("CAPTURE")
 	if cap != "":
@@ -127,6 +153,7 @@ func let_creatures_work() -> void:
 	Engine.time_scale = 20.0
 	for i in 600:
 		await get_tree().process_frame
+		creature_sec += get_process_delta_time()
 		var busy := false
 		for s: Creature in main.creatures:
 			if s._busy:
@@ -382,6 +409,7 @@ func hunt_day() -> void:
 		t += DT
 		zone_t += DT
 	zone_times.append("%s %.0f초" % [Config.HUNT_ZONES[h.zone].name, zone_t])
+	hunt_sec = t
 	var hearts_left := h.hearts
 	var knocked := h.knocked
 	hunt_days += 1

@@ -5,6 +5,8 @@ signal changed
 signal message(text: String)
 
 var day := 1
+## 하루 시계 (2026-09-29 사용자): 자정부터 센 게임 분. 막는 건 없고 자면 아침 6시로 돌아간다.
+var minutes := float(Config.DAY_START_MINUTE)
 var seeds := Config.START_SEEDS
 var crops := 0
 var money := Config.START_MONEY
@@ -62,12 +64,30 @@ func tool_level(work: int) -> int:
 	return tool_levels.get(work, 0)
 
 
+## 시계 글씨 (10분 단위): "오전 6:00", "오후 2:40", "밤 11:50", "새벽 1:00"
+static func clock_text(at_minutes: float) -> String:
+	var m := int(at_minutes) / 10 * 10
+	var h := (m / 60) % 24
+	var part := "오전"
+	if m >= 24 * 60:
+		part = "새벽"
+	elif h >= 21:
+		part = "밤"
+	elif h >= 12:
+		part = "오후"
+	var h12 := h % 12
+	if h12 == 0:
+		h12 = 12
+	return "%s %d:%02d" % [part, h12, m % 60]
+
+
 func touch() -> void:
 	changed.emit()
 
 
 func reset() -> void:
 	day = 1
+	minutes = float(Config.DAY_START_MINUTE)
 	seeds = Config.START_SEEDS
 	crops = 0
 	money = Config.START_MONEY

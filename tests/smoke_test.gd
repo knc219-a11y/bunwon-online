@@ -1385,6 +1385,31 @@ func _ready() -> void:
 	_check(h_forage.herbs.size() == h_before, "사냥꾼은 들나물을 캐지 않음 (농부 일)")
 	main._set_active(main.farmer)
 
+	# 32) 하루 시계 (2026-09-29 사용자: 시간은 아주 여유 있게, 막지 않고, 자야 하루가 넘어감)
+	main.next_day()
+	_check(is_equal_approx(GameState.minutes, Config.DAY_START_MINUTE) and main._status.text.contains("오전 6:00"), "아침 6시에 시작, 위 줄에 시계")
+	main.advance_clock(8 * 60 + 40)
+	_check(main._status.text.contains("오후 2:40") and is_zero_approx(main._dusk.color.a), "시계가 흐름 (오후 2:40), 낮엔 안 어두움")
+	main.advance_clock(8 * 60)
+	_check(main._status.text.contains("밤 10:40") and is_equal_approx(main._dusk.color.a, Config.DUSK_ALPHA), "밤이 되면 조금 어두워짐")
+	var c_day := GameState.day
+	main.advance_clock(24 * 60)
+	_check(GameState.day == c_day and is_equal_approx(GameState.minutes, Config.CLOCK_MAX_MINUTE) and main._status.text.contains("새벽 2:00"), "새벽 2시에서 멈추고 하루는 안 넘어감")
+	var c_cell: Farm.Cell = main.farm.get_cell(Vector2i(2, 3))
+	c_cell.planted = false
+	c_cell.tilled = false
+	_check(main.farm.do_work(Farm.Work.TILL, Vector2i(2, 3)), "새벽에도 도구질은 됨 (막지 않음)")
+	main.next_day()
+	_check(GameState.day == c_day + 1 and is_equal_approx(GameState.minutes, Config.DAY_START_MINUTE) and is_zero_approx(main._dusk.color.a), "자고 나면 다음 날 아침 6시")
+	main.advance_clock(3 * 60)
+	main.open_menu()
+	var c_min := GameState.minutes
+	main._process(5.0)
+	_check(is_equal_approx(GameState.minutes, c_min), "선택창을 연 동안은 시계가 멈춤")
+	main.close_menu()
+	main._process(5.0)
+	_check(is_equal_approx(GameState.minutes, c_min + 5.0 * Config.CLOCK_MINUTES_PER_SECOND), "닫으면 다시 흐름 (실제 1초 = 게임 %s분)" % Config.CLOCK_MINUTES_PER_SECOND)
+
 	print("SMOKE TEST: %s (%d failures)" % ["PASS" if _failures == 0 else "FAIL", _failures])
 	get_tree().quit(1 if _failures > 0 else 0)
 

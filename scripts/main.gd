@@ -63,6 +63,10 @@ var incubating_species: CreatureSpecies
 ## 잠든 동안(밤 → 아침 카드)에는 이동·도구를 막고 F만 받는다.
 var sleeping := false
 var _night: ColorRect
+## 저녁·밤 색 (하루 시계에 따라 조금씩 어두워진다. 일은 막지 않는다)
+var _dusk: ColorRect
+## 하루 시계가 흐르는지. 자동 플레이 봇은 끄고 스스로 시간을 잰다.
+var clock_running := true
 var _morning_card: Control
 var _morning_text: Label
 ## 마을 공급함 선택창 (농부가 F로 연다). 열려 있는 동안 W/S로 고르고 F로 정한다.
@@ -150,9 +154,25 @@ func _set_active(c: Character) -> void:
 	GameState.touch()
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	if hunt == null:
 		update_fading()
+	if clock_running and not sleeping and not menu_open and not inventory.visible:
+		advance_clock(delta * Config.CLOCK_MINUTES_PER_SECOND)
+
+
+## 하루 시계를 게임 분만큼 돌린다. 새벽 2시에서 멈추고, 아무것도 막지 않는다. HUD는 10분마다 고친다.
+func advance_clock(game_minutes: float) -> void:
+	var before := int(GameState.minutes) / 10
+	GameState.minutes = minf(GameState.minutes + game_minutes, Config.CLOCK_MAX_MINUTE)
+	_update_dusk()
+	if int(GameState.minutes) / 10 != before:
+		_refresh_hud()
+
+
+func _update_dusk() -> void:
+	var t := inverse_lerp(Config.DUSK_START_MINUTE, Config.DUSK_FULL_MINUTE, GameState.minutes)
+	_dusk.color.a = clampf(t, 0.0, 1.0) * Config.DUSK_ALPHA
 
 
 ## 캐릭터·크리처가 집·나무 그림 뒤에 가려지면 그 그림을 반투명하게 한다.
@@ -932,6 +952,8 @@ func near_door() -> bool:
 ## 하루를 넘기고 밤사이 일어난 일을 줄마다 돌려준다 (아침 카드에 쓴다).
 func next_day() -> Array[String]:
 	GameState.day += 1
+	GameState.minutes = float(Config.DAY_START_MINUTE)
+	_update_dusk()
 	var lines: Array[String] = []
 	if GameState.displayed_crops > 0:
 		var earned := GameState.displayed_crops * Config.CROP_PRICE
@@ -1069,6 +1091,13 @@ func _build_hud() -> void:
 	help.modulate = Color(1, 1, 1, 0.7)
 	help.text = "이동 WASD · 도구 Space (사냥터: 클릭) · 도구 변경 Q/E · 상호작용 F (공급함: W/S 고르기) · 크리처 일 R · 가방 I · 캐릭터 전환 Tab · 잠자기 집 현관 F"
 	layer.add_child(help)
+	# 저녁·밤 색 (하루 시계). 아침엔 투명.
+	_dusk = ColorRect.new()
+	_dusk.color = Color(0.1, 0.08, 0.3, 0.0)
+	_dusk.size = Vector2(640, 360)
+	_dusk.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	layer.add_child(_dusk)
+	layer.move_child(_dusk, 0)
 	# 잠잘 때 화면 전체를 덮는 밤 색. 평소에는 투명.
 	_night = ColorRect.new()
 	_night.color = Color(0.05, 0.06, 0.18, 0.0)
@@ -1111,9 +1140,9 @@ func _refresh_hud() -> void:
 	var tool_text: String = tool_name(TOOLS[tool_index]) if active == farmer else ("튼튼한 사냥칼" if GameState.hunter_knife else "사냥칼")
 	if hunt:
 		var buddy := hunt.companion.display_name() if hunt.companion else "혼자"
-		_status.text = "%d일째 | %s | 도구: %s | 동행: %s | 남은 몬스터 %d | 주운 알 %d | 돈 %d원 · 젤리 %d" % [GameState.day, Config.HUNT_ZONES[hunt.zone].name, tool_text, buddy, hunt.slimes.size(), hunt.picked.size(), GameState.money, GameState.junk]
+		_status.text = "%d일째 %s | %s | 도구: %s | 동행: %s | 남은 몬스터 %d | 주운 알 %d | 돈 %d원 · 젤리 %d" % [GameState.day, GameState.clock_text(GameState.minutes), Config.HUNT_ZONES[hunt.zone].name, tool_text, buddy, hunt.slimes.size(), hunt.picked.size(), GameState.money, GameState.junk]
 		return
-	_status.text = "%d일째 | %s | 도구: %s | 돈 %d원 | 씨앗 %d  작물 %d  나물 %d | 알: 농부 %d · 사냥꾼 %d · 공급함 %d | 크리처 %d" % [
-		GameState.day, active.display_name, tool_text, GameState.money, GameState.seeds, GameState.crops, GameState.herbs,
+	_status.text = "%d일째 %s | %s | 도구: %s | 돈 %d원 | 씨앗 %d  작물 %d  나물 %d | 알: 농부 %d · 사냥꾼 %d · 공급함 %d | 크리처 %d" % [
+		GameState.day, GameState.clock_text(GameState.minutes), active.display_name, tool_text, GameState.money, GameState.seeds, GameState.crops, GameState.herbs,
 		GameState.farmer_eggs.size(), GameState.hunter_eggs.size(), GameState.village_eggs.size(), creatures.size(),
 	]
