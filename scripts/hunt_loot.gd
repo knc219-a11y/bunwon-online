@@ -53,6 +53,10 @@ static func roll_for_kill(rng: RandomNumberGenerator, zone := 0) -> Dictionary:
 ## 대장 슬라임을 쓰러뜨렸을 때 떨어질 것 (늘 하나). "드롭 확률 +%p" 옵션은 쓰이지 않는다.
 static func roll_for_boss(rng: RandomNumberGenerator, zone := 0) -> Dictionary:
 	var z: Dictionary = Config.HUNT_ZONES[zone]
+	# 처음 주는 무기 (2026-09-29 무기): 분원농협 대장 첫 처치 = 사냥 활, 금사리 = 물의 지팡이 (일반, 한 번만)
+	if Config.FIRST_WEAPON_DROPS.has(zone) and not zone in GameState.weapon_gifts:
+		GameState.weapon_gifts.append(zone)
+		return {kind = &"gear", roll = Wearables.roll_gear(rng, &"normal", {}, Config.FIRST_WEAPON_DROPS[zone])}
 	if rng.randf() >= Config.BOSS_GEAR_CHANCE:
 		return _money(rng, z.boss_money[0], z.boss_money[1])
 	var missing := Wearables.missing_hunt_drops()
@@ -127,6 +131,8 @@ static func take(d: Dictionary) -> String:
 			var what := "%s %s" % [Wearables.RARITY_NAMES[d.roll.rarity], d.roll.name]
 			match where:
 				&"worn":
+					if Wearables.ITEMS[d.roll.base].slot == &"weapon":
+						return "%s을(를) 주워 바로 들었다! %s (사냥칼로 돌아가려면 I 가방에서 무기 칸을 벗기)" % [what, Wearables.weapon_line(Wearables.weapon())]
 					return "%s을(를) 주워 바로 입었다! %s" % [what, Wearables.affix_text(d.roll.affixes)]
 				&"bag":
 					return "%s을(를) 주워 가방에 넣었다. (I 키)" % what

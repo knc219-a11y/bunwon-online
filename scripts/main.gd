@@ -843,6 +843,8 @@ func forge_option_text(id: StringName) -> String:
 			return "닫기"
 	var it: Dictionary = Wearables.ITEMS[id]
 	var cost: Array = Config.CRAFT_COSTS[id]
+	if it.slot == &"weapon":
+		return "%s (사냥꾼 무기 · %s)   고철 %d · %d원" % [it.name, Wearables.WEAPON_KIND_NAMES[it.weapon.kind], cost[0], cost[1]]
 	return "%s (%s %s)   고철 %d · %d원" % [it.name, "농부" if it.who == &"farmer" else "사냥꾼", Wearables.SLOT_NAMES[it.slot], cost[0], cost[1]]
 
 
@@ -1400,6 +1402,8 @@ func _refresh_hud() -> void:
 	if _status == null:
 		return
 	var tool_text: String = tool_name(TOOLS[tool_index]) if active == farmer else ("튼튼한 사냥칼" if GameState.hunter_knife else "사냥칼")
+	if active == hunter and GameState.worn[&"hunter"].has(&"weapon"):
+		tool_text = Wearables.item(GameState.worn[&"hunter"][&"weapon"]).name
 	if active == smith:
 		tool_text = "망치"
 	if hunt:

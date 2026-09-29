@@ -44,6 +44,8 @@ var stash: Array[StringName] = []
 ## id(&"gear_n") → {base, rarity, name, affixes}. 가방 · 창고 · 입은 칸에는 이 id 가 들어간다.
 var gear := {}
 var gear_serial := 0
+## 처음 주는 무기를 이미 떨어뜨린 구역 (Config.FIRST_WEAPON_DROPS)
+var weapon_gifts: Array[int] = []
 ## 사냥터 드롭 (2026-09-27 결정 A + 드롭표): 빨간 물약, 잡템(슬라임 젤리)
 var potions := 0
 var junk := 0
@@ -121,6 +123,7 @@ func reset() -> void:
 	stash = []
 	gear = {}
 	gear_serial = 0
+	weapon_gifts = []
 	potions = 0
 	junk = 0
 	hunter_unlocked = false
