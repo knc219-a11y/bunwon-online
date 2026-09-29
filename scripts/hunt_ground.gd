@@ -71,6 +71,15 @@ var _cooldown := 0.0
 var _invulnerable := 0.0
 var _swing_time := 0.0
 var _swing_dir := Vector2.DOWN
+## 이번 휘두르기 반지름 (그리기용, 무기마다 다름)
+var _swing_radius := Config.SWING_RADIUS
+## 날아가는 화살 · 지팡이 구슬 {kind = &"arrow"/&"orb", at, dir, left = 남은 거리, (orb) blast, element}
+var shots: Array[Dictionary] = []
+## 지팡이 구슬이 터진 자리 (그리기용) {at, radius, element, t}
+var _blasts: Array[Dictionary] = []
+## 불 구슬: 잠시 뒤 한 번 더 피해 {slime, t}
+var _burns: Array[Dictionary] = []
+var _fx: Node2D
 var _hud: Node2D
 var _ground: Node2D
 var _trees: Array[Sprite2D] = []
@@ -116,6 +125,10 @@ func _ready() -> void:
 	camera = Camera2D.new()
 	add_child(camera)
 	camera.make_current()
+	_fx = Node2D.new()
+	_fx.z_index = 4000
+	_fx.draw.connect(_draw_fx)
+	add_child(_fx)
 	var layer := CanvasLayer.new()
 	layer.layer = 2
 	add_child(layer)
@@ -370,6 +383,9 @@ func tick(delta: float) -> void:
 	if popped:
 		_pack_pop()
 	_tick_dust(delta)
+	_tick_shots(delta)
+	if knocked:
+		return
 	if companion:
 		_tick_companion(delta)
 	for i in range(drops.size() - 1, -1, -1):
@@ -384,10 +400,12 @@ func tick(delta: float) -> void:
 		else:
 			loot[i].erase("full")
 	queue_redraw()
+	_fx.queue_redraw()
 	_hud.queue_redraw()
 
 
-## 사냥칼을 휘두른다. dir 이 비어 있으면 바라보는 쪽으로. 맞힌 수를 돌려준다.
+## 공격한다 (클릭). 든 무기에 따라 휘두르기 · 화살 · 지팡이 구슬 (2026-09-29 무기). 무기가 없으면 사냥칼.
+## dir 이 비어 있으면 바라보는 쪽으로. 휘두르기는 맞힌 수, 쏘기는 쏘았으면 1 (맞았는지는 날아간 뒤).
 func swing(dir := Vector2.ZERO) -> int:
 	if knocked or _cooldown > 0.0:
 		return 0
@@ -397,16 +415,87 @@ func swing(dir := Vector2.ZERO) -> int:
 	else:
 		dir = Vector2(hunter.facing)
 	_swing_dir = dir.normalized()
-	_cooldown = Config.SWING_COOLDOWN
+	var w := Wearables.weapon()
+	_cooldown = w.cooldown
+	var hand := hunter.feet() + Vector2(0, -8)
+	if w.kind == &"bow":
+		shots.append({kind = &"arrow", at = hand, dir = _swing_dir, left = w.range})
+		return 1
+	if w.kind == &"staff":
+		shots.append({kind = &"orb", at = hand, dir = _swing_dir, left = w.range, blast = w.blast, element = w.element})
+		return 1
 	_swing_time = 0.15
-	var center := hunter.feet() + Vector2(0, -8) + _swing_dir * Config.SWING_REACH
+	_swing_radius = w.radius
+	var center: Vector2 = hand + _swing_dir * w.reach
 	var hits := 0
 	for s in slimes.duplicate():
-		if not s.airborne() and s.position.distance_to(center) <= Wearables.swing_radius(&"hunter"):
+		if not s.airborne() and s.position.distance_to(center) <= w.radius:
 			hits += 1
 			if s.hit(hunter.feet()):
 				_defeat(s)
 	return hits
+
+
+## 화살 · 구슬을 날리고 맞힌다. 화살은 첫 몬스터에 박히고 (나는 참새도 맞힘, 모래에 숨은 모래게는 지나감.
+## 그루터기인 척하는 고목 그루터기는 보이니 맞아서 깨어남),
+## 구슬은 처음 닿은 몬스터 또는 사거리 끝에서 터져 둘레 모두를 맞힌다.
+func _tick_shots(delta: float) -> void:
+	for i in range(_blasts.size() - 1, -1, -1):
+		_blasts[i].t -= delta
+		if _blasts[i].t <= 0.0:
+			_blasts.remove_at(i)
+	for i in range(_burns.size() - 1, -1, -1):
+		var b: Dictionary = _burns[i]
+		b.t -= delta
+		if b.t > 0.0:
+			continue
+		_burns.remove_at(i)
+		var s: WildSlime = b.slime
+		if is_instance_valid(s) and s in slimes and s.hit(s.position + Vector2(0, -4)):
+			_defeat(s)
+	for i in range(shots.size() - 1, -1, -1):
+		var sh: Dictionary = shots[i]
+		var speed := Config.ARROW_SPEED if sh.kind == &"arrow" else Config.ORB_SPEED
+		var step := minf(speed * delta, sh.left)
+		sh.at += sh.dir * step
+		sh.left -= step
+		var hit_r := Config.ARROW_HIT_RADIUS if sh.kind == &"arrow" else Config.ORB_HIT_RADIUS
+		var target: WildSlime = null
+		for s in slimes:
+			if (s.buried and not s.disguise) or (s.airborne() and not (sh.kind == &"arrow" and s.in_air())):
+				continue
+			# 몬스터 몸 가운데 (발보다 조금 위, 큰 대장은 더 넓게)
+			if (s.position + Vector2(0, -8 * s.scale.y)).distance_to(sh.at) <= hit_r * s.scale.x:
+				target = s
+				break
+		# 나무 · 창고 · 비닐하우스처럼 키 큰 것에 막힌다 (물 · 바위 · 덤불 위로는 날아감)
+		var blocked := map != null and SHOT_BLOCK.contains(map.at(Vector2i(floori(sh.at.x / T), floori(sh.at.y / T))))
+		if target == null and sh.left > 0.0 and not blocked:
+			continue
+		shots.remove_at(i)
+		if sh.kind == &"arrow":
+			if target != null and target.hit(sh.at - sh.dir * 10.0):
+				_defeat(target)
+		else:
+			_burst(sh.at, sh.blast, sh.element)
+
+
+## 지팡이 구슬이 터진다: 둘레 모두 1 피해 + 속성 효과
+func _burst(at: Vector2, radius: float, element: StringName) -> void:
+	_blasts.append({at = at, radius = radius, element = element, t = 0.3})
+	for s in slimes.duplicate():
+		if s.airborne() or (s.position + Vector2(0, -6)).distance_to(at) > radius + 8.0 * s.scale.x:
+			continue
+		if s.hit(at):
+			_defeat(s)
+			continue
+		match element:
+			&"water":
+				s.slow(Config.STAFF_SLOW_TIME)
+			&"earth":
+				s.stun(Config.STAFF_STUN_TIME)
+			&"fire":
+				_burns.append({slime = s, t = Config.STAFF_BURN_DELAY})
 
 
 var _companion_cooldown := 0.0
@@ -805,6 +894,9 @@ func _draw() -> void:
 				draw_circle(p + Vector2(0, -1), 4, Color(0.85, 0.2, 0.22))
 			&"junk":
 				draw_circle(p, 4, Color(0.62, 0.52, 0.42, 0.9))
+			_ when Wearables.ITEMS[d.roll.base if d.has("roll") else d.id].slot == &"weapon":
+				draw_line(p + Vector2(-6, 2), p + Vector2(6, -8), Color(0.75, 0.75, 0.8), 2.0)
+				draw_line(p + Vector2(-6, -4), p + Vector2(-1, 2), Color(0.55, 0.38, 0.2), 2.0)
 			_:
 				draw_rect(Rect2(p + Vector2(-5, -8), Vector2(10, 10)), Color(0.2, 0.35, 0.2))
 				var sheet: Texture2D = Wearables.ITEMS[d.roll.base if d.has("roll") else d.id].sheet
@@ -817,7 +909,40 @@ func _draw() -> void:
 	if _swing_time > 0.0 and hunter:
 		var c := hunter.feet() + Vector2(0, -12)
 		var a := _swing_dir.angle()
-		draw_arc(c, 20, a - 1.0, a + 1.0, 10, Color(1, 1, 1, 0.85), 2.5)
+		draw_arc(c, _swing_radius + 2.0, a - 1.0, a + 1.0, 10, Color(1, 1, 1, 0.85), 2.5)
+
+
+const SHOT_BLOCK := "THG"
+const ELEMENT_COLORS := {&"water": Color(0.4, 0.65, 1.0), &"earth": Color(0.7, 0.5, 0.25), &"fire": Color(1.0, 0.5, 0.2)}
+
+
+## 화살 · 구슬 · 터짐 (몬스터 위에 그린다)
+func _draw_fx() -> void:
+	for sh in shots:
+		if sh.kind == &"arrow":
+			# 어두운 테두리 위에 밝은 화살 (풀밭 · 흙길 어디서나 보이게)
+			var tail: Vector2 = sh.at - sh.dir * 14.0
+			var o: Vector2 = sh.dir.orthogonal()
+			_fx.draw_line(tail, sh.at, Color(0.15, 0.1, 0.05, 0.8), 3.5)
+			_fx.draw_line(tail, sh.at, Color(0.95, 0.85, 0.6), 1.5)
+			_fx.draw_colored_polygon(PackedVector2Array([sh.at + sh.dir * 3.0, sh.at - sh.dir * 2.0 + o * 3.0, sh.at - sh.dir * 2.0 - o * 3.0]), Color(0.9, 0.9, 0.95))
+			_fx.draw_line(tail, tail - sh.dir * 3.0 + o * 3.0, Color(1, 1, 1), 1.0)
+			_fx.draw_line(tail, tail - sh.dir * 3.0 - o * 3.0, Color(1, 1, 1), 1.0)
+		else:
+			var col: Color = ELEMENT_COLORS[sh.element]
+			_fx.draw_circle(sh.at, 8.0, Color(col, 0.3))
+			_fx.draw_circle(sh.at, 5.0, col)
+			_fx.draw_circle(sh.at + Vector2(-1.5, -1.5), 2.0, Color(1, 1, 1, 0.85))
+	for b in _blasts:
+		var col: Color = ELEMENT_COLORS[b.element]
+		_fx.draw_set_transform(b.at, 0.0, Vector2(1.0, 0.6))
+		_fx.draw_circle(Vector2.ZERO, b.radius, Color(col, 0.3 * b.t / 0.3))
+		_fx.draw_arc(Vector2.ZERO, b.radius, 0, TAU, 24, col, 1.5)
+		_fx.draw_set_transform(Vector2.ZERO)
+	for b in _burns:
+		var s: WildSlime = b.slime
+		if is_instance_valid(s):
+			_fx.draw_circle(s.position + Vector2(0, -20 * s.scale.y), 2.5, ELEMENT_COLORS[&"fire"])
 
 
 ## 마을 표지 글씨: 항아리 몸통에 검정 글씨 (사용자: "금사리(구터)", 구조물은 회색 · 글씨는 검정)

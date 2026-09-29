@@ -1,6 +1,8 @@
 extends Node
 ## 핵심 루프 점검용 자동 플레이 (2026-09-28). 새 게임에서 며칠을 "보통 플레이어"처럼 돌리고 숫자를 남긴다.
-## 실행: godot --headless --path . res://tests/playthrough.tscn   (환경변수 DAYS=10 SEED=1 OUT=경로)
+## 실행: godot --headless --path . res://tests/playthrough.tscn   (환경변수 DAYS=10 SEED=1 OUT=경로 WEAPON=bow)
+## WEAPON (2026-09-29 무기): 봇이 즐겨 드는 무기 종류. bow (기본) · staff · melee (근거리 무기) · knife (무기 없이 사냥칼만).
+## 그 종류 무기가 없으면 사냥칼로 싸운다. DEBUG_KO=1 이면 하트가 줄 때 · 쓰러질 때 까닭을 적는다.
 ## 농사는 칸마다 도구를 쓰는 횟수를 세고, 사냥은 길찾기 봇이 실제 사냥터(실시간 AI)에서 싸운다.
 ## 봇은 사람보다 서툴 수도 잘할 수도 있으니, 숫자는 흐름을 보는 참고값이다.
 
@@ -64,11 +66,20 @@ var doma_hunts := 0
 var doma_hurt := 0
 var doma_knocked := 0
 const DOMA := 3
+## 즐겨 드는 무기 종류 (&"bow" / &"staff" / &"melee" / &"knife")
+var weapon_pref := &"bow"
+## 활 · 지팡이: 몬스터가 이보다 가까우면 물러서며 쏜다 (달려들기 거리 56쯤)
+const KITE_DISTANCE := 64.0
+## 첫 무기를 든 날, 사냥에서 쏜 수
+var weapon_day := -1
+var shots_fired := 0
 
 
 func _ready() -> void:
 	days = int(OS.get_environment("DAYS")) if OS.get_environment("DAYS") != "" else 10
 	var rng_seed := int(OS.get_environment("SEED")) if OS.get_environment("SEED") != "" else 1
+	if OS.get_environment("WEAPON") != "":
+		weapon_pref = StringName(OS.get_environment("WEAPON"))
 	seed(rng_seed)
 	main = load("res://scenes/main.tscn").instantiate()
 	add_child(main)
@@ -110,6 +121,7 @@ func _ready() -> void:
 	_log("\n도마리: 첫 도착 %s · 2막 대장(장승 한 쌍) 첫 처치 %s · 도마리 사냥 %d번 · 거기서 맞은 횟수 %d (한 번에 %.1f) · 쓰러짐 %d번 · 끝 돈 %s · 아기 나무 정령 %d마리" % [
 		"%d일" % doma_day if doma_day > 0 else "없음", cleared_day.get(Config.HUNT_ZONES[DOMA].name, "없음"), doma_hunts, doma_hurt,
 		float(doma_hurt) / maxi(doma_hunts, 1), doma_knocked, money_late, main.creatures.filter(func(c: Creature) -> bool: return c.data.species == CreatureCatalog.TREE_SPIRIT).size()])
+	_log("무기 (봇이 즐겨 듦: %s): 처음 든 날 %s · 쏜 화살 · 구슬 %d" % [weapon_pref, "%d일" % weapon_day if weapon_day > 0 else "없음", shots_fired])
 	_log("입은 장비: 농부 %s · 사냥꾼 %s" % [_worn_text(&"farmer"), _worn_text(&"hunter")])
 	_log("\n최종: %d일째, 돈 %d원, 씨앗 %d, 크리처 %d (훈련 단계 합 %d), 밭 구역 %d, 웨이포인트 %s" % [GameState.day, GameState.money, GameState.seeds, main.creatures.size(), trained, GameState.open_plots, GameState.waypoints])
 	var out := OS.get_environment("OUT")
@@ -447,18 +459,78 @@ func craft_day(did: Array[String]) -> void:
 		var who: StringName = it.who
 		var b: Array[StringName] = GameState.bag[who]
 		var i := b.find(id)
-		if i >= 0:
+		if i >= 0 and it.slot == &"weapon":
+			pick_weapon()
+		elif i >= 0:
 			var worn: StringName = GameState.worn[who].get(it.slot, &"")
 			if worn == &"" or _score(id) > _score(worn):
 				Wearables.wear_from_bag(who, i)
-		# 가방의 제작품은 판다 (입지 않은 것)
+		# 가방의 제작품은 판다 (입지 않은 것. 즐겨 드는 종류 무기는 남김)
 		for j in range(b.size() - 1, -1, -1):
-			if Wearables.is_rolled(b[j]) and Wearables.rarity(b[j]) == &"crafted":
+			if Wearables.is_rolled(b[j]) and Wearables.rarity(b[j]) == &"crafted" and not _wanted_weapon(b[j]):
 				Wearables.sell(who, j)
 		main.farmer.refresh_wear()
 		main.hunter.refresh_wear()
 	if not made.is_empty():
 		did.append("제작 %s" % ", ".join(made))
+
+
+func _debug_msg(t: String) -> void:
+	if "하트" in t or "쓰러" in t:
+		_log("  . %s (사냥꾼 칸 %s)" % [t, Vector2i(main.hunter.feet() / Config.TILE)])
+
+
+## 즐겨 드는 종류 무기인지
+func _wanted_weapon(id: StringName) -> bool:
+	var it := Wearables.item(id)
+	return it.slot == &"weapon" and it.weapon.kind == weapon_pref
+
+
+## 즐겨 드는 종류 무기 중 가장 좋은 것을 든다 (가방 · 창고에서). knife 면 무기를 내려놓는다.
+## 다른 종류 무기는 들지 않는다 (주울 때 빈 칸이라 바로 들었으면 내려놓음).
+func pick_weapon() -> void:
+	var worn: StringName = GameState.worn[&"hunter"].get(&"weapon", &"")
+	if worn != &"" and not _wanted_weapon(worn):
+		if not Wearables.take_off(&"hunter", &"weapon"):
+			# 가방 · 창고가 차 있으면 일반 장비를 팔고 다시, 그래도 안 되면 그 무기를 판다
+			Wearables.sell_all_normal(&"hunter")
+			if not Wearables.take_off(&"hunter", &"weapon"):
+				GameState.worn[&"hunter"].erase(&"weapon")
+				GameState.money += Wearables.sell_price(worn)
+				GameState.gear.erase(worn)
+		worn = &""
+	for i in range(GameState.stash.size() - 1, -1, -1):
+		if _wanted_weapon(GameState.stash[i]):
+			Wearables.stash_to_bag(&"hunter", i)
+	var b: Array[StringName] = GameState.bag[&"hunter"]
+	var best := -1
+	for i in b.size():
+		if _wanted_weapon(b[i]) and (best < 0 or _weapon_score(b[i]) > _weapon_score(b[best])):
+			best = i
+	if best >= 0 and (worn == &"" or _weapon_score(b[best]) > _weapon_score(worn)):
+		Wearables.wear_from_bag(&"hunter", best)
+	if weapon_day < 0 and GameState.worn[&"hunter"].has(&"weapon"):
+		weapon_day = GameState.day
+
+
+## 무기 점수: 초당 공격 수 · 사거리 (옵션 포함)
+func _weapon_score(id: StringName) -> float:
+	var it := Wearables.item(id)
+	var w: Dictionary = it.weapon
+	var sc: float = (1.0 + it.get("atk_speed", 0) / 100.0) / w.cooldown + w.get("range", w.get("radius", 0.0) * 4.0) / 200.0 * (1.0 + it.get("range_add", 0) / 100.0)
+	return sc + _score(id) * 0.1
+
+
+## 화살 · 구슬이 나무 · 창고 · 비닐하우스에 막히지 않는지
+func _clear_shot(h: HuntGround, from: Vector2, to: Vector2) -> bool:
+	if h.map == null:
+		return true
+	var n := int(from.distance_to(to) / 8.0) + 1
+	for k in n:
+		var p := from.lerp(to, float(k) / n)
+		if HuntGround.SHOT_BLOCK.contains(h.map.at(Vector2i(floori(p.x / Config.TILE), floori(p.y / Config.TILE)))):
+			return false
+	return true
 
 
 ## 장비 점수 (봇이 더 좋은 쪽을 입을 때): 옵션 수, 같으면 수치 합
@@ -514,8 +586,11 @@ func hunt_day() -> void:
 				best = s if best == null or best.data.species != CreatureCatalog.TREE_SPIRIT else best
 		if best != null:
 			pick = best
+	pick_weapon()
 	main.enter_hunt(pick, zone)
 	var h: HuntGround = main.hunt
+	if OS.get_environment("DEBUG_KO") != "" and not GameState.message.is_connected(_debug_msg):
+		GameState.message.connect(_debug_msg)
 	h.set_process(false)
 	var t := 0.0
 	var kills := 0
@@ -547,6 +622,9 @@ func hunt_day() -> void:
 			if doma_day < 0:
 				doma_day = GameState.day
 		if h.knocked:
+			if OS.get_environment("DEBUG_KO") != "":
+				for s: WildSlime in h.slimes:
+					_log("  ! 쓰러질 때 남은 %s%s 체력 %d · 거리 %.0f" % [s.title, " (대장)" if s.boss else "", s.hp, s.position.distance_to(main.hunter.feet())])
 			break
 		if t + 2 * DT >= 900.0 and t < 900.0 - DT:
 			for d in h.drops + h.loot:
@@ -611,6 +689,10 @@ func hunt_day() -> void:
 			t += DT
 			zone_t += DT
 			continue
+		# 더 깊은 구역으로 넘어가기 전, 하트가 모자라면 물약을 마신다 (사람이라면 그럴 것)
+		var need_hearts := 5 if h.zone + 1 >= 2 else 3
+		if nearest_s == null and h.path_open and not h.bridge_broken() and h.hearts < need_hearts and GameState.potions > 0:
+			h.drink_potion()
 		if not pickups.is_empty():
 			pickups.sort_custom(func(a: Vector2, b: Vector2) -> bool: return a.distance_to(feet) < b.distance_to(feet))
 			target = pickups[0]
@@ -634,15 +716,43 @@ func hunt_day() -> void:
 			continue
 		if goal == &"exit" and h.near_exit():
 			break
-		if goal == &"fight" and nearest_s.position.distance_to(feet + Vector2(0, -8)) <= Config.SWING_REACH + Wearables.swing_radius(&"hunter") - 2:
+		# 주운 무기를 빈 칸이라 바로 들었으면 즐겨 드는 종류로 바꾼다
+		var worn_w: StringName = GameState.worn[&"hunter"].get(&"weapon", &"")
+		if worn_w != &"" and not _wanted_weapon(worn_w):
+			pick_weapon()
+		var w := Wearables.weapon()
+		var ranged: bool = w.kind != &"melee"
+		# 활 · 지팡이: 사거리 안이고 막힌 게 없으면 서서 쏘고, 너무 가까우면 물러선다. 숨은 몬스터는 다가가 깨운다.
+		var away := false
+		var shoot := false
+		if goal == &"fight" and ranged and not (nearest_s.buried and not nearest_s.disguise):
+			var hand := feet + Vector2(0, -8)
+			var body := nearest_s.position + Vector2(0, -8 * nearest_s.scale.y)
+			var d := hand.distance_to(body)
+			var clear := _clear_shot(h, hand, body)
+			if clear and d <= w.range * 0.85 and h._cooldown <= 0.0:
+				shoot = true
+			elif d < minf(KITE_DISTANCE * nearest_s.scale.x, w.range * 0.6) and not nearest_s.stunned():
+				away = true
+			elif clear and d <= w.range * 0.85:
+				# 쏠 틈을 기다린다 (제자리)
+				target = feet
+		if shoot:
+			h.swing(nearest_s.position + Vector2(0, -8 * nearest_s.scale.y) - (feet + Vector2(0, -8)))
+			shots_fired += 1
+		elif goal == &"fight" and not ranged and nearest_s.position.distance_to(feet + Vector2(0, -8)) <= w.reach + w.radius - 2:
 			if nearest_s.buried and nearest_s.position.distance_to(feet) > Config.WILD_BURROW_POP_DISTANCE:
 				pass
 			var before := h.slimes.size()
 			h.swing(nearest_s.position - (feet + Vector2(0, -8)))
 			if h.slimes.size() < before:
 				kills += 1
+		elif target == feet:
+			pass
 		else:
 			var dir := _path_dir(h, feet, target)
+			if away:
+				dir = (feet - nearest_s.position).normalized()
 			var mult: float = (h.map.speed_at(feet) if h.map else 1.0) * Wearables.speed_mult(&"hunter") * hunter.slow_mult
 			var p0 := hunter.position
 			hunter.step(dir * Config.CHARACTER_SPEED * mult * DT)
@@ -655,7 +765,7 @@ func hunt_day() -> void:
 				hunter.facing = Vector2i(int(signf(dir.x)), 0) if absf(dir.x) > absf(dir.y) else Vector2i(0, int(signf(dir.y)))
 		var before_k := h.slimes.size()
 		h.tick(DT)
-		if h.slimes.size() < before_k and goal != &"fight":
+		if h.slimes.size() < before_k and (goal != &"fight" or ranged):
 			kills += before_k - h.slimes.size()
 		if h.hearts < last_hearts:
 			hurt += last_hearts - h.hearts

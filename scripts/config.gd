@@ -99,6 +99,24 @@ const WILD_SLIME_HP := 2
 const SWING_REACH := 18.0
 const SWING_RADIUS := 18.0
 const SWING_COOLDOWN := 0.35
+## 무기 (2026-09-29 사용자: "종류는 근거리무기, 원거리 활 무기, 특수효과 지팡이무기 정도이면 좋을거같아").
+## 무기 칸이 비어 있으면 사냥칼 (위 SWING_* 그대로). 무기마다 값은 Wearables.ITEMS 의 weapon 사전. 값은 전부 임시.
+## 화살: 첫 몬스터에 맞으면 사라진다. 나는 참새(공중)도 맞힌다. 모래에 숨은 모래게 위로는 지나간다 (그루터기인 척하는 고목 그루터기는 맞힘).
+const ARROW_SPEED := 300.0
+const ARROW_HIT_RADIUS := 9.0
+## 지팡이 구슬: 느리게 날아가 처음 닿은 몬스터(또는 사거리 끝)에서 터진다. 둘레 blast 안 몬스터 모두 1 피해 + 속성 효과.
+const ORB_SPEED := 170.0
+const ORB_HIT_RADIUS := 10.0
+## 물 = 느려짐 (그동안 모든 움직임 · 예고가 이 배율로), 땅 = 잠깐 멈춤, 불 = 잠시 뒤 한 번 더 피해
+const STAFF_SLOW_TIME := 2.5
+const STAFF_SLOW_MULT := 0.5
+const STAFF_STUN_TIME := 0.9
+const STAFF_BURN_DELAY := 1.5
+## 처음 주는 무기 (구역 대장을 처음 쓰러뜨리면 이 무기 일반 등급이 반드시 떨어짐, 한 번만): 분원농협 → 활, 금사리 → 지팡이
+const FIRST_WEAPON_DROPS := {0: &"hunting_bow", 1: &"water_staff"}
+## 장비 드롭 중 무기가 나올 몫 (나머지는 모자 · 옷 · 신발)
+const WEAPON_DROP_SHARE := 0.35
+
 ## 부딪히면 하트 -1, 그 뒤 이 시간 동안은 다시 맞지 않는다 (초)
 const HURT_INVULNERABLE_TIME := 1.0
 const WILD_SLIME_TOUCH_DISTANCE := 14.0
@@ -408,5 +426,7 @@ const SCRAP_PER_DAY := 6
 const CRAFT_COSTS := {
 	&"work_cap": [3, 200], &"rain_suit": [5, 300], &"work_boots": [4, 250],
 	&"hard_hat": [4, 250], &"hiking_vest": [5, 300], &"safety_shoes": [4, 250],
+	# 무기 (2026-09-29): 판타지풍도 괜찮다는 사용자 말에 따라 대장간도 검 · 쇠뇌를 만든다. 지팡이는 대장간 몫이 아님 (드롭만).
+	&"steel_sword": [5, 300], &"crossbow": [6, 350],
 }
 const CRAFT_AFFIX_WEIGHTS := {1: 50, 2: 35, 3: 15}

@@ -28,7 +28,7 @@ const DOLL_AT := Vector2(10, 24)
 const EQUIP_X := 110.0
 const BAG_AT := Vector2(146, 28)
 const STASH_AT := Vector2(274, 28)
-const BOTTOM_Y := 136.0
+const BOTTOM_Y := 146.0
 
 var character: Character
 ## 창고 칸이 같이 열려 있는지
@@ -49,7 +49,7 @@ func open(c: Character, stash := false, sell := false) -> void:
 	with_stash = stash
 	sell_mode = sell and not stash
 	cursor = {kind = &"bag", index = 0}
-	size = Vector2(STASH_AT.x + Config.STASH_COLUMNS * (CELL + GAP) + 8 if stash else BAG_AT.x + Config.BAG_COLUMNS * (CELL + GAP) + 8, 208)
+	size = Vector2(STASH_AT.x + Config.STASH_COLUMNS * (CELL + GAP) + 8 if stash else BAG_AT.x + Config.BAG_COLUMNS * (CELL + GAP) + 8, 240)
 	position = ((Vector2(640, 360) - size) / 2).round()
 	visible = true
 	queue_redraw()
@@ -68,7 +68,7 @@ func _grid_rect(origin: Vector2, columns: int, i: int) -> Rect2:
 func cell_rect(kind: StringName, i: int) -> Rect2:
 	match kind:
 		&"equip":
-			return Rect2(Vector2(EQUIP_X, 28 + i * (CELL + 8)), Vector2(CELL, CELL))
+			return Rect2(Vector2(EQUIP_X, 28 + i * (CELL + 4)), Vector2(CELL, CELL))
 		&"bag":
 			return _grid_rect(BAG_AT, Config.BAG_COLUMNS, i)
 		_:
@@ -77,7 +77,7 @@ func cell_rect(kind: StringName, i: int) -> Rect2:
 
 func _cells() -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
-	for i in Wearables.SLOTS.size():
+	for i in Wearables.slots_for(character.who).size():
 		out.append({kind = &"equip", index = i})
 	for i in Config.BAG_SIZE:
 		out.append({kind = &"bag", index = i})
@@ -232,8 +232,36 @@ func _text(p: Vector2, t: String, font_size := 9, col := INK) -> void:
 
 func _icon(id: StringName, r: Rect2) -> void:
 	var item := Wearables.item(id)
+	if item.slot == &"weapon":
+		_weapon_icon(item.weapon, r)
+		return
 	var src: Rect2 = ICON_SRC[item.slot]
 	draw_texture_rect_region(item.sheet, Rect2(r.get_center() - src.size / 2, src.size), src)
+
+
+## 무기는 덧그림이 없어 칸 안에 선으로 그린다 (근거리 칼날 · 활 · 지팡이 구슬 색은 속성)
+func _weapon_icon(w: Dictionary, r: Rect2) -> void:
+	var c := r.get_center()
+	var steel := Color(0.45, 0.47, 0.55)
+	var wood := Color(0.5, 0.33, 0.18)
+	match w.kind:
+		&"bow":
+			draw_arc(c + Vector2(-4, 0), 10.0, -1.2, 1.2, 10, wood, 2.0)
+			draw_line(c + Vector2(-4, 0) + Vector2(cos(-1.2), sin(-1.2)) * 10, c + Vector2(-4, 0) + Vector2(cos(1.2), sin(1.2)) * 10, Color(0.9, 0.9, 0.85), 1.0)
+			draw_line(c + Vector2(-6, 0), c + Vector2(9, 0), wood, 1.0)
+			draw_line(c + Vector2(9, 0), c + Vector2(6, -2), steel, 1.0)
+			draw_line(c + Vector2(9, 0), c + Vector2(6, 2), steel, 1.0)
+		&"staff":
+			var orb := {&"water": Color(0.35, 0.6, 1.0), &"earth": Color(0.6, 0.45, 0.25), &"fire": Color(1.0, 0.45, 0.2)}
+			draw_line(c + Vector2(-7, 10), c + Vector2(4, -5), wood, 2.0)
+			draw_circle(c + Vector2(5, -7), 4.0, orb.get(w.get("element", &"water"), Color.WHITE))
+		_:
+			if w.get("radius", 0.0) >= 26.0:
+				draw_line(c + Vector2(-7, 10), c + Vector2(5, -8), wood, 2.0)
+				draw_colored_polygon(PackedVector2Array([c + Vector2(1, -9), c + Vector2(10, -6), c + Vector2(6, 2), c + Vector2(3, -3)]), steel)
+			else:
+				draw_line(c + Vector2(-8, 9), c + Vector2(7, -8), steel, 2.5)
+				draw_line(c + Vector2(-8, 3), c + Vector2(-2, 9), Color(0.6, 0.45, 0.2), 2.0)
 
 
 func _draw() -> void:
@@ -252,7 +280,8 @@ func _draw() -> void:
 	var src := Rect2(0, 0, Character.FRAME_SIZE, Character.FRAME_SIZE)
 	draw_texture_rect_region(character.sheet, doll, src)
 	for id in Wearables.worn_by(who):
-		draw_texture_rect_region(Wearables.item(id).sheet, doll, src)
+		if Wearables.item(id).has("sheet"):
+			draw_texture_rect_region(Wearables.item(id).sheet, doll, src)
 	for c in _cells():
 		var r := cell_rect(c.kind, c.index)
 		var id := item_in(c.kind, c.index)
@@ -290,11 +319,22 @@ func _draw() -> void:
 	if sell_mode and picked != &"" and Wearables.is_rolled(picked) and cursor.kind == &"bag":
 		picked_text += " · %d원" % Wearables.sell_price(picked)
 	# 옵션이 많아 창보다 길면 이름과 효과를 두 줄로 나눈다
+	# 옵션이 많아 창보다 길면 이름과 효과를 나누고, 효과도 " · " 마디로 줄을 바꾼다 (무기는 옵션 줄이 길다)
 	var cut := picked_text.find(") · ")
-	if cut >= 0 and ThemeDB.fallback_font.get_string_size(picked_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 9).x > size.x - 20:
+	var font := ThemeDB.fallback_font
+	if cut >= 0 and font.get_string_size(picked_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 9).x > size.x - 20:
 		_text(Vector2(10, y), picked_text.substr(0, cut + 1), 9, picked_col)
+		var line := ""
+		for part in picked_text.substr(cut + 4).split(" · "):
+			var next: String = part if line == "" else line + " · " + part
+			if line != "" and font.get_string_size(next, HORIZONTAL_ALIGNMENT_LEFT, -1, 9).x > size.x - 30:
+				y += 12
+				_text(Vector2(18, y), line, 9, picked_col)
+				line = part
+			else:
+				line = next
 		y += 12
-		_text(Vector2(18, y), picked_text.substr(cut + 4), 9, picked_col)
+		_text(Vector2(18, y), line, 9, picked_col)
 	else:
 		_text(Vector2(10, y), picked_text, 9, picked_col)
 		y += 12

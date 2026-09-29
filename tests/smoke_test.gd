@@ -1059,6 +1059,7 @@ func _ready() -> void:
 		dry = dry and wm.monster_ok(chaser.position + Vector2(0, WildSlime.BOTTOM_Y - 2))
 	_check(dry, "몬스터는 깊은 물로 뛰어들지 않음")
 	chaser.ai_enabled = false
+	GameState.worn[&"hunter"].erase(&"weapon")  # 드롭으로 무기를 들었으면 사냥칼로 (이 아래는 칼 휘두르기 점검)
 	# 대장은 대장 모래밭에 나옴
 	for s in wh.slimes.duplicate():
 		s.hp = 1
@@ -1144,6 +1145,7 @@ func _ready() -> void:
 	hunter_n.position = nm.spot("K")
 	nh.tick(0.01)
 	_check(nh.minimap_seen(k_cell) and not nh.minimap_seen(n_cell), "대장 자리까지 가 보면 그곳이 지도에 드러남")
+	GameState.worn[&"hunter"].erase(&"weapon")  # 드롭으로 무기를 들었으면 사냥칼로 (이 아래는 칼 휘두르기 점검)
 	# 대장은 곳간 앞, 위쪽 길로 금사리
 	for s in nh.slimes.duplicate():
 		s.hp = 1
@@ -1249,6 +1251,7 @@ func _ready() -> void:
 	if not 1 in GameState.waypoints:
 		GameState.waypoints.append(1)
 	main.enter_hunt(null, 0)
+	GameState.worn[&"hunter"].erase(&"weapon")  # 드롭으로 무기를 들었으면 사냥칼로 (이 아래는 칼 휘두르기 점검)
 	var d_dh: HuntGround = main.hunt
 	d_dh.set_ai(false)
 	var d_hf: Vector2 = main.hunter.feet()
@@ -1735,6 +1738,7 @@ func _ready() -> void:
 	gh.tick(0.05)
 	_check(sp_a.in_air() and sp_a.airborne(), "사냥꾼이 다가오면 날아오름")
 
+	GameState.worn[&"hunter"].erase(&"weapon")  # 드롭으로 무기를 들었으면 사냥칼로 (이 아래는 칼 휘두르기 점검)
 	sp_a.position = main.hunter.feet() + Vector2(0, -8 - Config.SWING_REACH)
 	gh._cooldown = 0.0
 	_check(gh.swing(Vector2.UP) == 0 and sp_a.hp == g_z.hp, "나는 참새는 칼에 안 맞음")
@@ -1802,6 +1806,7 @@ func _ready() -> void:
 	gh.set_process(false)
 	HuntGround.egg_roll = 0.0
 	HuntGround.loot_enabled = false
+	GameState.worn[&"hunter"].erase(&"weapon")  # 드롭으로 무기를 들었으면 사냥칼로 (이 아래는 칼 휘두르기 점검)
 	var g_s: WildSlime = gh.slimes[0]
 	g_s.hp = 1
 	g_s.position = main.hunter.feet() + Vector2(0, -8 - Config.SWING_REACH)
@@ -1957,6 +1962,121 @@ func _ready() -> void:
 				j_names[zi] = HuntLoot.label(jd)
 				break
 	_check(j_names.get(0) == "슬라임 젤리" and j_names.get(1) == "모래게 껍데기" and j_names.get(2) == "참새 깃털" and j_names.get(3) == "고목 옹이", "잡템 이름이 구역마다 다름 %s" % j_names)
+
+	# 무기 (2026-09-29 사용자: 근거리 · 활 · 지팡이). 무기 칸이 비면 사냥칼.
+	GameState.reset()
+	GameState.hunter_unlocked = true
+	GameState.first_egg_done = true
+	GameState.waypoints = [0, 1, 2, 3]
+	main._set_active(main.hunter)
+	var wr := RandomNumberGenerator.new()
+	wr.seed = 5
+	_check(Wearables.weapon().kind == &"melee" and Wearables.weapon().name == "사냥칼", "무기 칸이 비면 사냥칼")
+	_check(Wearables.slots_for(&"hunter").has(&"weapon") and not Wearables.slots_for(&"farmer").has(&"weapon"), "무기 칸은 사냥꾼만")
+	var w_gift := HuntLoot.roll_for_boss(wr, 0)
+	var w_gift2 := HuntLoot.roll_for_boss(wr, 1)
+	_check(w_gift.has("roll") and w_gift.roll.base == &"hunting_bow" and w_gift.roll.rarity == &"normal" \
+		and w_gift2.has("roll") and w_gift2.roll.base == &"water_staff", "대장 첫 처치 선물: 분원농협 사냥 활 · 금사리 물의 지팡이 (일반)")
+	var w_again := 0
+	for i in 200:
+		var d := HuntLoot.roll_for_boss(wr, 0)
+		if d.has("roll") and d.roll.base == &"hunting_bow" and d.roll.rarity == &"normal":
+			w_again += 1
+	_check(w_again < 20, "선물은 한 번만 (그 뒤는 보통 드롭, 200번 중 일반 사냥 활 %d)" % w_again)
+	var w_count := 0
+	var w_affix_ok := true
+	for i in 2000:
+		var g := Wearables.roll_gear(wr, &"rare")
+		var is_w: bool = Wearables.ITEMS[g.base].slot == &"weapon"
+		w_count += int(is_w)
+		for a: Dictionary in g.affixes:
+			w_affix_ok = w_affix_ok and Wearables.AFFIXES[a.stat].on in [&"", &"weapon" if is_w else &"armor"]
+	_check(w_count > 600 and w_count < 800, "장비 드롭 중 무기 약 35%% (%d/2000)" % w_count)
+	_check(w_affix_ok, "무기엔 무기 옵션(공격 빠르기 · 사거리 · 돈 · 드롭)만, 방어구엔 방어구 옵션만")
+	var w_bow_where := Wearables.gain_rolled(w_gift.roll)
+	_check(w_bow_where == &"worn" and Wearables.weapon().kind == &"bow" and Wearables.weapon().range == 150.0, "처음 얻은 무기는 바로 듦 (활 사거리 150)")
+	# 활: 칼이 안 닿는 거리에서 화살 한 대
+	GameState.hunts_today = 0
+	main.hunter.position = main.hunt_gate.position
+	main.enter_hunt(null, 0)
+	var wph: HuntGround = main.hunt
+	wph.set_ai(false)
+	wph.set_process(false)
+	var w_feet: Vector2 = main.hunter.feet()
+	for o: WildSlime in wph.slimes:
+		o.position = w_feet + Vector2(-300, 0)
+	var w_t: WildSlime = wph.slimes[0]
+	w_t.hp = 3
+	w_t.position = w_feet + Vector2(120, 8)
+	_check(wph.swing(Vector2.RIGHT) == 1 and wph.shots.size() == 1, "활: 클릭하면 화살이 날아감")
+	for i in 30:
+		wph.tick(1.0 / 30.0)
+	_check(w_t.hp == 2 and wph.shots.is_empty(), "화살이 120 떨어진 몬스터에 맞고 사라짐")
+	w_t.position = w_feet + Vector2(220, 8)
+	wph._cooldown = 0.0
+	wph.swing(Vector2.RIGHT)
+	for i in 40:
+		wph.tick(1.0 / 30.0)
+	_check(w_t.hp == 2, "사거리(150) 밖은 안 맞음")
+	# 지팡이: 물 = 느려짐 · 땅 = 멈춤 · 불 = 잠시 뒤 한 번 더
+	for el: StringName in [&"water_staff", &"earth_staff", &"fire_staff"]:
+		Wearables.gain_rolled(Wearables.roll_gear(wr, &"normal", {}, el))
+		GameState.worn[&"hunter"][&"weapon"] = StringName("gear_%d" % GameState.gear_serial)
+		w_t.hp = 5
+		w_t._stun = 0.0
+		w_t._slow = 0.0
+		w_t.position = w_feet + Vector2(90, 8)
+		var w_near: WildSlime = wph.slimes[1]
+		w_near.hp = 5
+		w_near.position = w_t.position + Vector2(10, 6)
+		wph._cooldown = 0.0
+		wph.swing(Vector2.RIGHT)
+		for i in 25:
+			wph.tick(1.0 / 30.0)
+		var w_fx := {&"water_staff": w_t.slowed(), &"earth_staff": w_t.stunned(), &"fire_staff": wph._burns.size() == 2}
+		_check(w_t.hp == 4 and w_near.hp == 4 and w_fx[el], "%s: 구슬이 터져 둘레 둘 다 1 피해 + %s" % [Wearables.ITEMS[el].name, Wearables.ELEMENT_EFFECTS[Wearables.ITEMS[el].weapon.element]])
+	for i in 60:
+		wph.tick(1.0 / 30.0)
+	_check(w_t.hp == 3, "불 구슬: 잠시 뒤 한 번 더 피해")
+	# 근거리 무기: 전투 도끼는 사냥칼보다 넓게
+	Wearables.gain_rolled(Wearables.roll_gear(wr, &"normal", {}, &"battle_axe"))
+	GameState.worn[&"hunter"][&"weapon"] = StringName("gear_%d" % GameState.gear_serial)
+	w_t.position = w_feet + Vector2(0, -8) + Vector2(Config.SWING_REACH + 24, 0)
+	w_t.hp = 5
+	wph._cooldown = 0.0
+	_check(wph.swing(Vector2.RIGHT) == 1 and w_t.hp == 4, "전투 도끼: 사냥칼이 안 닿는 옆까지 벰")
+	main.leave_hunt()
+	# 나는 참새도 화살엔 맞는다
+	GameState.worn[&"hunter"][&"weapon"] = &"gear_1"
+	GameState.hunts_today = 0
+	main.hunter.position = main.hunt_gate.position
+	main.enter_hunt(null, 2)
+	var wpg: HuntGround = main.hunt
+	wpg.set_ai(false)
+	wpg.set_process(false)
+	var wg_feet: Vector2 = main.hunter.feet()
+	for o: WildSlime in wpg.slimes:
+		o.position = wg_feet + Vector2(-300, 0)
+	var w_sp: WildSlime = wpg.slimes[0]
+	w_sp.position = wg_feet + Vector2(80, 0)
+	w_sp.ai_enabled = true
+	w_sp._rest = 0.0
+	wpg.tick(0.05)
+	w_sp.ai_enabled = false
+	var w_sp_hp := w_sp.hp
+	w_sp.position = wg_feet + Vector2(100, 8)
+	wpg._cooldown = 0.0
+	wpg.swing(Vector2.RIGHT)
+	for i in 30:
+		wpg.tick(1.0 / 30.0)
+	_check(w_sp.hp == w_sp_hp - 1 and not w_sp.in_air(), "화살은 나는 참새도 맞혀 떨어뜨림")
+	main.leave_hunt()
+	# 대장간: 강철 검 · 쇠뇌
+	GameState.scrap = 20
+	GameState.money = 2000
+	var w_cid: StringName = main.craft(&"crossbow")
+	_check(w_cid != &"" and Wearables.rarity(w_cid) == &"crafted" and Wearables.item(w_cid).weapon.kind == &"bow" and Config.CRAFT_COSTS.has(&"steel_sword"), "대장간에서 쇠뇌 (제작 무기) · 강철 검")
+	_check(Wearables.describe(w_cid).contains("활 · 사거리"), "무기 설명에 종류 · 사거리 %s" % Wearables.describe(w_cid))
 
 	print("SMOKE TEST: %s (%d failures)" % ["PASS" if _failures == 0 else "FAIL", _failures])
 	get_tree().quit(1 if _failures > 0 else 0)

@@ -48,6 +48,8 @@ var _pull_from := Vector2.ZERO
 var _pull_to := Vector2.ZERO
 ## 멈춘 남은 시간 (금두꺼비 혀 당기기). 멈춘 동안은 움직이지 않고 부딪혀도 다치지 않는다.
 var _stun := 0.0
+## 느려진 남은 시간 (물의 지팡이). 그동안 움직임 · 예고 · 공격이 Config.STAFF_SLOW_MULT 배로 흐른다.
+var _slow := 0.0
 
 ## 부딪히면 잃는 하트 · 맞았을 때 밀려나는 거리 · 달려들기 예고 시간 (구역마다, Config.HUNT_ZONES)
 var damage := 1
@@ -284,11 +286,22 @@ func pull_to(to: Vector2) -> void:
 	_hop_t = -1.0
 
 
+func slow(time: float) -> void:
+	_slow = maxf(_slow, time)
+
+
+func slowed() -> bool:
+	return _slow > 0.0
+
+
 func stunned() -> bool:
 	return _stun > 0.0
 
 
 func tick(delta: float, target: Vector2) -> void:
+	if _slow > 0.0:
+		_slow = maxf(_slow - delta, 0.0)
+		delta *= Config.STAFF_SLOW_MULT
 	_anim_time += delta
 	_flash = maxf(_flash - delta, 0.0)
 	_stun = maxf(_stun - delta, 0.0)
@@ -339,6 +352,9 @@ func tick(delta: float, target: Vector2) -> void:
 	# 웅크림: 납작해졌다가 튀어나간다
 	_sprite.scale = Vector2(1.15, 0.85) if _windup >= 0.0 or _aim >= 0.0 or _log_aim >= 0.0 else Vector2.ONE
 	_sprite.modulate = Color(1, 1, 1) * 2.0 if _flash > 0.0 and int(_flash * 20) % 2 == 0 else _tint
+	if _slow > 0.0 and _flash <= 0.0:
+		# 물의 지팡이에 느려진 동안 푸르게
+		_sprite.modulate = _tint * Color(0.7, 0.85, 1.4)
 	z_index = int(sort_y())
 	queue_redraw()
 

@@ -62,6 +62,8 @@ func refresh_wear() -> void:
 		w.queue_free()
 	_wear.clear()
 	for id in Wearables.worn_by(who):
+		if not Wearables.item(id).has("sheet"):
+			continue
 		var w := Sprite2D.new()
 		w.texture = Wearables.item(id).sheet
 		w.centered = false
