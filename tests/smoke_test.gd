@@ -138,11 +138,11 @@ func _ready() -> void:
 	_check(main.creatures.size() == 1, "다음 날 부화")
 	var slime: Creature = main.creatures[0]
 	_check(slime.data.creature_trait != null and slime.data.base_work_speed > 0.0, "부화 시 능력치/Trait 생성")
-	_check(slime.job == CreatureJobs.WATER, "첫 슬라임은 급수 역할")
+	_check(slime.job == CreatureJobs.FARM, "첫 슬라임은 농사 역할 (급수 포함)")
 	_check(slime.data.element_names() == "물", "첫 슬라임은 물속성")
 	_check(slime.data.base_work_speed >= Config.FIRST_CREATURE_MIN_WORK_SPEED and slime.data.base_radius >= Config.FIRST_CREATURE_MIN_RADIUS, "첫 슬라임 최저 능력치 보장")
 
-	# 4) 슬라임 옮겨서 배치 → 급수 역할 → 자동으로 물주기
+	# 4) 슬라임 옮겨서 배치 → 농사 역할 → 자동으로 물주기
 	farmer.position = slime.position
 	main.interact()
 	_check(slime.carried_by == farmer, "슬라임 들기")
@@ -1476,6 +1476,90 @@ func _ready() -> void:
 	# 쉬는 중이면 채집하지 않음
 	f_earth.job = CreatureJobs.REST
 	_check(not f_earth.work_once(), "쉬는 크리처는 채집하지 않음")
+
+	# 34) 크리처 일 배분 (2026-09-29 사용자 선택 A+B): 파종·급수·수확을 "농사" 하나로 합침.
+	#     농사 크리처는 범위 안 밭을 수확 → 파종 → 급수 순으로 다 돌보고, 밭에 할 일이 없으면 풀밭으로 채집하러 간다.
+	_check(CreatureJobs.FARM_JOBS == [CreatureJobs.REST, CreatureJobs.FARM, CreatureJobs.FORAGE], "R 일 목록: 쉬는 중 → 농사 → 채집")
+	for s: Creature in main.creatures:
+		s.queue_free()
+	main.creatures.clear()
+	main.next_day()
+	var j_home := Vector2i(4, 4)
+	var j: Creature = main._hatch(CreatureCatalog.SLIME, j_home)
+	j.data.set_element(load("res://data/creatures/elements/earth.tres"))
+	j.auto_work = false
+	while j.job != CreatureJobs.FARM:
+		j.next_job()
+	# 범위 안: 익은 칸 하나, 갈아 둔 빈 칸 하나, 심고 물 안 준 칸 하나. 나머지 칸은 다 심고 물 줌.
+	var j_ripe := j_home + Vector2i.LEFT
+	var j_empty := j_home + Vector2i.RIGHT
+	var j_dry := j_home + Vector2i.UP
+	var j_r := j.data.work_radius()
+	for dx in range(-j_r, j_r + 1):
+		for dy in range(-j_r, j_r + 1):
+			var jc: Farm.Cell = main.farm.get_cell(j_home + Vector2i(dx, dy))
+			if jc == null:
+				continue
+			jc.tilled = true
+			jc.planted = true
+			jc.watered = true
+			jc.growth = 1
+	var j_rc: Farm.Cell = main.farm.get_cell(j_ripe)
+	j_rc.growth = Config.CROP_GROW_DAYS
+	j_rc.watered = false
+	var j_ec: Farm.Cell = main.farm.get_cell(j_empty)
+	j_ec.planted = false
+	j_ec.watered = false
+	j_ec.growth = 0
+	main.farm.get_cell(j_dry).watered = false
+	GameState.seeds = 5
+	var j_order: Array[StringName] = []
+	Engine.time_scale = 20.0
+	for i in 3:
+		_check(j.work_once(), "농사 크리처가 밭 일 찾음 %d" % i)
+		j_order.append(j.task)
+		while j._busy:
+			await get_tree().process_frame
+	Engine.time_scale = 1.0
+	_check(j_order == [CreatureJobs.HARVEST, CreatureJobs.SOW, CreatureJobs.SOW], "수확 먼저, 그다음 빈 칸 파종 (수확한 칸 포함) %s" % [j_order])
+	_check(main.farm.get_cell(j_ripe).planted and main.farm.get_cell(j_empty).planted, "익은 칸 거두고 빈 칸에 심음")
+	var j_wet := 0
+	Engine.time_scale = 20.0
+	while j.work_once() and j.task == CreatureJobs.WATER:
+		j_wet += 1
+		while j._busy:
+			await get_tree().process_frame
+	Engine.time_scale = 1.0
+	_check(j_wet == 3 and main.farm.get_cell(j_dry).watered, "그다음 마른 칸에 물 (%d칸)" % j_wet)
+	_check(is_equal_approx(j.data.work_speed(CreatureJobs.SOW), j.data.work_speed(CreatureJobs.WATER) * 1.5), "농사 안에서도 땅속성은 파종만 1.5배")
+	# 밭 일이 다 끝났으니 방금 부른 work_once 는 채집하러 나간 것
+	_check(j._busy and j.task == &"" and not main.forage.claimed.is_empty(), "밭에 할 일이 없으면 풀밭으로 채집하러 감")
+	GameState.displayed_herbs = 0
+	GameState.displayed_roots = 0
+	Engine.time_scale = 20.0
+	while j._busy:
+		await get_tree().process_frame
+	Engine.time_scale = 1.0
+	_check(GameState.displayed_herbs + GameState.displayed_roots == 1 and j.position.distance_to(Farm.center_of(j_home)) > 3 * Config.TILE, "풀밭에서 한 포기(또는 도라지)를 캐서 진열")
+	# 풀밭에 나가 있는 동안 밭에 일이 생기면 (무가 익으면) 돌아와서 한다
+	j_rc = main.farm.get_cell(j_ripe)
+	j_rc.growth = Config.CROP_GROW_DAYS
+	var j_t0 := Time.get_ticks_msec()
+	_check(j.work_once() and j.task == CreatureJobs.HARVEST, "밭에 일이 생기면 채집을 멈추고 돌아와 수확")
+	Engine.time_scale = 20.0
+	while j._busy:
+		await get_tree().process_frame
+	Engine.time_scale = 1.0
+	_check(main.farm.get_cell(j_ripe).growth == 0 and j.position == Farm.center_of(j_ripe), "돌아와서 익은 무를 거둠")
+	# 채집 전담은 밭 일을 하지 않는다
+	j_rc.planted = false
+	var jf: Creature = main._hatch(CreatureCatalog.SLIME, j_home + Vector2i.DOWN)
+	jf.auto_work = false
+	while jf.job != CreatureJobs.FORAGE:
+		jf.next_job()
+	jf.forage = null
+	_check(not jf.work_once(), "채집 전담은 밭 일을 하지 않음")
+	_check(j.describe().contains("수확") and j.describe().contains("급수"), "농사 크리처 설명에 일마다 속도 (%s)" % j.describe())
 
 	print("SMOKE TEST: %s (%d failures)" % ["PASS" if _failures == 0 else "FAIL", _failures])
 	get_tree().quit(1 if _failures > 0 else 0)

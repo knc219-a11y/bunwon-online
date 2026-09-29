@@ -7,7 +7,7 @@
 
 | 개념 | 파일 | 역할 |
 |---|---|---|
-| 일 (Job) | `scripts/creatures/creature_jobs.gd` | 크리처가 맡는 일의 id. 지금은 쉬기, 파종, 급수, 수확, 채집 |
+| 일 (Job) | `scripts/creatures/creature_jobs.gd` | 크리처가 맡는 일의 id. 지금은 쉬기, 농사, 채집. 농사 안의 파종·급수·수확 id는 재능 배율을 적는 데 쓴다 |
 | 속성 (Element) | `data/creatures/elements/*.tres` | 물, 비행 등. 일별 재능 배율과 이동 속도 배율 |
 | Trait | `data/creatures/traits/*.tres` | 개체 특성. 작업 속도, 이동 속도, 범위, 일별 재능 |
 | 종 (Species) | `data/creatures/species/*.tres` | 몬스터 종류. 가질 수 있는 속성 후보, 고유 재능, 부화 시 능력치 범위, Trait 후보 |
@@ -33,7 +33,7 @@
 일 속도에는 속도 훈련 배율(1 + 0.25 × `speed_level`)이 곱해진다. 훈련 단계는 개체 데이터(`CreatureData`)에 있고 공급함에서 돈으로 올린다 (`Config.TRAIN_*`, 값은 임시).
 ```
 
-예: 물속성(`water.tres`)은 급수 재능 1.5배라서, 같은 개체라도 급수를 맡기면 1.5배 빠르다.
+예: 물속성(`water.tres`)은 급수 재능 1.5배라서, 농사를 맡기면 급수할 때만 1.5배 빠르다 (농사는 수확·파종·급수를 한 마리가 다 하고, 일마다 그 일의 재능 배율을 쓴다).
 땅속성(`earth.tres`)은 파종 재능 1.5배, 대신 이동이 조금 느리다(0.9배).
 비행(`flying.tres`)은 이동 속도 1.6배라서 밭 사이를 더 빨리 오간다.
 

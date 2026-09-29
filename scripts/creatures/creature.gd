@@ -30,6 +30,10 @@ var _farm: Farm
 var forage: Forage
 var _timer := 0.0
 var _busy := false
+## 농사 안에서 지금(또는 마지막으로) 한 일: 파종·급수·수확 id. 동작 그림과 다음 일 간격에 쓴다.
+var task: StringName = &""
+## 지금까지 풀밭에서 캔 나물·뿌리 수 (자동 플레이 봇이 농사 크리처의 한가한 채집을 셀 때 쓴다)
+var picks := 0
 var _bob := 0.0
 var _anim := Anim.IDLE
 var _anim_time := 0.0
@@ -55,13 +59,20 @@ func setup(farm: Farm, creature_data: CreatureData, at_cell: Vector2i) -> void:
 
 
 func describe() -> String:
-	var text := "%s [%s] %s · 속도 %.2f / 범위 %d / %s" % [
+	var text := "%s [%s] %s · 속도 %s / 범위 %d / %s" % [
 		data.species.display_name, CreatureJobs.display_name(job), data.element_names(),
-		data.work_speed(job), data.work_radius(), data.trait_name(),
+		speed_text(), data.work_radius(), data.trait_name(),
 	]
 	if data.train_total() > 0:
 		text += " / 훈련 범위 %d · 속도 %d단계" % [data.radius_level, data.speed_level]
 	return text
+
+
+## 일 속도 표시. 농사는 수확·파종·급수 속도를 따로 보여 준다 (속성·Trait 재능이 일마다 달라서).
+func speed_text() -> String:
+	if job == CreatureJobs.FARM:
+		return "수확 %.2f·파종 %.2f·급수 %.2f" % [data.work_speed(CreatureJobs.HARVEST), data.work_speed(CreatureJobs.SOW), data.work_speed(CreatureJobs.WATER)]
+	return "%.2f" % data.work_speed(job)
 
 
 func next_job() -> void:
@@ -87,23 +98,28 @@ func work_once() -> bool:
 		return false
 	if job == CreatureJobs.FORAGE:
 		return _forage_once()
-	if not CreatureJobs.FARM_WORK.has(job):
-		return false
-	var work: Farm.Work = CreatureJobs.FARM_WORK[job]
-	var target: Variant = _farm.find_work(work, home, data.work_radius(), [], position)
-	if target == null:
-		return false
-	_busy = true
-	_play(Anim.HOP)
-	var tw := create_tween()
-	tw.tween_property(self, "position", Farm.center_of(target), hop_time())
-	tw.tween_callback(_play.bind(Anim.WORK))
-	tw.tween_interval(Config.CREATURE_WORK_ANIM_TIME)
-	tw.tween_callback(func() -> void:
-		_farm.do_work(work, target)
-		_busy = false
-		_play(Anim.IDLE))
-	return true
+	if job == CreatureJobs.FARM:
+		return _farm_once()
+	return false
+
+
+## 농사 한 번 (2026-09-29 사용자 선택 A+B): 범위 안 밭에서 수확 → 파종 → 급수 순으로 할 일을 찾는다.
+## 밭에 할 일이 없으면 한가한 동안 풀밭으로 채집하러 간다 (속성 효과 그대로). 풀밭에서도 할 게 없으면 제자리로.
+func _farm_once() -> bool:
+	var home_pos := Farm.center_of(home)
+	for t in CreatureJobs.FARM_ORDER:
+		var work: Farm.Work = CreatureJobs.FARM_WORK[t]
+		# 채집하러 나가 있어도 밭 일은 제자리 기준으로 찾는다
+		var target: Variant = _farm.find_work(work, home, data.work_radius(), [], home_pos)
+		if target == null:
+			continue
+		task = t
+		# 풀밭에서 돌아오는 길이면 먼 만큼 오래 걸린다. 제 범위 안에서는 한 번 깡충.
+		var away := position.distance_to(home_pos) > (data.work_radius() + 1.5) * Config.TILE
+		_hop_to(Farm.center_of(target), func() -> void: _farm.do_work(work, target), away)
+		return true
+	task = &""
+	return _forage_once()
 
 
 ## 속성 id 가 있는지 (땅 = 도라지 뿌리, 물 = 풀밭 물주기)
@@ -126,6 +142,8 @@ func _forage_once() -> bool:
 	forage.claimed[target] = true
 	_hop_to(Farm.center_of(target), func() -> void:
 		forage.claimed.erase(target)
+		if forage.herbs.has(target) or forage.roots.has(target):
+			picks += 1
 		if forage.herbs.has(target):
 			forage.pick(target)
 			GameState.displayed_herbs += 1
@@ -138,11 +156,11 @@ func _forage_once() -> bool:
 	return true
 
 
-## 여러 칸을 깡충깡충 건너가 일 동작을 하고 done 을 부른다. 멀수록 오래 걸린다.
-func _hop_to(to: Vector2, done: Callable) -> void:
+## 여러 칸을 깡충깡충 건너가 일 동작을 하고 done 을 부른다. by_distance 면 멀수록 오래 걸리고, 아니면 한 번 깡충.
+func _hop_to(to: Vector2, done: Callable, by_distance := true) -> void:
 	_busy = true
 	_play(Anim.HOP)
-	var tiles := maxf(position.distance_to(to) / Config.TILE, 1.0)
+	var tiles := maxf(position.distance_to(to) / Config.TILE, 1.0) if by_distance else 1.0
 	var tw := create_tween()
 	tw.tween_property(self, "position", to, hop_time() * tiles)
 	tw.tween_callback(_play.bind(Anim.WORK))
@@ -162,9 +180,10 @@ func frame_column() -> int:
 			return HOP_COLUMNS[i % HOP_COLUMNS.size()]
 		Anim.WORK:
 			# 급수 외의 일(파종·수확)은 아직 전용 동작이 없어 대기 동작을 빠르게 재생
-			var columns := WATER_COLUMNS if job == CreatureJobs.WATER else IDLE_COLUMNS
+			var watering := job == CreatureJobs.FARM and task == CreatureJobs.WATER
+			var columns := WATER_COLUMNS if watering else IDLE_COLUMNS
 			var i := int(_anim_time * WORK_FPS)
-			if job == CreatureJobs.WATER:
+			if watering:
 				return columns[mini(i, columns.size() - 1)]
 			return columns[i % columns.size()]
 	return IDLE_COLUMNS[int(_anim_time * IDLE_FPS) % IDLE_COLUMNS.size()]
@@ -185,8 +204,10 @@ func hop_time() -> float:
 	return Config.CREATURE_HOP_TIME / data.move_speed()
 
 
+## 다음 일까지 기다리는 시간. 농사는 방금 한 일(수확·파종·급수)의 속도를 따른다.
 func _reset_timer() -> void:
-	_timer = Config.CREATURE_WORK_INTERVAL / maxf(data.work_speed(job), 0.01)
+	var speed_job := task if job == CreatureJobs.FARM and task != &"" else job
+	_timer = Config.CREATURE_WORK_INTERVAL / maxf(data.work_speed(speed_job), 0.01)
 
 
 func _process(delta: float) -> void:
@@ -203,8 +224,8 @@ func _process(delta: float) -> void:
 		if auto_work:
 			_timer -= delta
 			if _timer <= 0.0:
-				_reset_timer()
 				work_once()
+				_reset_timer()
 	queue_redraw()
 
 

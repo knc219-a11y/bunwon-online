@@ -782,7 +782,8 @@ func train_option_text(id: StringName) -> String:
 	if stat == &"radius":
 		var r := s.data.work_radius()
 		return "%s   범위 %d → %d (%d원)" % [who, r, r + Config.TRAIN_RADIUS_STEP, train_price(s, stat)]
-	var job := s.job if s.job != CreatureJobs.REST else CreatureJobs.WATER
+	# 농사·쉬는 중은 급수 속도로 보여 준다 (훈련 배율은 모든 일에 같게 붙는다)
+	var job := s.job if s.job == CreatureJobs.FORAGE else CreatureJobs.WATER
 	var now := s.data.work_speed(job)
 	var next := now / s.data.train_speed_mult() * (s.data.train_speed_mult() + Config.TRAIN_SPEED_STEP)
 	return "%s   속도 %.2f → %.2f (%d원)" % [who, now, next, train_price(s, stat)]
