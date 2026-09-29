@@ -617,8 +617,8 @@ func hunt_day() -> void:
 		elif nearest_s != null:
 			target = nearest_s.position
 			goal = &"fight"
-		elif h.path_open and not h.bridge_broken() and h.hearts >= (6 if h.zone + 1 >= DOMA else 3):
-			# 2막 대장 구역(도마리)엔 하트가 넉넉할 때만 넘어간다 (사람이라면 반쯤 남은 하트로 대장 구역에 들어가지 않음)
+		elif h.path_open and not h.bridge_broken() and h.hearts >= (6 if h.zone + 1 >= 2 else 3):
+			# 2막 구역(광동리 · 도마리)엔 하트가 넉넉할 때만 넘어간다 (사람이라면 반쯤 남은 하트로 더 센 구역에 들어가지 않음)
 			target = h.next_area().get_center()
 			goal = &"next"
 		else:
