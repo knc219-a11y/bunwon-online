@@ -35,6 +35,19 @@ const CROP_PRICE := 50
 const SEED_PACK_SIZE := 5
 const SEED_PACK_PRICE := 100
 
+## 들나물 캐기 (2026-09-29 사용자 선택 A, 핵심 루프 점검 5번 "2~3일째 농부 할 일이 없다"): 아침마다 밭 밖 풀밭에 돋는다.
+## 농부가 F로 캐서 공급함에 진열하면 밤사이 팔린다 (무와 같은 방식). 값·수·자리는 전부 임시.
+const HERB_NAMES: Array[String] = ["냉이", "쑥", "달래"]
+const HERB_PRICE := 20
+## 하루에 돋는 포기 수 [최소, 최대]
+const HERBS_PER_DAY := Vector2i(5, 6)
+## 돋을 수 있는 풀밭 칸 (울타리·흙길·집·나무·마을 오브젝트를 피한 자리, 화면 위아래 글 띠에 가리지 않게 1~12줄)
+const HERB_SPOTS: Array[Vector2i] = [
+	Vector2i(1, 11), Vector2i(5, 11), Vector2i(9, 11), Vector2i(12, 11), Vector2i(4, 12), Vector2i(9, 12),
+	Vector2i(16, 12), Vector2i(16, 11), Vector2i(14, 2), Vector2i(19, 1), Vector2i(25, 1), Vector2i(14, 4),
+	Vector2i(16, 7), Vector2i(25, 10), Vector2i(24, 12), Vector2i(18, 12),
+]
+
 ## 도구 강화 (2026-09-27 후보 A 첫 조각): 마을 공급함에서 돈으로 한 번 사면 끝. 값은 전부 임시.
 ## 괭이·물뿌리개 1단계 = 바라보는 방향으로 앞 3칸 일자에 한 번에 쓴다.
 const TOOL_UPGRADE_REACH := 3
