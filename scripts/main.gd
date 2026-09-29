@@ -1185,7 +1185,10 @@ func next_day() -> Array[String]:
 	if forage.bonus_today > 0:
 		herb_line += " (물 준 풀밭 +%d)" % forage.bonus_today
 	lines.append(herb_line)
+	var boosted := boost_growth()
 	var grown := farm.advance_day()
+	if boosted > 0:
+		lines.append("아기 나무 정령이 밭을 돌봐 작물 %d개가 하루 더 자랐다." % boosted)
 	if grown > 0:
 		lines.append("밤사이 작물 %d개가 자랐다." % grown)
 	var ripe := farm.ripe_count()
@@ -1231,6 +1234,16 @@ func gather_gold_dust() -> int:
 		if r.y > 0 and c.job != CreatureJobs.REST:
 			total += _rng.randi_range(r.x, r.y)
 	GameState.money += total
+	return total
+
+
+## 키우기 (아기 나무 정령, 2026-09-29 도마리): 농사를 맡은 개체마다 범위 안 밭의 작물을 가끔 하루 더 키운다.
+func boost_growth() -> int:
+	var total := 0
+	for c in creatures:
+		var ch := c.data.species.grow_chance
+		if ch > 0.0 and c.job == CreatureJobs.FARM:
+			total += farm.boost_growth(c.home, c.data.work_radius(), ch, _rng)
 	return total
 
 

@@ -58,6 +58,12 @@ var gwang_hunts := 0
 var gwang_hurt := 0
 var gwang_knocked := 0
 var money_by_day := {}
+## 도마리 (2026-09-29, 2막 마지막 구역): 처음 도착한 날 · 사냥한 날 수 · 거기서 맞은 횟수 · 쓰러진 횟수
+var doma_day := -1
+var doma_hunts := 0
+var doma_hurt := 0
+var doma_knocked := 0
+const DOMA := 3
 
 
 func _ready() -> void:
@@ -97,6 +103,13 @@ func _ready() -> void:
 	_log("\n광동리: 첫 도착 %s · 첫 대장 처치 %s · 광동리 사냥 %d번 · 거기서 맞은 횟수 %d (한 번에 %.1f) · 쓰러짐 %d번 · 끝 돈 %s · 아기 참새 %d마리" % [
 		"%d일" % gwang_day if gwang_day > 0 else "없음", cleared_day.get(Config.HUNT_ZONES[2].name, "없음"), gwang_hunts, gwang_hurt,
 		float(gwang_hurt) / maxi(gwang_hunts, 1), gwang_knocked, money_at, main.creatures.filter(func(c: Creature) -> bool: return c.data.species == CreatureCatalog.SPARROW).size()])
+	var money_late := []
+	for d in [40, 45, 50]:
+		if money_by_day.has(d):
+			money_late.append("%d일 %d원" % [d, money_by_day[d]])
+	_log("\n도마리: 첫 도착 %s · 2막 대장(장승 한 쌍) 첫 처치 %s · 도마리 사냥 %d번 · 거기서 맞은 횟수 %d (한 번에 %.1f) · 쓰러짐 %d번 · 끝 돈 %s · 아기 나무 정령 %d마리" % [
+		"%d일" % doma_day if doma_day > 0 else "없음", cleared_day.get(Config.HUNT_ZONES[DOMA].name, "없음"), doma_hunts, doma_hurt,
+		float(doma_hurt) / maxi(doma_hunts, 1), doma_knocked, money_late, main.creatures.filter(func(c: Creature) -> bool: return c.data.species == CreatureCatalog.TREE_SPIRIT).size()])
 	_log("입은 장비: 농부 %s · 사냥꾼 %s" % [_worn_text(&"farmer"), _worn_text(&"hunter")])
 	_log("\n최종: %d일째, 돈 %d원, 씨앗 %d, 크리처 %d (훈련 단계 합 %d), 밭 구역 %d, 웨이포인트 %s" % [GameState.day, GameState.money, GameState.seeds, main.creatures.size(), trained, GameState.open_plots, GameState.waypoints])
 	var out := OS.get_environment("OUT")
@@ -492,6 +505,14 @@ func hunt_day() -> void:
 		for s: Creature in main.creatures:
 			if s.data.species == CreatureCatalog.SPARROW and (pick == null or pick.data.species != CreatureCatalog.SPARROW):
 				pick = s
+	# 도마리 고목 그루터기는 땅 몬스터: 아기 나무 정령(덩굴 묶기)이 있으면 데려가고, 없으면 금두꺼비 · 땅 슬라임
+	if zone >= DOMA:
+		var best: Creature = null
+		for s: Creature in main.creatures:
+			if s.data.species == CreatureCatalog.TREE_SPIRIT or (best == null and s.data.species == CreatureCatalog.GOLD_TOAD):
+				best = s if best == null or best.data.species != CreatureCatalog.TREE_SPIRIT else best
+		if best != null:
+			pick = best
 	main.enter_hunt(pick, zone)
 	var h: HuntGround = main.hunt
 	h.set_process(false)
@@ -510,6 +531,7 @@ func hunt_day() -> void:
 	var seen := {}
 	var dodges := 0
 	var gwang_hurt0 := -1
+	var doma_hurt0 := -1
 	## 가방 · 창고가 차서 못 주운 드롭 자리 (이번 사냥에선 다시 가지 않음. 안 그러면 한 걸음 떨어졌다 돌아가기를 되풀이)
 	var full_at := {}
 	while t < 900.0:
@@ -518,6 +540,11 @@ func hunt_day() -> void:
 			gwang_hunts += 1
 			if gwang_day < 0:
 				gwang_day = GameState.day
+		if h.zone == DOMA and doma_hurt0 < 0:
+			doma_hurt0 = hurt
+			doma_hunts += 1
+			if doma_day < 0:
+				doma_day = GameState.day
 		if h.knocked:
 			break
 		if t + 2 * DT >= 900.0 and t < 900.0 - DT:
@@ -642,8 +669,11 @@ func hunt_day() -> void:
 	hunt_knocked += int(knocked)
 	knocked_zone = h.zone if knocked else -1
 	if gwang_hurt0 >= 0:
-		gwang_hurt += hurt - gwang_hurt0
+		gwang_hurt += (doma_hurt0 if doma_hurt0 >= 0 else hurt) - gwang_hurt0
 		gwang_knocked += int(knocked and h.zone == 2)
+	if doma_hurt0 >= 0:
+		doma_hurt += hurt - doma_hurt0
+		doma_knocked += int(knocked and h.zone == DOMA)
 	if h.boss_spawned and h._boss() == null:
 		_cleared(h.zone)
 	var comp := h.companion.display_name() if h.companion else "혼자"

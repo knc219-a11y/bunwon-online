@@ -4,11 +4,12 @@ extends Node2D
 ## 사냥꾼 뒤를 따라다니다가 가까운 야생 슬라임을 스스로 공격한다. 다치지 않는다.
 ## 공격 방식은 종에 정해져 있으면 그것 (금두꺼비 = 혀 당기기), 아니면 첫 번째 속성으로 정한다:
 ## 물 = 멀리서 물총, 그 밖(땅) = 붙어서 박치기. 아기 참새 = 날아가 쪼기 (2026-09-29 광동리 B).
+## 아기 나무 정령 = 덩굴 묶기 (2026-09-29 도마리): 덩굴을 뻗어 몬스터를 잠깐 붙잡는다.
 ## 누구를 언제 때릴지는 HuntGround 가 정하고, 이 노드는 움직임과 그리기만 맡는다.
 
-enum Style { SHOT, BUMP, PULL, PECK }
+enum Style { SHOT, BUMP, PULL, PECK, BIND }
 
-const STYLE_NAMES := {Style.SHOT: "멀리서 물총", Style.BUMP: "붙어서 박치기", Style.PULL: "혀로 끌어오기", Style.PECK: "날아가 쪼기"}
+const STYLE_NAMES := {Style.SHOT: "멀리서 물총", Style.BUMP: "붙어서 박치기", Style.PULL: "혀로 끌어오기", Style.PECK: "날아가 쪼기", Style.BIND: "덩굴 묶기"}
 
 ## 농장에 있는 크리처 (돌아가면 그 자리·그 일로 복귀)
 var source: Creature
@@ -46,6 +47,8 @@ static func style_for(d: CreatureData) -> Style:
 		return Style.PULL
 	if d.species.companion_style == &"peck":
 		return Style.PECK
+	if d.species.companion_style == &"bind":
+		return Style.BIND
 	var element: StringName = d.elements[0].id if not d.elements.is_empty() else &""
 	return Style.SHOT if element == &"water" else Style.BUMP
 
@@ -60,13 +63,13 @@ func display_name() -> String:
 
 ## 공격 한 번에 걸리는 시간. 일 속도가 빠른 개체일수록 조금 짧다 (절반~두 배 사이). 속도 훈련도 반영.
 func attack_interval() -> float:
-	var base: float = {Style.SHOT: Config.COMPANION_SHOT_INTERVAL, Style.BUMP: Config.COMPANION_BUMP_INTERVAL, Style.PULL: Config.COMPANION_PULL_INTERVAL, Style.PECK: Config.COMPANION_PECK_INTERVAL}[style]
+	var base: float = {Style.SHOT: Config.COMPANION_SHOT_INTERVAL, Style.BUMP: Config.COMPANION_BUMP_INTERVAL, Style.PULL: Config.COMPANION_PULL_INTERVAL, Style.PECK: Config.COMPANION_PECK_INTERVAL, Style.BIND: Config.COMPANION_BIND_INTERVAL}[style]
 	return base / clampf(data.base_work_speed * data.train_speed_mult(), 0.5, 2.0)
 
 
 ## 공격이 닿는 거리 (px)
 func reach() -> float:
-	return {Style.SHOT: Config.COMPANION_SHOT_RANGE, Style.BUMP: Config.COMPANION_BUMP_RANGE, Style.PULL: Config.COMPANION_PULL_RANGE, Style.PECK: Config.COMPANION_PECK_RANGE}[style]
+	return {Style.SHOT: Config.COMPANION_SHOT_RANGE, Style.BUMP: Config.COMPANION_BUMP_RANGE, Style.PULL: Config.COMPANION_PULL_RANGE, Style.PECK: Config.COMPANION_PECK_RANGE, Style.BIND: Config.COMPANION_BIND_RANGE}[style]
 
 
 func speed() -> float:
@@ -92,6 +95,9 @@ func play_attack(at: Vector2) -> void:
 	elif style == Style.PECK:
 		shot_to = at
 		shot_time = 0.3
+	elif style == Style.BIND:
+		shot_to = at
+		shot_time = Config.COMPANION_BIND_STUN
 	else:
 		# 박치기: 상대 쪽으로 살짝 튀어 나갔다 돌아온다 (그림만)
 		shot_to = at
@@ -137,6 +143,17 @@ func _draw() -> void:
 		var tip := at - position + Vector2(0, -2)
 		draw_line(Vector2(0, -2), tip, Color(0.9, 0.42, 0.48), 3.0)
 		draw_circle(tip, 3.5, Color(0.95, 0.55, 0.6))
+	elif shot_time > 0.0 and style == Style.BIND:
+		# 덩굴 묶기: 상대까지 구불구불한 초록 덩굴, 끝에 잎 (전용 그림은 다음 단계)
+		var at := pulling.position if is_instance_valid(pulling) else shot_to
+		var to := at - position
+		var pts := PackedVector2Array()
+		for i in 9:
+			var k := i / 8.0
+			pts.append(Vector2(0, -4).lerp(to, k) + to.orthogonal().normalized() * sin(k * TAU * 1.5 + _anim_time * 6.0) * 3.0)
+		draw_polyline(pts, Color(0.36, 0.62, 0.3), 2.0)
+		draw_arc(to, 7.0, 0, TAU, 12, Color(0.4, 0.7, 0.32), 2.0)
+		draw_circle(to + Vector2(5, -5), 2.5, Color(0.6, 0.85, 0.45))
 	elif shot_time > 0.0 and style == Style.PECK:
 		# 날아가 쪼기: 상대까지 날아간 자국 (점선)과 쪼는 부리 반짝임 (전용 그림은 다음 단계)
 		var to := shot_to - position + Vector2(0, -10)
