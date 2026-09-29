@@ -43,6 +43,13 @@ const CAN_UPGRADE_PRICE := 250
 ## 사냥꾼 튼튼한 사냥칼: 이후 태어나는 크리처 능력치 바닥을 첫 크리처만큼 보장한다
 const HUNTER_KNIFE_PRICE := 400
 
+## 크리처 훈련 (2026-09-29 사용자 선택 A, 돈 쓸 곳 2단계): 공급함에서 크리처마다 범위·속도를 한 단계씩 올린다.
+## 값은 단계마다 두 배, 크리처·능력마다 따로 낸다. 최대 단계 = 배열 길이. 값은 전부 임시.
+const TRAIN_PRICES: Array[int] = [300, 600, 1200]
+## 범위 훈련 한 단계 = 범위 +1, 속도 훈련 한 단계 = 일 속도 +25%
+const TRAIN_RADIUS_STEP := 1
+const TRAIN_SPEED_STEP := 0.25
+
 ## 시작할 때 마을 공급함에 들어 있는 알 수 (첫 알 획득 이벤트는 미정이라 임시로 채워 둠)
 const START_VILLAGE_EGGS := 1
 const EGG_HATCH_DAYS := 1

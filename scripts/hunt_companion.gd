@@ -56,10 +56,10 @@ func display_name() -> String:
 	return "%s %s" % [data.element_names(), data.species.display_name]
 
 
-## 공격 한 번에 걸리는 시간. 일 속도가 빠른 개체일수록 조금 짧다 (절반~두 배 사이).
+## 공격 한 번에 걸리는 시간. 일 속도가 빠른 개체일수록 조금 짧다 (절반~두 배 사이). 속도 훈련도 반영.
 func attack_interval() -> float:
 	var base: float = {Style.SHOT: Config.COMPANION_SHOT_INTERVAL, Style.BUMP: Config.COMPANION_BUMP_INTERVAL, Style.PULL: Config.COMPANION_PULL_INTERVAL}[style]
-	return base / clampf(data.base_work_speed, 0.5, 2.0)
+	return base / clampf(data.base_work_speed * data.train_speed_mult(), 0.5, 2.0)
 
 
 ## 공격이 닿는 거리 (px)

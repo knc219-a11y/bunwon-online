@@ -53,10 +53,13 @@ func setup(farm: Farm, creature_data: CreatureData, at_cell: Vector2i) -> void:
 
 
 func describe() -> String:
-	return "%s [%s] %s · 속도 %.2f / 범위 %d / %s" % [
+	var text := "%s [%s] %s · 속도 %.2f / 범위 %d / %s" % [
 		data.species.display_name, CreatureJobs.display_name(job), data.element_names(),
 		data.work_speed(job), data.work_radius(), data.trait_name(),
 	]
+	if data.train_total() > 0:
+		text += " / 훈련 범위 %d · 속도 %d단계" % [data.radius_level, data.speed_level]
+	return text
 
 
 func next_job() -> void:
@@ -168,7 +171,10 @@ func _draw() -> void:
 		draw_circle(Vector2(4, 2), 1.5, Color.BLACK)
 	if job == CreatureJobs.REST:
 		return
-	draw_string(ThemeDB.fallback_font, Vector2(-20, -26), CreatureJobs.display_name(job), HORIZONTAL_ALIGNMENT_CENTER, 40, 9)
+	var label := CreatureJobs.display_name(job)
+	if data.train_total() > 0:
+		label += " ★%d" % data.train_total()
+	draw_string(ThemeDB.fallback_font, Vector2(-24, -26), label, HORIZONTAL_ALIGNMENT_CENTER, 48, 9)
 	if carried_by == null:
 		# 작업 범위 표시
 		var radius := data.work_radius()

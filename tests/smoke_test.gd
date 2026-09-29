@@ -406,7 +406,7 @@ func _ready() -> void:
 	farmer.position = main.supply_box.position
 	main.interact()
 	_check(main.menu_open and farmer.frozen, "선택창이 열리면 캐릭터는 멈춤")
-	_check(main.supply_options() == [&"display_crops", &"buy_seeds", &"close"], "알이 없으면 진열·씨앗·닫기만")
+	_check(main.supply_options() == [&"display_crops", &"buy_seeds", &"train", &"close"], "알이 없으면 진열·씨앗·크리처 훈련·닫기만")
 	_check(not main.supply_action(&"buy_seeds") and GameState.seeds == seeds_before, "돈이 모자라면 씨앗을 못 삼")
 	main._unhandled_input(_action(&"move_down"))
 	_check(main.menu_index == 1, "W/S로 고르기")
@@ -414,7 +414,7 @@ func _ready() -> void:
 	main._unhandled_input(_action(&"interact"))
 	_check(GameState.crops == 0 and GameState.displayed_crops == 3, "F로 무 3개 진열")
 	_check(main.supply_box.badge.contains("무 3"), "공급함에 진열한 무 표시")
-	_check(main.menu_open and main.supply_options() == [&"buy_seeds", &"close"], "진열 뒤에도 선택창은 열려 있음")
+	_check(main.menu_open and main.supply_options() == [&"buy_seeds", &"train", &"close"], "진열 뒤에도 선택창은 열려 있음")
 	main._unhandled_input(_action(&"menu_close"))
 	_check(not main.menu_open and not farmer.frozen, "Esc로 선택창 닫기")
 	var money_lines: Array[String] = main.next_day()
@@ -1188,6 +1188,49 @@ func _ready() -> void:
 	main.show_morning_card([] as Array[String])
 	_check(mcard.size.y == main.MORNING_CARD_SIZE.y, "조용한 밤에는 아침 카드가 원래 크기")
 	mcard.visible = false
+
+	# 29) 크리처 훈련 (2026-09-29 사용자 선택 A, 돈 쓸 곳 2단계): 공급함에서 크리처마다 범위·속도, 값은 단계마다 두 배
+	main._set_active(farmer)
+	farmer.position = main.supply_box.position + Vector2(0, 16)
+	var tr: Creature = main.creatures[0]
+	tr.data.radius_level = 0
+	tr.data.speed_level = 0
+	_check(main.supply_options().has(&"train"), "크리처가 있으면 공급함에 크리처 훈련")
+	var r0 := tr.data.work_radius()
+	var sp0 := tr.data.work_speed(CreatureJobs.WATER)
+	GameState.money = Config.TRAIN_PRICES[0] - 1
+	_check(not main.train(tr, &"radius") and tr.data.radius_level == 0, "돈이 모자라면 훈련 못 함")
+	GameState.money = 10000
+	_check(main.train(tr, &"radius") and tr.data.work_radius() == r0 + 1 and GameState.money == 10000 - Config.TRAIN_PRICES[0], "범위 훈련 1단계: 범위 +1")
+	_check(main.train_price(tr, &"radius") == Config.TRAIN_PRICES[0] * 2, "다음 단계 값은 두 배")
+	_check(main.train(tr, &"speed") and is_equal_approx(tr.data.work_speed(CreatureJobs.WATER), sp0 * (1.0 + Config.TRAIN_SPEED_STEP)), "속도 훈련 1단계: 일 속도 +25%")
+	for i in Config.TRAIN_PRICES.size() - 1:
+		main.train(tr, &"radius")
+	_check(tr.data.radius_level == Config.TRAIN_PRICES.size() and main.train_price(tr, &"radius") == -1 and not main.train(tr, &"radius"), "범위는 최대 단계까지만")
+	var topt: Array[StringName] = main.train_options()
+	_check(not topt.has(&"train_0_radius") and topt.has(&"train_0_speed") and topt[-1] == &"back", "다 올린 능력은 훈련 목록에서 빠짐")
+	_check(tr.describe().contains("훈련"), "크리처 설명에 훈련 단계")
+	# 선택창: 공급함 → 크리처 훈련 → 한 줄 고르면 돈이 나가고 창은 그대로
+	main.close_menu()
+	main.open_menu()
+	main.menu_index = main.supply_options().find(&"train")
+	main.menu_confirm()
+	_check(main.menu_open and main.menu_kind == &"train" and main._menu_text.text.contains("크리처 훈련"), "공급함 크리처 훈련 → 훈련 선택창")
+	var m_before := GameState.money
+	main.menu_index = main.train_options().find(&"train_0_speed")
+	main.menu_confirm()
+	_check(GameState.money == m_before - Config.TRAIN_PRICES[1] and tr.data.speed_level == 2 and main.menu_kind == &"train", "훈련 선택창에서 속도 2단계")
+	main.menu_index = main.train_options().size() - 1
+	main.menu_confirm()
+	_check(main.menu_open and main.menu_kind == &"supply", "뒤로 → 공급함 선택창")
+	main.close_menu()
+	# 동행도 속도 훈련만큼 공격이 빨라진다
+	var comp_t := HuntCompanion.new()
+	comp_t.data = tr.data
+	var fast := comp_t.attack_interval()
+	tr.data.speed_level = 0
+	_check(fast < comp_t.attack_interval() or is_equal_approx(fast, comp_t.attack_interval()), "속도 훈련은 동행 공격 간격도 줄임 (최대 두 배 제한 안에서)")
+	comp_t.free()
 
 	print("SMOKE TEST: %s (%d failures)" % ["PASS" if _failures == 0 else "FAIL", _failures])
 	get_tree().quit(1 if _failures > 0 else 0)

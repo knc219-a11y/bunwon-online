@@ -25,7 +25,10 @@ func _ready() -> void:
 	_log("# 자동 플레이 seed=%d" % rng_seed)
 	for d in days:
 		await play_day()
-	_log("\n최종: %d일째, 돈 %d원, 씨앗 %d, 크리처 %d, 밭 구역 %d, 웨이포인트 %s" % [GameState.day, GameState.money, GameState.seeds, main.creatures.size(), GameState.open_plots, GameState.waypoints])
+	var trained := 0
+	for s: Creature in main.creatures:
+		trained += s.data.train_total()
+	_log("\n최종: %d일째, 돈 %d원, 씨앗 %d, 크리처 %d (훈련 단계 합 %d), 밭 구역 %d, 웨이포인트 %s" % [GameState.day, GameState.money, GameState.seeds, main.creatures.size(), trained, GameState.open_plots, GameState.waypoints])
 	var out := OS.get_environment("OUT")
 	if out != "":
 		var f := FileAccess.open(out, FileAccess.WRITE)
@@ -148,7 +151,7 @@ func farm_by_hand() -> Dictionary:
 	return counts
 
 
-## 공급함: 알 받기 · 무 진열 · 살 수 있는 것 사기 (밭 넓히기 → 물뿌리개 → 괭이 → 부족한 씨앗 → 사냥칼)
+## 공급함: 알 받기 · 무 진열 · 살 수 있는 것 사기 (밭 넓히기 → 물뿌리개 → 괭이 → 부족한 씨앗 → 사냥칼 → 크리처 훈련)
 func shop() -> Array[String]:
 	var did: Array[String] = []
 	if not GameState.village_eggs.is_empty():
@@ -176,6 +179,24 @@ func shop() -> Array[String]:
 					did.append("%s(%d원)" % [id, m - GameState.money])
 					keep = true
 					break
+		if keep:
+			continue
+		# 다 사고 남은 돈은 크리처 훈련 (2026-09-29 선택 A): 가장 싼 단계부터
+		var best := &""
+		var best_price := 1 << 30
+		for id: StringName in main.train_options():
+			if id == &"back":
+				continue
+			var pick: Array = main.train_from_option(id)
+			var price: int = main.train_price(pick[0], pick[1])
+			if price < best_price:
+				best = id
+				best_price = price
+		if best != &"" and GameState.money >= best_price:
+			var pick: Array = main.train_from_option(best)
+			main.train(pick[0], pick[1])
+			did.append("훈련 %s(%d원)" % [String(best).trim_prefix("train_"), best_price])
+			keep = true
 	return did
 
 
