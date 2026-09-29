@@ -429,8 +429,8 @@ const LANTERN_RADIUS := 44.0
 const GHOST_FADE := 0.35
 ## 도깨비불 (번천 wisp): 불빛 안에서 이 거리 안에 오면 부풀어 (구역 windup 초 예고) 둘레 WISP_BURST_RADIUS 에 불똥을 튀긴다.
 ## 튀긴 뒤 WISP_RECOVER 초 쪼그라들어 멈춘다 (칠 틈). 도깨비불은 벽 · 물 · 가드레일을 지나 떠다닌다.
-const WISP_TRIGGER := 44.0
-const WISP_BURST_RADIUS := 30.0
+const WISP_TRIGGER := 48.0
+const WISP_BURST_RADIUS := 40.0
 const WISP_RECOVER := 1.2
 const WISP_COOLDOWN := 1.8
 ## 유령 막차 (번천 대장 bus): 사냥꾼 쪽 (가로 · 세로 중 먼 쪽 = 도로 방향) 긴 띠 예고 BUS_WINDUP 뒤 BUS_TIME 동안 BUS_LENGTH 만큼 돌진.
@@ -508,7 +508,9 @@ const ALCHEMIST_CELL := Vector2i(18, 10)
 ## 복구에 드는 것 (로드맵: 약방 ≈ 4.5시간 ≈ 45일째). 장승 조각(장승 한 쌍을 잡을 때마다 1개)이 속도를 정한다.
 const YAK_COST_MONEY := 4000
 const YAK_COST_ROOTS := 20
-const YAK_COST_MATERIAL := 10
+const YAK_COST_MATERIAL := 20
+## 약방을 고친 뒤 공급함에서 잡템을 팔 때 연금술사 재료로 남기는 수
+const JUNK_KEEP := 10
 ## 도라지밭: 아침마다 이만큼 돋는다 (안 캔 것은 새로 채움). 농부가 F로 하나씩 캐도 된다.
 const HERB_BED_PER_DAY := 6
 ## 연금술사 제작 (약방에서 연금술사 F). 재료: herbs 들나물 (농부가 든 것) · roots 도라지 · junk 잡템 · crops 무.

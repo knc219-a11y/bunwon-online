@@ -2078,6 +2078,154 @@ func _ready() -> void:
 	_check(w_cid != &"" and Wearables.rarity(w_cid) == &"crafted" and Wearables.item(w_cid).weapon.kind == &"bow" and Config.CRAFT_COSTS.has(&"steel_sword"), "대장간에서 쇠뇌 (제작 무기) · 강철 검")
 	_check(Wearables.describe(w_cid).contains("활 · 사거리"), "무기 설명에 종류 · 사거리 %s" % Wearables.describe(w_cid))
 
+	# 39) 3막 번천 (2026-09-29 사용자: 번천 = 춥고 어두운 삼거리, 유령 몬스터 → 후보 A 도깨비불 + 유령 막차 + 아기 도깨비불)
+	#     약방 · 연금술사 (사용자 선택 A+B 물약 · 크리처 보약): 장승 조각 → 약방 터 → 한 번에 복구 → 연금술사 · 호롱
+	var b_zi := 4
+	var b_z: Dictionary = Config.HUNT_ZONES[b_zi]
+	_check(b_z.name == "번천" and b_z.monster == "도깨비불" and b_z.boss_monster == "유령 막차" and b_z.night and b_z.ghost, "5구역 번천: 도깨비불 · 유령 막차 · 밤 · 유령")
+	var b_map := HuntMap.load_map("bunjeon")
+	_check(b_map.find("L").size() >= 6 and not b_map.find("P").is_empty() and not b_map.is_free(Rect2(b_map.find("L")[0] - Vector2(3, 3), Vector2(6, 6))), "번천 칸 지도: 가로등 · 버스 정류장 (막힘)")
+	var b_c: Creature = main._hatch(CreatureCatalog.WILL_O, Vector2i(18, 12))
+	_check(b_c.data.species.display_name == "아기 도깨비불" and b_c.data.elements[0].id == &"fire" and HuntCompanion.style_name(b_c.data) == "불빛 + 불씨", "아기 도깨비불 (새 속성 불, 동행 불빛 + 불씨)")
+	_check(b_c.data.work_speed(CreatureJobs.HERB) > b_c.data.work_speed(CreatureJobs.FORAGE), "불 속성은 도라지밭 일이 빠름")
+	GameState.hunts_today = 0
+	GameState.lamp_oil = 1
+	GameState.strength = 1
+	if not b_zi in GameState.waypoints:
+		GameState.waypoints.append(b_zi)
+	main.enter_hunt(b_c, b_zi)
+	var bjh: HuntGround = main.hunt
+	bjh.set_ai(false)
+	bjh.set_process(false)
+	bjh.companion_ai = false
+	_check(bjh.zone == b_zi and bjh.is_night() and bjh.lamps.size() == b_map.find("L").size(), "번천에 들어옴: 밤, 가로등 %d" % bjh.lamps.size())
+	_check(bjh.lamp_oil and GameState.lamp_oil == 0 and is_equal_approx(bjh.lantern_radius(), Config.LANTERN_RADIUS * Config.LAMP_OIL_MULT), "호롱 기름을 채워 호롱 불빛이 넓음")
+	_check(bjh.strong and GameState.strength == 0 and bjh.power() == 2, "힘 물약: 이번 사냥 피해 +1")
+	bjh.strong = false
+	bjh.lamp_oil = false
+	var b_feet: Vector2 = main.hunter.feet()
+	var b_lamps := bjh.lamps.duplicate()
+	bjh.lamps.clear()
+	bjh.companion.position = b_feet + Vector2(0, -220)
+	for o: WildSlime in bjh.slimes:
+		o.position = b_feet + Vector2(-320, 0)
+	var b_g: WildSlime = bjh.slimes[0]
+	b_g.hp = 3
+	b_g.position = b_feet + Vector2(120, 8)
+	bjh.tick(0.01)
+	_check(not bjh.hittable(b_g) and is_equal_approx(b_g.modulate.a, Config.GHOST_FADE), "어둠 속 도깨비불은 반쯤 비침 (못 맞힘)")
+	_check(bjh.in_light(b_feet + Vector2(20, 0)) and not bjh.in_light(b_feet + Vector2(Config.LANTERN_RADIUS + 10, 0)), "사냥꾼 호롱 둘레만 밝음")
+	bjh._cooldown = 0.0
+	bjh.swing(Vector2.RIGHT)
+	for i in 30:
+		bjh.tick(1.0 / 30.0)
+	_check(b_g.hp == 3, "화살이 어둠 속 도깨비불을 지나감")
+	bjh.lamps.assign(b_lamps)
+	_check(bjh.hittable(b_g) == bjh.in_light(b_g.position) and bjh.in_light(b_lamps[0] + Vector2(0, 10)), "가로등 아래는 밝음")
+	# 불빛 동행: 동행 둘레 유령도 맞고, 불씨로 잠시 뒤 한 번 더
+	bjh.lamps.clear()
+	b_g.position = bjh.companion.position + Vector2(20, 0)
+	_check(bjh.hittable(b_g), "아기 도깨비불 불빛 안의 도깨비불은 맞음")
+	bjh.companion_attack(b_g)
+	_check(b_g.hp == 2 and bjh._burns.size() == 1, "불씨: 1 피해 + 불붙음")
+	for i in int(Config.STAFF_BURN_DELAY * 30) + 5:
+		bjh.tick(1.0 / 30.0)
+	_check(b_g.hp == 1, "불씨: 잠시 뒤 한 번 더 피해")
+	# 도깨비불 불똥: 불빛 안에서만 부풀어 원 안을 다치게 함
+	var b_w: WildSlime = bjh.slimes[1]
+	b_w.lit = false
+	b_w._lunge_cd = 0.0
+	_check(not b_w._tick_attack(0.01, b_w.position + Vector2(10, 0)) and b_w._burst < 0.0, "어둠 속 도깨비불은 불똥을 안 튀김")
+	b_w.position = b_feet + Vector2(16, 0)
+	b_w.ai_enabled = true
+	bjh._invulnerable = 0.0
+	var b_h0 := bjh.hearts
+	bjh.tick(0.02)
+	_check(b_w._burst >= 0.0, "호롱 불빛에 들어온 도깨비불이 부풂 (예고)")
+	for i in int(b_z.windup * 30) + 3:
+		bjh.tick(1.0 / 30.0)
+	_check(bjh.hearts == b_h0 - b_z.damage and b_w._recover > 0.0, "불똥에 다침 (하트 -%d), 쪼그라든 동안 칠 틈" % b_z.damage)
+	b_w.ai_enabled = false
+	# 유령 막차: 전조등 띠 예고 → 도로 따라 돌진, 닿으면 다침. 대장은 어둠에서도 맞음
+	bjh.lamps.assign(b_lamps)
+	for o: WildSlime in bjh.slimes.duplicate():
+		bjh.slimes.erase(o)
+		o.queue_free()
+	var b_bus: WildSlime = bjh.spawn_boss()
+	_check(b_bus.boss_frame == Vector2i(96, 48) and b_bus.pattern == &"bus" and b_bus.hp == b_z.boss_hp and bjh.hittable(b_bus), "유령 막차 (96x48, 체력 %d, 어둠에서도 맞음)" % b_z.boss_hp)
+	b_bus.position = b_feet + Vector2(150, 0)
+	b_bus.ai_enabled = true
+	b_bus._pattern_cd = 0.0
+	bjh._invulnerable = 0.0
+	b_h0 = bjh.hearts
+	bjh.tick(0.02)
+	_check(b_bus._bus_aim >= 0.0 and b_bus._bus_to.y == b_bus._bus_from.y, "막차가 전조등으로 가로 띠를 비춤 (예고)")
+	for i in int((Config.BUS_WINDUP + Config.BUS_TIME) * 30) + 5:
+		bjh.tick(1.0 / 30.0)
+	_check(bjh.hearts < b_h0 and b_bus._runs == 1, "막차 돌진에 치임 (하트 %d → %d)" % [b_h0, bjh.hearts])
+	b_bus.ai_enabled = false
+	main.leave_hunt()
+
+	# 약방: 도마리 장승 한 쌍을 잡으면 장승 조각 + 다음 날 약방 터, 고치기 전엔 번천 쪽이 캄캄
+	GameState.yak_state = 0
+	GameState.material2 = 0
+	GameState.hunts_today = 0
+	main.enter_hunt(null, 3)
+	var yh: HuntGround = main.hunt
+	yh.set_ai(false)
+	yh.set_process(false)
+	for o: WildSlime in yh.slimes.duplicate():
+		yh.slimes.erase(o)
+		o.queue_free()
+	yh.spawn_boss()
+	for o: WildSlime in yh.slimes.duplicate():
+		yh._defeat(o)
+	_check(GameState.material2 == 1 and GameState.yak_boss_down and yh.path_open, "장승 한 쌍을 쓰러뜨리면 장승 조각 1")
+	_check(yh.road_dark() and yh.path_block().contains("캄캄") and not yh.advance(), "약방을 고치기 전엔 번천 쪽이 캄캄해서 못 감")
+	main.leave_hunt()
+	var y_lines: Array[String] = main.next_day()
+	_check(GameState.yak_state == 1 and main.yak != null and " ".join(y_lines).contains("약방 터"), "다음 날 아침 약방 터가 드러남")
+	GameState.money = 100
+	_check(not main.restore_yak() and GameState.yak_state == 1, "모자라면 못 고침")
+	GameState.money = Config.YAK_COST_MONEY + 7
+	GameState.roots = Config.YAK_COST_ROOTS
+	GameState.material2 = Config.YAK_COST_MATERIAL
+	_check(main.restore_yak() and GameState.yak_state == 2 and main.alchemist.visible and main.herb_bed != null and GameState.money == 7 and GameState.roots == 0 and GameState.material2 == 0,
+		"약방 복구 (돈 %d · 도라지 %d · 장승 조각 %d) → 연금술사" % [Config.YAK_COST_MONEY, Config.YAK_COST_ROOTS, Config.YAK_COST_MATERIAL])
+	_check(CreatureJobs.jobs().has(CreatureJobs.HERB) and GameState.herb_bed == Config.HERB_BED_PER_DAY, "도라지밭 일이 생김 (하루 %d)" % Config.HERB_BED_PER_DAY)
+	_check(main.pick_herb_bed() and GameState.roots == 1 and GameState.herb_bed == Config.HERB_BED_PER_DAY - 1, "도라지밭에서 손으로 도라지 하나")
+	b_c.home = Vector2i(18, 12)
+	b_c.job = CreatureJobs.HERB
+	_check(b_c._herb_once(), "아기 도깨비불이 도라지밭 일을 함")
+	GameState.hunts_today = 0
+	main.enter_hunt(null, 3)
+	_check(main.hunt.path_block() == "", "약방을 고치면 번천 길이 열림 (호롱)")
+	main.leave_hunt()
+	# 연금술사 제작: 물약 (A) · 크리처 보약 (B)
+	GameState.herbs = 4
+	GameState.junk = 3
+	GameState.roots = 0
+	GameState.potions = 0
+	_check(main.brew(&"potion") and GameState.potions == 2 and GameState.herbs == 2 and GameState.junk == 2, "빨간 물약 두 병 (나물 2 · 잡템 1)")
+	_check(not main.brew(&"lamp_oil") and GameState.lamp_oil == 0, "도라지가 없으면 호롱 기름 못 만듦")
+	GameState.roots = 3
+	_check(main.brew(&"lamp_oil") and GameState.lamp_oil == 1 and GameState.roots == 2, "호롱 기름 (도라지 1 · 잡템 1)")
+	GameState.crops = 5
+	_check(main.brew(&"tonic") and GameState.tonics == 1 and GameState.crops == 0 and GameState.roots == 0, "크리처 보약 (무 5 · 도라지 2)")
+	b_c._reset_timer()
+	var y_t1 := b_c._timer
+	_check(main.brew_options().has(&"feed_tonic") and main.feed_tonic() and not main.feed_tonic() and GameState.tonics == 0, "보약 먹이기 (하루 한 번)")
+	_check(is_equal_approx(b_c._timer, y_t1 / Config.TONIC_SPEED_MULT), "보약 먹은 날 크리처 일 두 배 빠름")
+	GameState.junk = Config.JUNK_KEEP + 5
+	var y_m0 := GameState.money
+	main._set_active(main.hunter)
+	main.hunter.position = Farm.center_of(main.SUPPLY_RECT.position + Vector2i(1, 1))
+	main._hunter_interact()
+	main.close_menu()
+	_check(GameState.junk == Config.JUNK_KEEP and GameState.money == y_m0 + 5 * Config.JUNK_PRICE, "약방을 고친 뒤 공급함은 잡템 %d개를 약방 재료로 남기고 나머지만 팖" % Config.JUNK_KEEP)
+	main.next_day()
+	_check(GameState.tonic_day != GameState.day and GameState.herb_bed == Config.HERB_BED_PER_DAY, "다음 날: 보약 효과 끝 · 도라지밭 다시 돋음")
+
 	# 38) 테스트용 시작 지점 (2026-09-29 사용자: "매번 처음부터 시작하는게 조금 어려운거같아")
 	_check(not main.menu_open, "테스트 장면 안에서는 시작 지점 창이 안 뜸")
 	main.queue_free()

@@ -416,7 +416,10 @@ func _hunter_interact() -> void:
 		open_inventory(true)
 	elif _near(supply_box):
 		var has_gear := Wearables.rolled_in_bag(&"hunter") > 0
-		if GameState.hunter_eggs.is_empty() and GameState.junk <= 0:
+		# 약방을 고친 뒤로는 잡템을 JUNK_KEEP 개까지 연금술사 재료로 남기고 나머지만 판다
+		var keep := Config.JUNK_KEEP if GameState.yak_state >= 2 else 0
+		var sell := maxi(GameState.junk - keep, 0)
+		if GameState.hunter_eggs.is_empty() and sell <= 0:
 			if has_gear:
 				open_menu()
 			else:
@@ -427,12 +430,12 @@ func _hunter_interact() -> void:
 			GameState.village_eggs.append_array(GameState.hunter_eggs)
 			GameState.hunter_eggs.clear()
 			parts.append("마을 공급함에 알을 넣었다. 농부가 받아 갈 수 있다.")
-		if GameState.junk > 0:
-			# 사냥터 잡템(슬라임 젤리)은 공급함에 두면 바로 값이 나온다 (제작 소재가 아님)
-			var earned := GameState.junk * Config.JUNK_PRICE
-			parts.append("사냥 잡템 (젤리 · 껍데기 · 깃털 · 옹이) %d개를 팔았다. +%d원" % [GameState.junk, earned])
+		if sell > 0:
+			# 사냥터 잡템(슬라임 젤리)은 공급함에 두면 바로 값이 나온다 (약방을 고치기 전엔 제작 소재가 아님)
+			var earned := sell * Config.JUNK_PRICE
+			parts.append("사냥 잡템 (젤리 · 껍데기 · 깃털 · 옹이 · 불씨) %d개를 팔았다. +%d원%s" % [sell, earned, (" (약방 재료로 %d개 남김)" % keep) if keep > 0 else ""])
 			GameState.money += earned
-			GameState.junk = 0
+			GameState.junk -= sell
 		GameState.notify(" ".join(parts))
 		# 가방에 사냥터 등급 장비가 있으면 장비 팔기 선택창도 연다 (2026-09-28 사용자 선택 A)
 		if has_gear:
@@ -996,6 +999,7 @@ func show_yak_site() -> void:
 	GameState.yak_state = maxi(GameState.yak_state, 1)
 	if yak == null:
 		yak = _add_prop("약방 터", preload("res://assets/props/yak_ruin.png"), Config.YAK_RECT)
+		yak.badge_side = true
 		forage.block(Config.YAK_RECT)
 		forage.block(Config.HERB_BED_RECT)
 	_refresh_props()
