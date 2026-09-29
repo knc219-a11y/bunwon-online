@@ -1347,6 +1347,44 @@ func _ready() -> void:
 	_check(d_bh2.drops.size() + d_bh2.loot.size() == d_drops_before and d_bh2._boss() == d_sb, "C. 새끼는 알·드롭을 남기지 않음")
 	main.leave_hunt()
 
+	# 31) 들나물 캐기 (2026-09-29 사용자 선택 A, 초반 며칠 할 일): 아침마다 풀밭에 돋고, F로 캐서 공급함에 진열 → 밤사이 팔림
+	main._set_active(main.farmer)
+	var h_forage: Forage = main.forage
+	var h_bad: Array[Vector2i] = []
+	for spot in Config.HERB_SPOTS:
+		var stand := Farm.center_of(spot) - Vector2(0, main.farmer.FEET_Y)
+		var h_inside: bool = main.farm.get_cell(spot) != null or main.farm._path.has(spot) or main.farm._fence.has(spot) or spot.y < 1 or spot.y > 12
+		for p: Prop in main.props:
+			if p.footprint_rect().has_point(Farm.center_of(spot) - p.position):
+				h_inside = true
+		if h_inside or not main.farm.is_free(main.farmer.feet_rect(stand)):
+			h_bad.append(spot)
+	_check(h_bad.is_empty(), "들나물 자리는 모두 밭·길·울타리·오브젝트 밖, 서서 캘 수 있는 풀밭 %s" % [h_bad])
+	main.next_day()
+	var h_n: int = h_forage.herbs.size()
+	_check(h_n >= Config.HERBS_PER_DAY.x and h_n <= Config.HERBS_PER_DAY.y, "아침마다 들나물 %d~%d포기가 돋음 (%d)" % [Config.HERBS_PER_DAY.x, Config.HERBS_PER_DAY.y, h_n])
+	for s: Creature in main.creatures:
+		s.position = Vector2(-500, -500)
+	GameState.herbs = 0
+	for spot: Vector2i in h_forage.herbs.keys():
+		main.farmer.position = Farm.center_of(spot) - Vector2(0, main.farmer.FEET_Y) + Vector2(10, 0)
+		main.interact()
+	_check(GameState.herbs == h_n and h_forage.herbs.is_empty(), "농부가 가까이서 F로 캠 (들나물 %d)" % GameState.herbs)
+	main.farmer.position = main.supply_box.position
+	_check(main.supply_options().has(&"display_herbs") and main.supply_option_text(&"display_herbs").contains("%d원" % (h_n * Config.HERB_PRICE)), "공급함에 들나물 진열하기")
+	_check(main.supply_action(&"display_herbs") and GameState.herbs == 0 and GameState.displayed_herbs == h_n, "들나물 진열")
+	var h_money := GameState.money
+	var h_lines: Array[String] = main.next_day()
+	_check(GameState.money - h_money >= h_n * Config.HERB_PRICE and GameState.displayed_herbs == 0 and " ".join(h_lines).contains("들나물 %d포기가 팔렸다" % h_n), "밤사이 팔려 아침에 +%d원" % (h_n * Config.HERB_PRICE))
+	_check(not h_forage.herbs.is_empty() and " ".join(h_lines).contains("들나물"), "다음 날 아침 새로 돋음")
+	_check(Forage.object_particle("쑥") == "을" and Forage.object_particle("냉이") == "를", "들나물 이름에 맞는 조사 (쑥을 · 냉이를)")
+	main._set_active(main.hunter)
+	main.hunter.position = Farm.center_of(h_forage.herbs.keys()[0]) - Vector2(0, main.hunter.FEET_Y)
+	var h_before: int = h_forage.herbs.size()
+	main.interact()
+	_check(h_forage.herbs.size() == h_before, "사냥꾼은 들나물을 캐지 않음 (농부 일)")
+	main._set_active(main.farmer)
+
 	print("SMOKE TEST: %s (%d failures)" % ["PASS" if _failures == 0 else "FAIL", _failures])
 	get_tree().quit(1 if _failures > 0 else 0)
 

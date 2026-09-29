@@ -61,6 +61,9 @@ func play_day() -> void:
 	var farm_counts := farm_by_hand()
 	await let_creatures_work()
 	farm_counts.merge(farm_by_hand(), true)
+	var herbs := forage()
+	if herbs > 0:
+		farm_counts["들나물"] = herbs
 	var bought := shop()
 	# 산 뒤(밭을 넓혔거나 씨앗을 샀으면) 한 번 더 심는다
 	var more := farm_by_hand()
@@ -135,6 +138,19 @@ func let_creatures_work() -> void:
 	Engine.time_scale = 1.0
 
 
+## 밭 밖 풀밭의 들나물을 다 캔다 (2026-09-29 선택 A). 한 포기 = F 한 번.
+func forage() -> int:
+	var n := 0
+	for cell: Vector2i in main.forage.herbs.keys():
+		main.farmer.position = Farm.center_of(cell) - Vector2(0, main.farmer.FEET_Y)
+		# 크리처를 들지 않도록 들나물만 캔다
+		main.forage.pick(cell)
+		GameState.herbs += 1
+		n += 1
+	manual_actions += n
+	return n
+
+
 ## 손으로 수확 → 갈기 → 심기 → 물주기. 도구를 쓴 횟수(강화 도구는 3칸에 한 번)를 센다.
 func farm_by_hand() -> Dictionary:
 	var counts := {}
@@ -170,6 +186,9 @@ func shop() -> Array[String]:
 	if GameState.crops > 0:
 		did.append("무 %d 진열" % GameState.crops)
 		main.supply_action(&"display_crops")
+	if GameState.herbs > 0:
+		did.append("들나물 %d 진열" % GameState.herbs)
+		main.supply_action(&"display_herbs")
 	var keep := true
 	while keep:
 		keep = false

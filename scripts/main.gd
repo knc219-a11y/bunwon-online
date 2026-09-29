@@ -44,6 +44,8 @@ const MORNING_CARD_SIZE := Vector2(300, 150)
 const MENU_VISIBLE_ROWS := 14
 
 var farm: Farm
+## 밭 밖 풀밭의 들나물 (2026-09-29 사용자 선택 A)
+var forage: Forage
 var farmer: Character
 var hunter: Character
 var incubator: Prop
@@ -91,6 +93,9 @@ func _ready() -> void:
 	# 바닥은 앞뒤 가림(z_index = 발 y)보다 항상 뒤
 	farm.z_index = -1000
 	add_child(farm)
+	forage = Forage.new()
+	add_child(forage)
+	forage.sprout(_rng)
 
 	house = _add_prop("", preload("res://assets/props/house.png"), HOUSE_RECT, HOUSE_BLOCK, true)
 	_add_prop("", preload("res://assets/props/tree_dangsan.png"), DANGSAN_RECT, DANGSAN_BLOCK, true)
@@ -110,7 +115,7 @@ func _ready() -> void:
 	GameState.changed.connect(_refresh_hud)
 	GameState.message.connect(func(t: String) -> void: _message.text = t)
 	_refresh_props()
-	GameState.notify("농부로 밭을 가꿔 보자. 마을 공급함에 알이 하나 있다.")
+	GameState.notify("농부로 밭을 가꿔 보자. 마을 공급함에 알이 하나 있다. 풀밭의 들나물은 F로 캔다.")
 
 
 func _add_prop(label: String, texture: Texture2D, rect: Rect2i, block := Rect2(), fade := false) -> Prop:
@@ -305,6 +310,10 @@ func _farmer_interact() -> void:
 	if s:
 		s.pick_up(farmer)
 		GameState.notify("%s을(를) 들었다. 원하는 자리에서 다시 F." % s.data.species.display_name)
+	elif forage.nearest(farmer.feet()) != null:
+		var herb := forage.pick(forage.nearest(farmer.feet()))
+		GameState.herbs += 1
+		GameState.notify("%s%s 캤다! (들나물 %d) 공급함에 진열하면 밤사이 한 포기 %d원." % [herb, Forage.object_particle(herb), GameState.herbs, Config.HERB_PRICE])
 	elif _near_stash():
 		open_inventory(true)
 	elif _near(supply_box):
@@ -464,6 +473,8 @@ func supply_options() -> Array[StringName]:
 		options.append(&"take_eggs")
 	if GameState.crops > 0:
 		options.append(&"display_crops")
+	if GameState.herbs > 0:
+		options.append(&"display_herbs")
 	options.append(&"buy_seeds")
 	if not creatures.is_empty():
 		options.append(&"train")
@@ -487,6 +498,8 @@ func supply_option_text(id: StringName) -> String:
 			return "알 받기 (%d개)" % GameState.village_eggs.size()
 		&"display_crops":
 			return "무 진열하기 (%d개, 밤사이 %d원)" % [GameState.crops, GameState.crops * Config.CROP_PRICE]
+		&"display_herbs":
+			return "들나물 진열하기 (%d포기, 밤사이 %d원)" % [GameState.herbs, GameState.herbs * Config.HERB_PRICE]
 		&"buy_seeds":
 			return "씨앗 %d개 사기 (%d원)" % [Config.SEED_PACK_SIZE, Config.SEED_PACK_PRICE]
 		&"train":
@@ -590,6 +603,14 @@ func supply_action(id: StringName) -> bool:
 			GameState.displayed_crops += n
 			GameState.crops = 0
 			GameState.notify("무 %d개를 공급함에 진열했다. 밤사이 마을 사람들이 사 가고 돈통에 값을 넣어 둔다." % n)
+		&"display_herbs":
+			if GameState.herbs <= 0:
+				GameState.notify("진열할 들나물이 없다.")
+				return false
+			var n := GameState.herbs
+			GameState.displayed_herbs += n
+			GameState.herbs = 0
+			GameState.notify("들나물 %d포기를 공급함에 진열했다. 밤사이 팔리면 아침에 돈통에 들어온다." % n)
 		&"buy_seeds":
 			if GameState.money < Config.SEED_PACK_PRICE:
 				GameState.notify("돈이 모자라다. 씨앗 %d개에 %d원 (가진 돈 %d원)." % [Config.SEED_PACK_SIZE, Config.SEED_PACK_PRICE, GameState.money])
@@ -917,6 +938,13 @@ func next_day() -> Array[String]:
 		GameState.money += earned
 		lines.append("공급함의 무 %d개가 팔렸다. 돈통에 +%d원" % [GameState.displayed_crops, earned])
 		GameState.displayed_crops = 0
+	if GameState.displayed_herbs > 0:
+		var earned := GameState.displayed_herbs * Config.HERB_PRICE
+		GameState.money += earned
+		lines.append("공급함의 들나물 %d포기가 팔렸다. 돈통에 +%d원" % [GameState.displayed_herbs, earned])
+		GameState.displayed_herbs = 0
+	forage.sprout(_rng)
+	lines.append("밭 밖 풀밭에 들나물 %d포기가 돋았다." % forage.herbs.size())
 	var grown := farm.advance_day()
 	if grown > 0:
 		lines.append("밤사이 작물 %d개가 자랐다." % grown)
@@ -1085,7 +1113,7 @@ func _refresh_hud() -> void:
 		var buddy := hunt.companion.display_name() if hunt.companion else "혼자"
 		_status.text = "%d일째 | %s | 도구: %s | 동행: %s | 남은 몬스터 %d | 주운 알 %d | 돈 %d원 · 젤리 %d" % [GameState.day, Config.HUNT_ZONES[hunt.zone].name, tool_text, buddy, hunt.slimes.size(), hunt.picked.size(), GameState.money, GameState.junk]
 		return
-	_status.text = "%d일째 | %s | 도구: %s | 돈 %d원 | 씨앗 %d  작물 %d | 알: 농부 %d · 사냥꾼 %d · 공급함 %d | 크리처 %d" % [
-		GameState.day, active.display_name, tool_text, GameState.money, GameState.seeds, GameState.crops,
+	_status.text = "%d일째 | %s | 도구: %s | 돈 %d원 | 씨앗 %d  작물 %d  나물 %d | 알: 농부 %d · 사냥꾼 %d · 공급함 %d | 크리처 %d" % [
+		GameState.day, active.display_name, tool_text, GameState.money, GameState.seeds, GameState.crops, GameState.herbs,
 		GameState.farmer_eggs.size(), GameState.hunter_eggs.size(), GameState.village_eggs.size(), creatures.size(),
 	]
