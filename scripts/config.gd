@@ -518,8 +518,8 @@ const HERB_BED_PER_DAY := 6
 ## · speed 빠르기 물약 (다음 사냥 한 번 걸음 x SPEED_POTION_MULT) · tonic 크리처 보약 (먹인 날 모든 크리처 일 속도 x TONIC_SPEED_MULT)
 const BREWS := {
 	&"potion": {name = "빨간 물약", count = 2, cost = {herbs = 2, junk = 1}, effect = "하트 +1 (1 키), 두 병"},
-	&"lamp_oil": {name = "호롱 기름", count = 1, cost = {roots = 1, junk = 1}, effect = "밤 구역 호롱 불빛이 넓어짐 (들어갈 때 하나)"},
-	&"strength": {name = "힘 물약", count = 1, cost = {roots = 2, junk = 2}, effect = "다음 사냥 한 번 공격 피해 +1"},
+	&"lamp_oil": {name = "호롱 기름", count = 1, cost = {roots = 2}, effect = "밤 구역 호롱 불빛이 넓어짐 (들어갈 때 하나)"},
+	&"strength": {name = "힘 물약", count = 1, cost = {roots = 3, junk = 1}, effect = "다음 사냥 한 번 공격 피해 +1"},
 	&"speed": {name = "빠르기 물약", count = 1, cost = {herbs = 2, junk = 1}, effect = "다음 사냥 한 번 걸음 +25%"},
 	&"tonic": {name = "크리처 보약", count = 1, cost = {crops = 5, roots = 2}, effect = "먹인 날 모든 크리처 일 속도 x2"},
 }

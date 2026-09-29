@@ -620,16 +620,27 @@ func _stand(to: Vector2) -> Vector2:
 	return to
 
 
+## dir 쪽으로 한 번 뛸 자리. 내려앉을 곳만이 아니라 뛰는 길 중간이 물 위면 (물가 모퉁이를 가로지름) 못 뜀.
+func _hop_dest(dir: Vector2) -> Vector2:
+	var to := _stand(position + dir * Config.WILD_SLIME_HOP_DISTANCE)
+	if wisp or terrain == null or to == position or not terrain.monster_ok(position + Vector2(0, BOTTOM_Y - 2)):
+		return to
+	for k in [0.25, 0.5, 0.75]:
+		if not terrain.monster_ok(position.lerp(to, k) + Vector2(0, BOTTOM_Y - 2)):
+			return position
+	return to
+
+
 func _start_hop(target: Vector2) -> void:
 	var dir: Vector2
 	if position.distance_to(target) <= Config.WILD_SLIME_CHASE_DISTANCE:
 		dir = (target - position).normalized()
 	else:
 		dir = Vector2.RIGHT.rotated(randf() * TAU)
-	var to := _stand(position + dir * Config.WILD_SLIME_HOP_DISTANCE)
+	var to := _hop_dest(dir)
 	if to == position:
 		# 물가에 막히면 옆으로 비껴 뛴다
-		to = _stand(position + dir.rotated(PI / 2 * (1 if randf() < 0.5 else -1)) * Config.WILD_SLIME_HOP_DISTANCE)
+		to = _hop_dest(dir.rotated(PI / 2 * (1 if randf() < 0.5 else -1)))
 	_hop_from = position
 	_hop_to = to
 	_hop_t = 0.0

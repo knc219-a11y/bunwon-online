@@ -2208,8 +2208,8 @@ func _ready() -> void:
 	GameState.potions = 0
 	_check(main.brew(&"potion") and GameState.potions == 2 and GameState.herbs == 2 and GameState.junk == 2, "빨간 물약 두 병 (나물 2 · 잡템 1)")
 	_check(not main.brew(&"lamp_oil") and GameState.lamp_oil == 0, "도라지가 없으면 호롱 기름 못 만듦")
-	GameState.roots = 3
-	_check(main.brew(&"lamp_oil") and GameState.lamp_oil == 1 and GameState.roots == 2, "호롱 기름 (도라지 1 · 잡템 1)")
+	GameState.roots = 4
+	_check(main.brew(&"lamp_oil") and GameState.lamp_oil == 1 and GameState.roots == 2 and GameState.junk == 2, "호롱 기름 (도라지 2)")
 	GameState.crops = 5
 	_check(main.brew(&"tonic") and GameState.tonics == 1 and GameState.crops == 0 and GameState.roots == 0, "크리처 보약 (무 5 · 도라지 2)")
 	b_c._reset_timer()
