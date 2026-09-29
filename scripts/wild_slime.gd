@@ -25,6 +25,8 @@ var speed := 1.0
 var sheet: Texture2D = SHEET
 ## 모래에 숨어 있는지 (금사리 모래게). 사냥꾼이 가까이 오거나 맞으면 튀어나온다.
 var buried := false
+## 숨은 모습이 진짜 그루터기인 척 (도마리 고목 그루터기): 숨은 동안 대부분 6열, 몇 초에 한 번 눈이 번쩍 (7열)
+var disguise := false
 var _tint := TINT
 ## 움직일 수 있는 영역 (사냥터 공터)
 var area := Rect2()
@@ -86,6 +88,11 @@ var _angle := 0.0
 ## 허수아비 장수 짚단 던지기: 떨어질 짚단들 {at, t = 남은 시간}, 던진 횟수 (두 번에 한 번 참새 부르기)
 var _bales: Array[Dictionary] = []
 var _throws := 0
+## 천하대장군 통나무 굴리기 (도마리): 예고 남은 시간(-1 = 아님) → 굴러가는 진행(0~1, -1 = 아님), 굴러갈 길
+var _log_aim := -1.0
+var _log_t := -1.0
+var _log_from := Vector2.ZERO
+var _log_to := Vector2.ZERO
 
 ## 참새가 내려꽂았다 (내려앉은 곳). HuntGround 가 받아 원 안의 사냥꾼을 다치게 한다.
 signal swooped(at: Vector2)
@@ -95,6 +102,8 @@ signal bale_landed(at: Vector2)
 signal called(at: Vector2)
 ## 대장이 내려찍었다 (떨어진 곳). HuntGround 가 받아 원 안의 사냥꾼을 다치게 하고 새끼를 놓는다.
 signal slammed(at: Vector2)
+## 통나무가 굴러가는 중 (지금 통나무 자리). HuntGround 가 받아 닿은 사냥꾼을 다치게 한다.
+signal rolled(at: Vector2)
 ## 대장이 혀를 뻗었다 (입 → 혀끝). HuntGround 가 받아 선 위의 사냥꾼을 다치게 하고 금가루를 뿌린다.
 signal lashed(from: Vector2, to: Vector2)
 
@@ -120,6 +129,7 @@ func setup_zone(zone: int) -> void:
 	_tint = z.monster_tint
 	sheet = load(z.sheet)
 	buried = z.burrow
+	disguise = z.get("disguise", false)
 	damage = z.get("damage", 1)
 	knockback = z.get("knockback", 14.0)
 	windup_time = z.get("windup", 0.6)
@@ -143,6 +153,18 @@ func make_boss(zone := 0) -> void:
 	knockback = z.get("knockback", 14.0)
 	pattern = z.get("boss_pattern", &"")
 	sheet = load(z.boss_sheet)
+	if _sprite:
+		_sprite.texture = sheet
+		_sprite.hframes = sheet.get_width() / FRAME_SIZE
+
+
+## 짝 대장으로 바꾼다 (도마리 지하여장군: 구역 데이터 partner = {name, sheet, pattern}). make_boss 뒤에 부른다.
+func make_partner(zone := 0) -> void:
+	var p: Dictionary = Config.HUNT_ZONES[zone].partner
+	title = p.name
+	pattern = p.pattern
+	sheet = load(p.sheet)
+	_pattern_cd = 3.0
 	if _sprite:
 		_sprite.texture = sheet
 		_sprite.hframes = sheet.get_width() / FRAME_SIZE
@@ -241,7 +263,17 @@ func _telegraph_one() -> Dictionary:
 		return {kind = &"circle", at = _air_to, radius = Config.SLAM_RADIUS, progress = _air_t}
 	if _aim >= 0.0:
 		return {kind = &"lane", from = position, to = _tongue_to, width = Config.TONGUE_WIDTH, progress = 1.0 - _aim / Config.TONGUE_WINDUP}
+	if _log_aim >= 0.0:
+		return {kind = &"lane", from = _log_from, to = _log_to, width = Config.LOG_WIDTH, progress = 1.0 - _log_aim / Config.LOG_WINDUP}
+	if _log_t >= 0.0:
+		# 굴러가는 중: 남은 길을 계속 보여 준다 (봇이 비킬 수 있게)
+		return {kind = &"lane", from = log_at(), to = _log_to, width = Config.LOG_WIDTH, progress = 1.0}
 	return {}
+
+
+## 굴러가는 통나무 자리
+func log_at() -> Vector2:
+	return _log_from.lerp(_log_to, maxf(_log_t, 0.0))
 
 
 ## 혀에 끌려 to 까지 짧게 미끄러진다 (금두꺼비 혀 당기기). 멈춤과 함께 쓴다.
@@ -291,11 +323,13 @@ func tick(delta: float, target: Vector2) -> void:
 	var hopping := hop_t >= 0.0
 	var cols := BURIED_COLUMNS if buried else (HOP_COLUMNS if hopping else IDLE_COLUMNS)
 	var col: int = HOP_COLUMNS[mini(int(hop_t * 4), 3)] if hopping else cols[int(_anim_time * 2.0) % 2]
+	if buried and disguise:
+		col = BURIED_COLUMNS[1] if fmod(_anim_time + _angle, Config.DISGUISE_BLINK_EVERY) < 0.35 else BURIED_COLUMNS[0]
 	if flyer:
 		# 날갯짓 · 낟알 쪼기 (내려앉은 뒤) · 앉아 있기
 		col = HOP_COLUMNS[int(_anim_time * 10.0) % 4] if in_air() else (BURIED_COLUMNS if _rest > 0.0 else IDLE_COLUMNS)[int(_anim_time * 3.0) % 2]
-	elif not _bales.is_empty():
-		col = BURIED_COLUMNS[0]
+	elif not _bales.is_empty() or _log_aim >= 0.0 or _log_t >= 0.0:
+		col = BURIED_COLUMNS[int(_anim_time * 6.0) % 2]
 	_sprite.frame = col
 	# 내려찍기: 공중에서 그림을 위로 띄운다 (그림자는 제자리). 참새는 나는 동안 FLY_HEIGHT 만큼.
 	var lift := sin(_air_t * PI) * 60.0 / scale.y if _air_t >= 0.0 else 0.0
@@ -303,7 +337,7 @@ func tick(delta: float, target: Vector2) -> void:
 		lift = Config.FLY_HEIGHT * (1.0 - maxf(_dive_t, 0.0)) / scale.y
 	_sprite.position = Vector2(-FRAME_SIZE / 2.0, BOTTOM_Y - FRAME_SIZE - lift)
 	# 웅크림: 납작해졌다가 튀어나간다
-	_sprite.scale = Vector2(1.15, 0.85) if _windup >= 0.0 or _aim >= 0.0 else Vector2.ONE
+	_sprite.scale = Vector2(1.15, 0.85) if _windup >= 0.0 or _aim >= 0.0 or _log_aim >= 0.0 else Vector2.ONE
 	_sprite.modulate = Color(1, 1, 1) * 2.0 if _flash > 0.0 and int(_flash * 20) % 2 == 0 else _tint
 	z_index = int(sort_y())
 	queue_redraw()
@@ -354,6 +388,19 @@ func _tick_attack(delta: float, target: Vector2) -> bool:
 			_recover = Config.TONGUE_RECOVER
 			_pattern_cd = Config.TONGUE_COOLDOWN
 		return true
+	if _log_aim >= 0.0:
+		_log_aim -= delta
+		if _log_aim < 0.0:
+			_log_t = 0.0
+		return true
+	if _log_t >= 0.0:
+		_log_t = minf(_log_t + delta / Config.LOG_TIME, 1.0)
+		rolled.emit(log_at())
+		if _log_t >= 1.0:
+			_log_t = -1.0
+			_recover = Config.LOG_RECOVER
+			_pattern_cd = Config.LOG_COOLDOWN
+		return true
 	if not _bales.is_empty():
 		for i in range(_bales.size() - 1, -1, -1):
 			_bales[i].t -= delta
@@ -382,6 +429,14 @@ func _tick_attack(delta: float, target: Vector2) -> bool:
 			var spots := [target, target + side, target - side]
 			for i in Config.STRAW_BALES:
 				_bales.append({at = spots[i % spots.size()], t = Config.STRAW_WINDUP + i * Config.STRAW_GAP})
+			return true
+		if pattern == &"log" and _pattern_cd <= 0.0 and d <= Config.LOG_RANGE:
+			var dir := (target - position).normalized()
+			if dir == Vector2.ZERO:
+				dir = Vector2.DOWN
+			_log_from = position + dir * 16.0
+			_log_to = (_log_from + dir * Config.LOG_LENGTH).clamp(area.position, area.end)
+			_log_aim = Config.LOG_WINDUP
 			return true
 		if pattern == &"tongue" and _pattern_cd <= 0.0 and d <= Config.TONGUE_RANGE:
 			_tongue_to = position + (target - position).normalized() * Config.TONGUE_RANGE
@@ -475,7 +530,7 @@ func _draw() -> void:
 			var a := _anim_time * 6.0 + i * TAU / 3.0
 			draw_circle(Vector2(cos(a) * 8.0, -22 + sin(a) * 2.0), 2.0, Color(1.0, 0.92, 0.45))
 	# 달려들기·혀 채찍 예고: 머리 위 느낌표
-	if _windup >= 0.0 or _aim >= 0.0:
+	if _windup >= 0.0 or _aim >= 0.0 or _log_aim >= 0.0:
 		draw_circle(Vector2(0, -30), 6.0, Color(1.0, 0.92, 0.5))
 		draw_arc(Vector2(0, -30), 6.0, 0, TAU, 16, Color(0.6, 0.15, 0.1), 1.0)
 		draw_string(ThemeDB.fallback_font, Vector2(-2.5, -25), "!", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.85, 0.15, 0.1))
@@ -484,6 +539,17 @@ func _draw() -> void:
 		var tip := (_tongue_to - position) / scale.x
 		draw_line(Vector2(0, -4), tip, Color(0.95, 0.45, 0.55), 3.0 / scale.x)
 		draw_circle(tip, 3.0 / scale.x, Color(0.95, 0.45, 0.55))
+	# 굴러가는 통나무 (임시 그림: 갈색 통나무 + 나이테 끝)
+	if _log_t >= 0.0:
+		var at := (log_at() - position) / scale.x
+		var dir := (_log_to - _log_from).normalized()
+		var side := dir.orthogonal() * 11.0 / scale.x
+		var roll := _log_t * 10.0
+		draw_line(at - side, at + side, Color(0.45, 0.32, 0.22), 8.0 / scale.x)
+		draw_line(at - side + dir * sin(roll) / scale.x, at + side + dir * sin(roll) / scale.x, Color(0.6, 0.44, 0.3), 3.0 / scale.x)
+		for e in [at - side, at + side]:
+			draw_circle(e, 4.0 / scale.x, Color(0.86, 0.74, 0.55))
+			draw_circle(e, 1.5 / scale.x, Color(0.6, 0.44, 0.3))
 	# 대장 이름표 (디아블로2 챔피언처럼 금색)
 	if boss:
 		var font := ThemeDB.fallback_font

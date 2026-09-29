@@ -902,7 +902,14 @@ func _ready() -> void:
 	_check(toad_eggs.size() == 1, "대장 금두꺼비는 알 확률에 걸리면 금두꺼비 알을 남김")
 	sh.drops.clear()
 	main.hunter.position = sh.next_area().get_center()
+	# 끊어진 쇠다리 (2026-09-29 "대장간과 묶기"): 대장간을 고치기 전엔 광동리로 못 건넘
+	var br_state := GameState.forge_state
+	GameState.forge_state = 1
+	_check(sh.bridge_broken() and not sh.advance() and sh.zone == 1, "대장간을 고치기 전엔 금사리 쇠다리가 끊겨 광동리로 못 감")
+	GameState.forge_state = 2
+	_check(not sh.bridge_broken(), "대장간을 고치면 쇠다리가 이어짐")
 	_check(sh.advance() and sh.zone == 2 and 2 in GameState.waypoints and sh.slimes[0].title == "참새", "위쪽 길로 3구역 광동리 (웨이포인트 켜짐, 참새)")
+	GameState.forge_state = br_state
 	main.hunter.position = sh.exit_area().get_center()
 	main.interact()
 	_check(main.hunt == null, "아래 입구 F로 마을로")
@@ -1819,6 +1826,15 @@ func _ready() -> void:
 	var g_seeds := GameState.seeds
 	var g_got: int = main.gather_seeds()
 	_check(g_got >= 2 and g_got <= 4 * main.creatures.filter(func(c: Creature) -> bool: return c.data.species == CreatureCatalog.SPARROW and c.job != CreatureJobs.REST).size() and GameState.seeds == g_seeds + g_got, "아침마다 씨앗 %d" % g_got)
+	# 씨앗 넘침: 씨앗이 넉넉하면 남는 낟알은 공급함에서 돈으로
+	var g_old_seeds := GameState.seeds
+	GameState.seeds = Config.GRAIN_SEED_CAP
+	var g_money := GameState.money
+	var g_kept: int = main.gather_seeds()
+	var g_sold := GameState.money - g_money
+	_check(g_kept == 0 and GameState.seeds == Config.GRAIN_SEED_CAP and g_sold >= 2 * Config.GRAIN_PRICE and g_sold % Config.GRAIN_PRICE == 0, "씨앗 %d개부터 낟알은 팔림 (+%d원)" % [Config.GRAIN_SEED_CAP, g_sold])
+	GameState.seeds = g_old_seeds
+	GameState.money = g_money
 	GameState.hunts_today = 0
 	main.next_day()
 	main.enter_hunt(g_c, 2)
@@ -1834,6 +1850,113 @@ func _ready() -> void:
 	gh._tick_companion(0.01)
 	_check(g_t.hp == 1 and not g_t.in_air() and g_t._rest > 0.0, "아기 참새가 날던 참새를 쪼아 떨어뜨림")
 	main.leave_hunt()
+
+	# 37. 도마리 (4구역, 2막 마지막 구역): 고목 그루터기 · 장승 한 쌍 · 아기 나무 정령 (2026-09-29)
+	var d_zi := 3
+	var d_z: Dictionary = Config.HUNT_ZONES[d_zi]
+	_check(d_z.name == "도마리" and d_z.monster == "고목 그루터기" and d_z.boss_monster == "천하대장군" and d_z.partner.name == "지하여장군", "4구역 도마리: 고목 그루터기 · 천하대장군 · 지하여장군")
+	var d_map := HuntMap.load_map("doma")
+	_check(d_map.size == Vector2i(52, 30) and not d_map.find("G").is_empty() and not d_map.find("u").is_empty(), "도마리 칸 지도 52x30 (비닐하우스 · 그루터기)")
+	var d_g := d_map.find("G")[0]
+	_check(not d_map.is_free(Rect2(d_g - Vector2(4, 3), Vector2(8, 6))) and not d_map.monster_ok(d_map.find("u")[0]), "장작 비닐하우스 · 그루터기는 막힘")
+	var d_c: Creature = main._hatch(CreatureCatalog.TREE_SPIRIT, Vector2i(18, 12))
+	_check(d_c.data.species.display_name == "아기 나무 정령" and d_c.data.elements[0].id == &"earth" and HuntCompanion.style_name(d_c.data) == "덩굴 묶기", "아기 나무 정령 (땅, 동행 덩굴 묶기)")
+	GameState.hunts_today = 0
+	if not d_zi in GameState.waypoints:
+		GameState.waypoints.append(d_zi)
+	main.enter_hunt(d_c, d_zi)
+	var dh: HuntGround = main.hunt
+	dh.set_ai(false)
+	dh.set_process(false)
+	dh.companion_ai = false
+	_check(dh.zone == d_zi and dh.slimes.size() == d_z.count, "도마리에 들어옴 (고목 그루터기 %d)" % d_z.count)
+	var d_s: WildSlime = dh.slimes[0]
+	_check(d_s.buried and d_s.disguise and d_s.hp == d_z.hp, "고목 그루터기는 그루터기인 척 숨어 있음 (체력 %d)" % d_z.hp)
+	d_s.position = main.hunter.feet() + Vector2(Config.WILD_BURROW_POP_DISTANCE - 10, 0)
+	dh.tick(0.01)
+	_check(not d_s.buried, "가까이 가면 일어남")
+	# 덩굴 묶기: 잠깐 붙잡음
+	d_s.position = dh.companion.position + Vector2(Config.COMPANION_BIND_RANGE - 10, 0)
+	dh._companion_cooldown = 0.0
+	var d_hp0 := d_s.hp
+	dh._tick_companion(0.01)
+	_check(d_s.stunned() and d_s.hp == d_hp0 - 1, "아기 나무 정령이 덩굴로 묶음 (피해 1 + 멈춤)")
+	# 대장: 장승 한 쌍
+	for o in dh.slimes.duplicate():
+		dh.slimes.erase(o)
+		o.queue_free()
+	dh.spawn_boss()
+	var d_bs := dh.slimes.filter(func(o: WildSlime) -> bool: return o.boss)
+	_check(d_bs.size() == 2 and d_bs[0].title == "천하대장군" and d_bs[1].title == "지하여장군" and d_bs[0].pattern == &"log" and d_bs[1].pattern == &"slam" and d_bs[0].hp == d_z.boss_hp, "장승 한 쌍 (천하대장군 통나무 · 지하여장군 내려찍기, 체력 %d씩)" % d_z.boss_hp)
+	var d_ch: WildSlime = d_bs[0]
+	var d_ji: WildSlime = d_bs[1]
+	d_ji.position = Vector2(-500, -500)
+	d_ch.ai_enabled = true
+	d_ch._pattern_cd = 0.0
+	main.hunter.position = dh.map.pixel_size() / 2.0 + Vector2(0, 60)
+	d_ch.position = main.hunter.feet() + Vector2(0, -120)
+	dh.hearts = 10
+	dh._invulnerable = 0.0
+	dh.tick(0.05)
+	var d_tel := d_ch.telegraph()
+	_check(d_tel.get("kind", &"") == &"lane" and d_tel.from.distance_to(d_tel.to) > 150.0, "천하대장군 통나무 굴리기 긴 띠 예고")
+	for i in 40:
+		dh.tick(0.05)
+	_check(dh.hearts == 10 - d_z.damage, "띠 위에 서 있으면 굴러온 통나무에 치임")
+	d_ch._recover = 0.0
+	d_ch._pattern_cd = 0.0
+	dh.hearts = 10
+	dh._invulnerable = 0.0
+	dh.tick(0.05)
+	main.hunter.position += Vector2(60, 0)
+	for i in 40:
+		dh.tick(0.05)
+	_check(dh.hearts == 10, "옆으로 비키면 통나무에 안 맞음")
+	d_ch.ai_enabled = false
+	# 대장은 몸에 닿기만 해선 안 다침 (예고 패턴으로만)
+	d_ch._recover = 1.0
+	d_ch.position = main.hunter.feet()
+	dh.hearts = 10
+	dh._invulnerable = 0.0
+	for i in 5:
+		dh.tick(0.05)
+	_check(dh.hearts == 10, "대장 몸에 닿기만 해선 하트가 안 줆")
+	d_ch.position = main.hunter.feet() + Vector2(0, -120)
+	# 하나만 쓰러뜨리면 보상 없음, 둘 다 쓰러뜨리면 대장 알 (확률 고정)
+	HuntGround.egg_roll = 0.0
+	dh.drops.clear()
+	dh._defeat(d_ch)
+	_check(dh.drops.is_empty() and dh.slimes.has(d_ji), "천하대장군만 쓰러뜨리면 알 없음 (지하여장군이 남음)")
+	dh._defeat(d_ji)
+	var d_eggs := dh.drops.filter(func(d: Dictionary) -> bool: return d.species == CreatureCatalog.TREE_SPIRIT)
+	_check(d_eggs.size() == 1, "둘 다 쓰러뜨리면 나무 정령 알 (확률에 걸리면)")
+	HuntGround.egg_roll = -1.0
+	main.leave_hunt()
+	# 키우기: 농사를 맡으면 범위 안 밭 작물이 가끔 하루 더 자람 (확률을 1로 두고 확인)
+	var d_cell: Vector2i = Config.FIELD_PLOTS[0].position + Vector2i(1, 1)
+	main.farm.do_work(Farm.Work.TILL, d_cell)
+	main.farm.do_work(Farm.Work.SOW, d_cell)
+	main.farm.do_work(Farm.Work.WATER, d_cell)
+	main.farm.get_cell(d_cell).growth = 0
+	var d_g0: int = main.farm.get_cell(d_cell).growth
+	d_c.home = d_cell
+	d_c.job = CreatureJobs.FARM
+	var d_sp: CreatureSpecies = CreatureCatalog.TREE_SPIRIT
+	var d_ch0 := d_sp.grow_chance
+	d_sp.grow_chance = 1.0
+	var d_boost: int = main.boost_growth()
+	d_sp.grow_chance = d_ch0
+	_check(d_boost >= 1 and main.farm.get_cell(d_cell).growth == d_g0 + 1, "아기 나무 정령 키우기: 물 준 작물이 하루 더 자람")
+	# 잡템 이름은 구역 몬스터에 맞춤 (금사리 모래게 껍데기 · 광동리 참새 깃털 · 도마리 고목 옹이)
+	var j_rng := RandomNumberGenerator.new()
+	var j_names := {}
+	for zi in 4:
+		for k in 400:
+			var jd := HuntLoot.roll_for_kill(j_rng, zi)
+			if jd.get("kind") == &"junk":
+				j_names[zi] = HuntLoot.label(jd)
+				break
+	_check(j_names.get(0) == "슬라임 젤리" and j_names.get(1) == "모래게 껍데기" and j_names.get(2) == "참새 깃털" and j_names.get(3) == "고목 옹이", "잡템 이름이 구역마다 다름 %s" % j_names)
 
 	print("SMOKE TEST: %s (%d failures)" % ["PASS" if _failures == 0 else "FAIL", _failures])
 	get_tree().quit(1 if _failures > 0 else 0)

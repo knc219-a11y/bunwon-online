@@ -404,7 +404,7 @@ func _hunter_interact() -> void:
 		if GameState.junk > 0:
 			# 사냥터 잡템(슬라임 젤리)은 공급함에 두면 바로 값이 나온다 (제작 소재가 아님)
 			var earned := GameState.junk * Config.JUNK_PRICE
-			parts.append("슬라임 젤리 %d개를 팔았다. +%d원" % [GameState.junk, earned])
+			parts.append("사냥 잡템 (젤리 · 껍데기 · 깃털 · 옹이) %d개를 팔았다. +%d원" % [GameState.junk, earned])
 			GameState.money += earned
 			GameState.junk = 0
 		GameState.notify(" ".join(parts))
@@ -880,7 +880,7 @@ func restore_forge() -> bool:
 	smith.visible = true
 	smith.position = Farm.center_of(Config.SMITH_CELL)
 	_refresh_props()
-	GameState.notify("대장간을 고쳤다! 대장장이가 왔다 (Tab). 고물 더미의 고철로 모루에서 장비를 만든다. 크리처에게 고철 줍기(R)도 맡길 수 있다.")
+	GameState.notify("대장간을 고쳤다! 대장장이가 왔다 (Tab). 고물 더미의 고철로 모루에서 장비를 만든다. 크리처에게 고철 줍기(R)도 맡길 수 있다. 금사리 윗길 쇠다리도 이어 줘서 이제 광동리로 건너갈 수 있다.")
 	return true
 
 
@@ -1185,7 +1185,10 @@ func next_day() -> Array[String]:
 	if forage.bonus_today > 0:
 		herb_line += " (물 준 풀밭 +%d)" % forage.bonus_today
 	lines.append(herb_line)
+	var boosted := boost_growth()
 	var grown := farm.advance_day()
+	if boosted > 0:
+		lines.append("아기 나무 정령이 밭을 돌봐 작물 %d개가 하루 더 자랐다." % boosted)
 	if grown > 0:
 		lines.append("밤사이 작물 %d개가 자랐다." % grown)
 	var ripe := farm.ripe_count()
@@ -1194,9 +1197,13 @@ func next_day() -> Array[String]:
 	var gold := gather_gold_dust()
 	if gold > 0:
 		lines.append("금두꺼비가 밭에서 사금을 주웠다. 돈통에 +%d원" % gold)
+	var grain_money := GameState.money
 	var seeds := gather_seeds()
+	grain_money = GameState.money - grain_money
 	if seeds > 0:
 		lines.append("아기 참새가 벌판에서 낟알을 물어 왔다. 씨앗 +%d" % seeds)
+	if grain_money > 0:
+		lines.append("씨앗이 넉넉해서 남는 낟알은 공급함에서 팔렸다. +%d원" % grain_money)
 	if GameState.hunter_unlocked and GameState.hunts_today > 0:
 		lines.append("사냥꾼이 다시 사냥을 나갈 수 있다.")
 	GameState.hunts_today = 0
@@ -1230,15 +1237,29 @@ func gather_gold_dust() -> int:
 	return total
 
 
+## 키우기 (아기 나무 정령, 2026-09-29 도마리): 농사를 맡은 개체마다 범위 안 밭의 작물을 가끔 하루 더 키운다.
+func boost_growth() -> int:
+	var total := 0
+	for c in creatures:
+		var ch := c.data.species.grow_chance
+		if ch > 0.0 and c.job == CreatureJobs.FARM:
+			total += farm.boost_growth(c.home, c.data.work_radius(), ch, _rng)
+	return total
+
+
 ## 낟알 줍기 (아기 참새, 2026-09-29 광동리 B): 일을 맡은 개체마다 종의 daily_seeds 범위만큼 씨앗을 물어 온다. 쉬는 중이면 없음.
+## 씨앗 넘침 (2026-09-29 4구역 스레드, Claude 기본값): 씨앗이 GRAIN_SEED_CAP 개를 넘으면 넘는 낟알은 씨앗 대신
+## 공급함에서 밤에 팔린다 (개당 GRAIN_PRICE원). 돌려주는 값은 씨앗으로 들어온 수.
 func gather_seeds() -> int:
 	var total := 0
 	for c in creatures:
 		var r := c.data.species.daily_seeds
 		if r.y > 0 and c.job != CreatureJobs.REST:
 			total += _rng.randi_range(r.x, r.y)
-	GameState.seeds += total
-	return total
+	var kept := clampi(Config.GRAIN_SEED_CAP - GameState.seeds, 0, total)
+	GameState.seeds += kept
+	GameState.money += (total - kept) * Config.GRAIN_PRICE
+	return kept
 
 
 func _hatch(species: CreatureSpecies, at_cell: Vector2i) -> Creature:
@@ -1383,7 +1404,7 @@ func _refresh_hud() -> void:
 		tool_text = "망치"
 	if hunt:
 		var buddy := hunt.companion.display_name() if hunt.companion else "혼자"
-		_status.text = "%d일째 %s | %s | 도구: %s | 동행: %s | 남은 몬스터 %d | 주운 알 %d | 돈 %d원 · 젤리 %d" % [GameState.day, GameState.clock_text(GameState.minutes), Config.HUNT_ZONES[hunt.zone].name, tool_text, buddy, hunt.slimes.size(), hunt.picked.size(), GameState.money, GameState.junk]
+		_status.text = "%d일째 %s | %s | 도구: %s | 동행: %s | 남은 몬스터 %d | 주운 알 %d | 돈 %d원 · 잡템 %d" % [GameState.day, GameState.clock_text(GameState.minutes), Config.HUNT_ZONES[hunt.zone].name, tool_text, buddy, hunt.slimes.size(), hunt.picked.size(), GameState.money, GameState.junk]
 		return
 	_status.text = "%d일째 %s | %s | 도구: %s | 돈 %d원 | 씨앗 %d  작물 %d  나물 %d | 알: 농부 %d · 사냥꾼 %d · 공급함 %d | 크리처 %d" % [
 		GameState.day, GameState.clock_text(GameState.minutes), active.display_name, tool_text, GameState.money, GameState.seeds, GameState.crops, GameState.herbs,

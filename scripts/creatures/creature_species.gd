@@ -29,6 +29,8 @@ extends Resource
 @export var daily_gold := Vector2i.ZERO
 ## 낟알 줍기 (아기 참새, 2026-09-29 광동리 B): 채집을 맡은 개체가 아침마다 벌판에서 물어 오는 씨앗 범위. (0, 0)이면 없음.
 @export var daily_seeds := Vector2i.ZERO
+## 키우기 (아기 나무 정령, 2026-09-29 도마리): 농사를 맡은 개체의 범위 안 밭에서 밤사이 자란 작물이 이 확률로 하루 더 자란다.
+@export var grow_chance := 0.0
 
 @export_group("그래픽")
 ## 속성 id → 스프라이트 시트 (규격은 docs/sprites.md). 시트가 없으면 color 로 도형을 그린다.

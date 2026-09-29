@@ -34,6 +34,9 @@ const START_MONEY := 0
 const CROP_PRICE := 50
 const SEED_PACK_SIZE := 5
 const SEED_PACK_PRICE := 100
+## 아기 참새 낟알: 씨앗이 이만큼 있으면 더 물어 온 낟알은 씨앗 대신 공급함에서 개당 GRAIN_PRICE원에 팔린다 (임시)
+const GRAIN_SEED_CAP := 30
+const GRAIN_PRICE := 5
 
 ## 들나물 캐기 (2026-09-29 사용자 선택 A, 핵심 루프 점검 5번 "2~3일째 농부 할 일이 없다"): 아침마다 밭 밖 풀밭에 돋는다.
 ## 농부가 F로 캐서 공급함에 진열하면 밤사이 팔린다 (무와 같은 방식). 값·수·자리는 전부 임시.
@@ -162,6 +165,15 @@ const STRAW_SPREAD := 34.0
 const STRAW_COOLDOWN := 3.0
 const STRAW_RECOVER := 1.0
 const STRAW_CALL := 2
+## 천하대장군 통나무 굴리기 (도마리 2막 대장): 사냥꾼 쪽 긴 띠 예고 LOG_WINDUP 뒤 통나무가 LOG_TIME 동안 LOG_LENGTH 만큼 굴러감.
+## 굴러가는 통나무에 닿으면 (띠 너비 LOG_WIDTH) 하트 -피해.
+const LOG_RANGE := 190.0
+const LOG_WINDUP := 0.7
+const LOG_LENGTH := 230.0
+const LOG_TIME := 0.8
+const LOG_WIDTH := 22.0
+const LOG_COOLDOWN := 3.2
+const LOG_RECOVER := 1.1
 
 ## 초당 약 3.4타일
 const CHARACTER_SPEED := 82.0
@@ -219,6 +231,10 @@ const COMPANION_PULL_TIME := 0.25
 ## 날아가 쪼기 (아기 참새, 2026-09-29 광동리 B): 이 거리 안이면 물·벽 너머 · 날고 있는 몬스터도 쪼음 (피해 1). 날던 참새는 땅에 떨어진다.
 const COMPANION_PECK_RANGE := 120.0
 const COMPANION_PECK_INTERVAL := 1.4
+## 덩굴 묶기 (아기 나무 정령, 2026-09-29 도마리): 닿는 거리 · 공격 간격 · 묶어 두는 시간 (묶인 몬스터는 못 움직이고 부딪혀도 안 다침)
+const COMPANION_BIND_RANGE := 90.0
+const COMPANION_BIND_INTERVAL := 2.4
+const COMPANION_BIND_STUN := 1.6
 ## 박치기 크리처가 야생 슬라임을 쫓아가기 시작하는 거리 (사냥꾼에게서 너무 멀어지지 않게)
 const COMPANION_CHASE_DISTANCE := 90.0
 
@@ -270,7 +286,7 @@ const BOSS_MONEY_MAX := 60
 ## sign 이 있으면 아래 입구 오른쪽에 그 마을 표지 (금사리: 회색 항아리 구조물에 검정 글씨, 사용자 설명).
 const HUNT_ZONES: Array[Dictionary] = [
 	{
-		name = "분원농협", monster = "야생 슬라임", boss_monster = "대장 슬라임", waypoint = false,
+		name = "분원농협", junk_name = "슬라임 젤리", monster = "야생 슬라임", boss_monster = "대장 슬라임", waypoint = false,
 		## 넓은 맵 (2026-09-28 사용자 선택 C. 창고 마당): 아래는 농협 창고 마당, 철망 너머 위는 논밭, 대장은 곳간 앞
 		map = "nonghyup",
 		## 창고 벽 간판 (칸 자리, 글씨). 그림은 칸 지도에서 그린 임시 그림
@@ -287,7 +303,7 @@ const HUNT_ZONES: Array[Dictionary] = [
 		monster_tint = Color(1, 0.8, 0.75), boss_tint = Color(1.0, 0.82, 0.4), ground_tint = Color(0.82, 0.9, 0.8), tree_tint = Color(0.78, 0.92, 0.78),
 	},
 	{
-		name = "금사리", monster = "모래게", boss_monster = "금두꺼비", waypoint = true,
+		name = "금사리", junk_name = "모래게 껍데기", monster = "모래게", boss_monster = "금두꺼비", waypoint = true,
 		## 화면보다 넓은 맵 (2026-09-28 사용자 선택 C): data/hunt_maps/geumsa.txt, 카메라가 사냥꾼을 따라간다
 		map = "geumsa",
 		sheet = "res://assets/creatures/wild_sand_crab.png", boss_sheet = "res://assets/creatures/wild_gold_toad.png", burrow = true,
@@ -312,7 +328,7 @@ const HUNT_ZONES: Array[Dictionary] = [
 		## 2막 첫 구역 (2026-09-29 사용자: "3구역은 광동리다", 후보 B. 동지벌 군량 벌판 선택).
 		## 광동리 = 광복동(광백이) + 동지벌촌 (광주시 유래: 병자호란 때 군량미를 가장 많이 낸 넓은 벌판 마을).
 		## 추수한 벌판 · 짚가리 · 옛 군량 곳간 · 배수로. 곡식 도둑 참새 떼가 날아다니고, 곳간을 지키던 허수아비 장수가 대장.
-		name = "광동리", monster = "참새", boss_monster = "허수아비 장수", waypoint = true,
+		name = "광동리", junk_name = "참새 깃털", monster = "참새", boss_monster = "허수아비 장수", waypoint = true,
 		map = "gwangdong",
 		labels = [[Vector2(26, 4.3), "군량 곳간"]],
 		sheet = "res://assets/creatures/wild_sparrow.png", boss_sheet = "res://assets/creatures/wild_scarecrow.png", burrow = false,
@@ -331,11 +347,37 @@ const HUNT_ZONES: Array[Dictionary] = [
 		money = [30, 60], boss_money = [70, 120],
 		monster_tint = Color.WHITE, boss_tint = Color.WHITE, ground_tint = Color(0.92, 0.88, 0.74), tree_tint = Color(0.74, 0.86, 0.68),
 	},
+	{
+		## 2막 둘째 구역 = 2막 마지막 구역 (2026-09-29 사용자: "4구역 이름은 도마리야 여긴 나무꾼 하는사람이 있는데
+		## 이거랑 연관지은 나무 관련 몬스터가 있으면 좋겠어", "나무가 쌓여있는 하우스가 구조물로", "비닐하우스").
+		## 참나무 숲 속 나무꾼 벌목터 · 장작 쌓인 비닐하우스 · 장작더미 · 그루터기 (칸 지도 data/hunt_maps/doma.txt).
+		## 몬스터 고목 그루터기 (사용자: "몬스터는 고목그루터기 몬스터로"): 진짜 그루터기 사이에 그루터기인 척 숨어 있다가
+		## (가끔 눈이 번쩍) 가까이 오면 일어나 녹슨 도끼로 달려든다 (금사리 모래게처럼 burrow + 달려들기).
+		## 2막 대장 = 장승 한 쌍 (사용자: "보스는 장승", "천하대장군 지하여장군 무섭게 그리자"). 둘 다 쓰러뜨려야 도마리를 깬다.
+		## 천하대장군 = 통나무 굴리기 (긴 띠 예고 → 통나무가 굴러감), 지하여장군 (partner) = 쿵 내려찍고 그루터기 새끼를 깨움.
+		name = "도마리", junk_name = "고목 옹이", monster = "고목 그루터기", boss_monster = "천하대장군", waypoint = true,
+		map = "doma",
+		sheet = "res://assets/creatures/wild_old_stump.png", boss_sheet = "res://assets/creatures/wild_cheonha.png", burrow = true,
+		partner = {name = "지하여장군", sheet = "res://assets/creatures/wild_jiha.png", pattern = &"slam"},
+		## 알: 2막 일반 알 = 아기 참새 (광동리와 같음), 2막 대장 알 = 아기 나무 정령 (사용자: "알은 나무정령알")
+		egg = "res://data/creatures/species/sparrow.tres", boss_egg = "res://data/creatures/species/tree_spirit.tres",
+		egg_chance = 0.03, boss_egg_chance = 0.2,
+		## 2막 대장이라 광동리보다 한 계단 더 (임시, 봇 50일로 맞춤). boss_hp 는 장승 하나 체력 (둘이라 합은 두 배)
+		count = 10, hp = 7, speed = 1.1, boss_hp = 22,
+		damage = 2, knockback = 4.0, windup = 0.4, pack = false, boss_pattern = &"log", disguise = true,
+		advice = "권장: 하트 10 · 제작 장비",
+		loot = {&"money": 38, &"potion": 25, &"junk": 19, &"gear": 18},
+		rarity = {&"normal": 35, &"magic": 44, &"rare": 21}, boss_rarity = {&"normal": 10, &"magic": 55, &"rare": 35},
+		money = [35, 70], boss_money = [90, 150],
+		monster_tint = Color.WHITE, boss_tint = Color.WHITE, ground_tint = Color(0.78, 0.86, 0.7), tree_tint = Color(0.66, 0.8, 0.6),
+	},
 ]
 ## 넓은 맵의 여울(얕은 물)에서 걷기 빠르기 배율 (임시)
 const HUNT_FORD_SPEED := 0.6
 ## 넓은 맵의 물 댄 논에서 사냥꾼 걷기 빠르기 배율 (임시). 슬라임은 느려지지 않는다.
 const HUNT_PADDY_SPEED := 0.6
+## 그루터기인 척 숨은 고목 그루터기가 눈을 번쩍이는 간격 (초, 임시)
+const DISGUISE_BLINK_EVERY := 3.0
 ## 숨은 몬스터가 튀어나오는 거리 (px)
 const WILD_BURROW_POP_DISTANCE := 60.0
 ## 무리(pack) 구역에서 하나가 튀어나오면 이 거리 안의 숨은 몬스터도 같이 튀어나온다 (px)

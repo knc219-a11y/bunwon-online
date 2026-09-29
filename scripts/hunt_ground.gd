@@ -305,9 +305,18 @@ func near_next() -> bool:
 	return path_open and next_area().has_point(hunter.position)
 
 
+## 끊어진 쇠다리 (2026-09-29 사용자 선택 "대장간과 묶기"): 금사리 대장을 잡아도 윗길(광동리 쪽)의 쇠다리가 끊겨 있어
+## 대장간을 고쳐야 대장장이가 다리를 이어 준다. 2막이 1막 목표(약 20일)보다 일찍 열리던 것과 사금 덩이를 건너뛰던 것을 막는다.
+func bridge_broken() -> bool:
+	return zone == Config.FORGE_ZONE and GameState.forge_state < 2
+
+
 ## 위쪽 길로 다음 구역에 들어간다 (같은 날, 하트 그대로). 땅에 남은 것은 챙겨 간다.
 func advance() -> bool:
 	if not path_open or zone + 1 >= Config.HUNT_ZONES.size():
+		return false
+	if bridge_broken():
+		GameState.notify("쇠다리가 끊겨 있어 건널 수 없다. 대장간을 고치면 대장장이가 이어 줄 것 같다.")
 		return false
 	for d in drops:
 		picked.append(d.species)
@@ -354,7 +363,9 @@ func tick(delta: float) -> void:
 		popped = popped or (was_buried and not s.buried)
 		if knocked:
 			return
-		if _invulnerable <= 0.0 and not s.buried and not s.flyer and not s.stunned() and not s.airborne() and s.position.distance_to(feet) <= Config.WILD_SLIME_TOUCH_DISTANCE * s.scale.x:
+		# 대장은 몸에 닿아도 안 다친다 (2026-09-29 사용자: "보스몬스터에 부딪히기만 해도 체력이 감소하는건 근거리를 좋아하는 유저에겐 힘들거같아").
+		# 대장은 예고가 있는 패턴(내려찍기 · 혀 · 짚단 · 통나무)으로만 다치게 한다.
+		if _invulnerable <= 0.0 and not s.boss and not s.buried and not s.flyer and not s.stunned() and not s.airborne() and s.position.distance_to(feet) <= Config.WILD_SLIME_TOUCH_DISTANCE * s.scale.x:
 			_hurt(s.position, s.damage, s.title)
 	if popped:
 		_pack_pop()
@@ -431,6 +442,10 @@ func companion_attack(target: WildSlime) -> void:
 		_defeat(target)
 	elif companion.style == HuntCompanion.Style.PECK:
 		pass
+	elif companion.style == HuntCompanion.Style.BIND:
+		# 덩굴 묶기: 잠깐 붙잡는다 (못 움직이고 부딪혀도 안 다침, 사냥꾼 칼 칠 틈)
+		target.stun(Config.COMPANION_BIND_STUN)
+		companion.pulling = target
 	elif companion.style == HuntCompanion.Style.PULL:
 		# 혀 당기기: 동행 바로 앞까지 끌어와 잠깐 멈춘다 (사냥꾼 칼 앞으로 데려옴)
 		var toward := (target.position - companion.position).normalized()
@@ -454,6 +469,10 @@ func _nearest_slime(from: Vector2) -> WildSlime:
 func _defeat(s: WildSlime) -> void:
 	slimes.erase(s)
 	var z: Dictionary = Config.HUNT_ZONES[zone]
+	# 짝 대장 (도마리 장승 한 쌍): 둘 다 쓰러뜨려야 대장 보상 · 길 · 알. 먼저 쓰러진 쪽은 대장 드롭만.
+	var boss_left := s.boss and slimes.any(func(o: WildSlime) -> bool: return o.boss)
+	var last_boss := s.boss and not boss_left
+	var who := "%s과(와) %s" % [z.boss_monster, z.partner.name] if last_boss and z.has("partner") else s.title
 	if s.minion:
 		# 대장이 불러낸 새끼는 아무것도 남기지 않는다
 		s.queue_free()
@@ -461,7 +480,7 @@ func _defeat(s: WildSlime) -> void:
 		return
 	# 대장 재료 (2026-09-29 대장간 복구 A): 금두꺼비를 잡을 때마다 사금 덩이 하나, 처음 잡으면 다음 날 마을에 대장간 터
 	var material_text := ""
-	if s.boss and z.get("boss_material", false):
+	if last_boss and z.get("boss_material", false):
 		GameState.material += 1
 		material_text = " %s을(를) 얻었다 (%d개)." % [Config.BOSS_MATERIAL_NAME, GameState.material]
 		if zone == Config.FORGE_ZONE and not GameState.forge_boss_down:
@@ -475,10 +494,14 @@ func _defeat(s: WildSlime) -> void:
 		var sp: CreatureSpecies = load(z.egg) if z.has("egg") and GameState.first_egg_done else table[randi() % table.size()]
 		drops.append({at = _reachable(s.position), species = sp})
 		GameState.notify("%s을(를) 쓰러뜨리자 알이 떨어졌다!" % s.title)
+	elif boss_left:
+		GameState.notify("%s이(가) 쓰러졌다! 남은 %s을(를) 마저 쓰러뜨리자." % [s.title, slimes.filter(func(o: WildSlime) -> bool: return o.boss)[0].title])
+	elif s.boss and bridge_broken():
+		GameState.notify("%s을(를) 쓰러뜨렸다! 위쪽 길이 보이지만 %d구역 %s로 가는 쇠다리가 끊겨 있다. 대장간을 고치면 이어질 것 같다.%s" % [who, zone + 2, Config.HUNT_ZONES[zone + 1].name, material_text])
 	elif s.boss and zone + 1 < Config.HUNT_ZONES.size():
-		GameState.notify("%s을(를) 쓰러뜨렸다! 위쪽 길이 열렸다. 길에서 F로 %d구역 %s, 아래 입구 F로 마을.%s" % [s.title, zone + 2, Config.HUNT_ZONES[zone + 1].name, material_text])
+		GameState.notify("%s을(를) 쓰러뜨렸다! 위쪽 길이 열렸다. 길에서 F로 %d구역 %s, 아래 입구 F로 마을.%s" % [who, zone + 2, Config.HUNT_ZONES[zone + 1].name, material_text])
 	elif s.boss:
-		GameState.notify("%s을(를) 쓰러뜨렸다! 더 깊은 곳은 아직 막혀 있다. 아래 입구에서 F로 마을로 돌아가자.%s" % [s.title, material_text])
+		GameState.notify("%s을(를) 쓰러뜨렸다! 더 깊은 곳은 아직 막혀 있다. 아래 입구에서 F로 마을로 돌아가자.%s" % [who, material_text])
 	elif slimes.is_empty() and not boss_spawned:
 		GameState.notify("다 쓰러뜨리자 대장이 나타났다!")
 	elif slimes.is_empty():
@@ -486,13 +509,13 @@ func _defeat(s: WildSlime) -> void:
 	else:
 		GameState.notify("%s을(를) 쓰러뜨렸다. 남은 %d마리." % [s.title, slimes.size()])
 	var boss_egg: String = z.get("boss_egg", "")
-	if s.boss and boss_egg != "" and _egg_roll() < z.get("boss_egg_chance", 0.0):
+	if last_boss and boss_egg != "" and _egg_roll() < z.get("boss_egg_chance", 0.0):
 		# 대장은 가끔 알을 남긴다 (금사리 금두꺼비 → 아기 금두꺼비 알, 2026-09-29 반드시 → 확률로 낮춤)
 		var sp: CreatureSpecies = load(boss_egg)
 		drops.append({at = _reachable(s.position + Vector2(-10, 4)), species = sp})
 		GameState.first_egg_done = true
 		GameState.notify("%s이(가) 알을 남겼다! 부화하면 %s." % [s.title, sp.display_name])
-	if s.boss and zone + 1 < Config.HUNT_ZONES.size():
+	if last_boss and zone + 1 < Config.HUNT_ZONES.size():
 		path_open = true
 		_ground.queue_redraw()
 	if loot_enabled:
@@ -515,16 +538,28 @@ func _egg_roll() -> float:
 
 func spawn_boss() -> WildSlime:
 	boss_spawned = true
+	var z: Dictionary = Config.HUNT_ZONES[zone]
+	var b := _new_boss(boss_at() + (Vector2(-30, 0) if z.has("partner") else Vector2.ZERO))
+	if z.has("partner"):
+		# 짝 대장 (도마리 천하대장군 · 지하여장군): 둘이 나란히 서 있고, 둘 다 쓰러뜨려야 구역을 깬다
+		var p := _new_boss(boss_at() + Vector2(30, 0))
+		p.make_partner(zone)
+		GameState.notify("%s과(와) %s이(가) 눈을 부릅떴다!" % [b.title, p.title])
+	return b
+
+
+func _new_boss(at: Vector2) -> WildSlime:
 	var b := WildSlime.new()
 	b.make_boss(zone)
 	b.area = monster_area()
 	b.terrain = map
-	b.position = boss_at()
+	b.position = at
 	b.ai_enabled = _ai_on
-	b.slammed.connect(_on_slammed)
+	b.slammed.connect(_on_slammed.bind(b))
 	b.lashed.connect(_on_lashed)
 	b.bale_landed.connect(_on_bale_landed)
 	b.called.connect(_on_called)
+	b.rolled.connect(_on_rolled.bind(b))
 	add_child(b)
 	slimes.append(b)
 	return b
@@ -544,10 +579,11 @@ func _pack_pop() -> void:
 
 
 ## 대장 슬라임이 내려찍었다: 그림자 원 안이면 다치고, 새끼가 둘 튀어나온다.
-func _on_slammed(at: Vector2) -> void:
+func _on_slammed(at: Vector2, boss: WildSlime = null) -> void:
 	var d := hunter.feet() - at
 	d.y *= 2.0
-	var boss := _boss()
+	if boss == null:
+		boss = _boss()
 	if _invulnerable <= 0.0 and d.length() <= Config.SLAM_RADIUS and boss:
 		_hurt(at, boss.damage, boss.title, "%s이(가) 쿵 내려찍었다!" % boss.title)
 	if knocked:
@@ -571,6 +607,13 @@ func _on_slammed(at: Vector2) -> void:
 func _on_swooped(at: Vector2, s: WildSlime) -> void:
 	if _in_circle(at, Config.SWOOP_RADIUS) and _invulnerable <= 0.0 and not knocked:
 		_hurt(at, s.damage, s.title, "%s이(가) 내려꽂았다!" % s.title)
+
+
+## 천하대장군의 통나무가 굴러간다: 통나무에 닿으면 다친다 (다친 뒤 잠깐 무적이라 한 번만).
+func _on_rolled(at: Vector2, boss: WildSlime) -> void:
+	var feet := hunter.feet()
+	if _invulnerable <= 0.0 and not knocked and feet.distance_to(at) <= Config.LOG_WIDTH / 2.0 + 6.0:
+		_hurt(at, boss.damage, boss.title, "%s이(가) 굴린 통나무에 치였다!" % boss.title)
 
 
 ## 허수아비 장수의 짚단이 떨어졌다: 원 안이면 다친다.
@@ -795,6 +838,8 @@ func _draw_ground(n: Node2D) -> void:
 	if map:
 		n.draw_texture(map.ground, Vector2.ZERO)
 		_draw_labels(n)
+		if zone == Config.FORGE_ZONE:
+			_draw_bridge(n)
 		_draw_waypoint(n)
 		return
 	var tiles: Texture2D = preload("res://assets/tiles/farm_tiles.png")
@@ -808,6 +853,28 @@ func _draw_ground(n: Node2D) -> void:
 		for y in range(top, CLEARING.end.y + 3 if x >= 11 and x <= 13 else CLEARING.end.y):
 			n.draw_texture_rect_region(tiles, Rect2(x * T, y * T, T, T), Rect2(4 * T, 0, T, T))
 	_draw_waypoint(n)
+
+
+## 금사리 윗길 쇠다리 (임시 그림): 대장간을 고치기 전엔 가운데가 끊겨 있다
+func _draw_bridge(n: Node2D) -> void:
+	var p := map.spot("N") + Vector2(0, T * 0.5)
+	var broken := bridge_broken()
+	var rail := Color(0.42, 0.44, 0.5)
+	var plank := Color(0.55, 0.57, 0.62)
+	for i in 5:
+		var y := p.y - T * 0.5 + i * 6.0
+		if broken and i >= 2 and i <= 3:
+			continue
+		n.draw_rect(Rect2(p.x - 18, y, 36, 4), plank)
+	for sx in [-20.0, 18.0]:
+		if broken:
+			n.draw_rect(Rect2(p.x + sx, p.y - T * 0.5 - 2, 2, 12), rail)
+			n.draw_rect(Rect2(p.x + sx, p.y + 8, 2, 10), rail)
+		else:
+			n.draw_rect(Rect2(p.x + sx, p.y - T * 0.5 - 2, 2, 32), rail)
+	if broken:
+		n.draw_line(p + Vector2(-16, 0), p + Vector2(-8, 5), Color(0.3, 0.25, 0.22), 1.0)
+		n.draw_line(p + Vector2(10, 1), p + Vector2(16, 6), Color(0.3, 0.25, 0.22), 1.0)
 
 
 ## 창고 벽 간판 (구역 데이터 labels: 칸 자리 + 글씨)
@@ -855,6 +922,8 @@ func _draw_hud() -> void:
 	_draw_minimap()
 	if path_open:
 		var pt := "▲ 위쪽 길: %d구역 %s (F)" % [zone + 2, Config.HUNT_ZONES[zone + 1].name]
+		if bridge_broken():
+			pt = "▲ 위쪽 길: 쇠다리가 끊김 (대장간을 고치면 이어짐)"
 		var pw := font.get_string_size(pt, HORIZONTAL_ALIGNMENT_LEFT, -1, 9).x
 		_hud.draw_rect(Rect2(13 * T - pw / 2 - 3, 2 * T - 10, pw + 6, 13), Color(0, 0, 0, 0.55))
 		_hud.draw_string(font, Vector2(13 * T - pw / 2, 2 * T), pt, HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(1.0, 0.9, 0.35))
@@ -869,6 +938,7 @@ const MINI_COLORS := {
 	"p": Color(0.48, 0.66, 0.64), "x": Color(0.84, 0.75, 0.56), "r": Color(0.6, 0.45, 0.33), "%": Color(0.78, 0.78, 0.75),
 	"m": Color(0.78, 0.66, 0.4), "H": Color(0.5, 0.58, 0.68), "F": Color(0.55, 0.55, 0.6), "s": Color(0.9, 0.88, 0.8),
 	"h": Color(0.85, 0.72, 0.4), "w": Color(0.95, 0.95, 0.95),
+	"G": Color(0.85, 0.9, 0.88), "l": Color(0.62, 0.45, 0.3), "u": Color(0.7, 0.55, 0.38),
 }
 ## 사냥꾼 둘레 이만큼(칸, 가로·세로 반지름)이 작은 지도에 드러난다. 화면 절반쯤 (임시)
 const MINI_REVEAL := Vector2i(12, 7)

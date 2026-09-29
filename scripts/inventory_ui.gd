@@ -299,7 +299,7 @@ func _draw() -> void:
 		_text(Vector2(10, y), picked_text, 9, picked_col)
 		y += 12
 	y += 13
-	_text(Vector2(10, y), "물약 %d · 젤리 %d · 씨앗 %d · 무 %d · 돈 %d원" % [GameState.potions, GameState.junk, GameState.seeds, GameState.crops, GameState.money], 8, SUB)
+	_text(Vector2(10, y), "물약 %d · 잡템 %d · 씨앗 %d · 무 %d · 돈 %d원" % [GameState.potions, GameState.junk, GameState.seeds, GameState.crops, GameState.money], 8, SUB)
 	var help := "클릭: 창고로 넣기/꺼내기 · 오른쪽 클릭(R): 입기 · 입은 칸 클릭: 벗기 · I 닫기" if with_stash else "클릭(F): 입기/벗기 · WASD 칸 고르기 · I 닫기"
 	if sell_mode:
 		help = "클릭(F): 팔기 (사냥터 등급 장비만) · 오른쪽 클릭(R): 입기 · I 닫기"

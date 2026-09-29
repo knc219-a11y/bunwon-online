@@ -146,6 +146,19 @@ func advance_day() -> int:
 	return grown
 
 
+## 키우기 (아기 나무 정령): center 둘레 radius 칸 안에서 오늘 밤 자란(물 준) 작물이 chance 확률로 하루 더 자란다.
+## advance_day 앞에 부른다 (물 준 칸만 = 그날 밤 자라는 칸). 더 자란 수를 돌려준다.
+func boost_growth(center: Vector2i, radius: int, chance: float, rng: RandomNumberGenerator) -> int:
+	var n := 0
+	for dx in range(-radius, radius + 1):
+		for dy in range(-radius, radius + 1):
+			var c: Cell = _cells.get(center + Vector2i(dx, dy))
+			if c and c.planted and c.watered and not c.is_ripe() and c.growth + 1 < Config.CROP_GROW_DAYS and rng.randf() < chance:
+				c.growth += 1
+				n += 1
+	return n
+
+
 func ripe_count() -> int:
 	var n := 0
 	for c: Cell in _cells.values():
