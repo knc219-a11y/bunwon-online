@@ -494,7 +494,8 @@ func hunt_day() -> void:
 		if pick == null or s.data.species.id == &"gold_toad" or (s.data.elements[0].id == &"earth" and pick.data.species.id != &"gold_toad"):
 			pick = s
 	var zone: int = GameState.waypoints.max()
-	if zone == knocked_zone and zone > 0:
+	# 2막 구역(웨이포인트)에서 쓰러졌으면 다음 날 하트를 채워 같은 웨이포인트에서 다시 (아래 구역부터 걸어오면 하트가 깎인 채 들어가 또 쓰러짐)
+	if zone == knocked_zone and zone > 0 and zone < 2:
 		# 어제 여기서 쓰러졌으면 한 구역 아래부터 (사람이라면 그럴 것)
 		zone = GameState.waypoints.filter(func(z: int) -> bool: return z < knocked_zone).max()
 	# 대장간을 아직 못 고쳤으면 사금 덩이(금사리 금두꺼비)를 모으러 금사리 웨이포인트부터 걸어간다 (광동리로 건너뛰지 않음)
@@ -617,7 +618,7 @@ func hunt_day() -> void:
 		elif nearest_s != null:
 			target = nearest_s.position
 			goal = &"fight"
-		elif h.path_open and not h.bridge_broken() and h.hearts >= (6 if h.zone + 1 >= 2 else 3):
+		elif h.path_open and not h.bridge_broken() and h.hearts >= (5 if h.zone + 1 >= 2 else 3):
 			# 2막 구역(광동리 · 도마리)엔 하트가 넉넉할 때만 넘어간다 (사람이라면 반쯤 남은 하트로 더 센 구역에 들어가지 않음)
 			target = h.next_area().get_center()
 			goal = &"next"
