@@ -86,6 +86,8 @@ var _mini_tex: ImageTexture
 var _mini_cell := Vector2i(-999, -999)
 ## 넓은 맵에 세운 나무 (구역이 바뀌면 치운다)
 var _map_trees: Array[Sprite2D] = []
+## 금두꺼비 혀가 지나간 자리의 금가루 {at, t = 남은 시간}. 밟으면 느려진다.
+var dust: Array[Dictionary] = []
 
 
 func _ready() -> void:
@@ -128,6 +130,7 @@ func _fill_zone() -> void:
 	for s in slimes:
 		s.queue_free()
 	slimes.clear()
+	dust.clear()
 	var z: Dictionary = Config.HUNT_ZONES[zone]
 	map = HuntMap.load_map(z.map) if z.has("map") else null
 	for t in _map_trees:
@@ -321,6 +324,8 @@ func advance() -> bool:
 		companion.position = hunter.feet() + Vector2(0, Config.COMPANION_FOLLOW_DISTANCE)
 	var z: Dictionary = Config.HUNT_ZONES[zone]
 	var text := "%d구역 %s에 들어왔다. %s이(가) 더 단단하고 빠르다!" % [zone + 1, z.name, z.monster]
+	if z.has("advice"):
+		text += " (%s)" % z.advice
 	if z.waypoint and not zone in GameState.waypoints:
 		GameState.waypoints.append(zone)
 		text += " 웨이포인트가 켜졌다. 내일부터 사냥터 입구에서 여기서 시작할 수 있다."
@@ -341,10 +346,18 @@ func tick(delta: float) -> void:
 	_follow_camera()
 	_reveal_minimap()
 	var feet := hunter.feet()
-	for s in slimes:
+	var popped := false
+	for s: WildSlime in slimes.duplicate():
+		var was_buried := s.buried
 		s.tick(delta, feet)
-		if _invulnerable <= 0.0 and not s.buried and not s.stunned() and s.position.distance_to(feet) <= Config.WILD_SLIME_TOUCH_DISTANCE:
-			_hurt(s.position)
+		popped = popped or (was_buried and not s.buried)
+		if knocked:
+			return
+		if _invulnerable <= 0.0 and not s.buried and not s.stunned() and not s.airborne() and s.position.distance_to(feet) <= Config.WILD_SLIME_TOUCH_DISTANCE * s.scale.x:
+			_hurt(s.position, s.damage, s.title)
+	if popped:
+		_pack_pop()
+	_tick_dust(delta)
 	if companion:
 		_tick_companion(delta)
 	for i in range(drops.size() - 1, -1, -1):
@@ -377,7 +390,7 @@ func swing(dir := Vector2.ZERO) -> int:
 	var center := hunter.feet() + Vector2(0, -8) + _swing_dir * Config.SWING_REACH
 	var hits := 0
 	for s in slimes.duplicate():
-		if s.position.distance_to(center) <= Wearables.swing_radius(&"hunter"):
+		if not s.airborne() and s.position.distance_to(center) <= Wearables.swing_radius(&"hunter"):
 			hits += 1
 			if s.hit(hunter.feet()):
 				_defeat(s)
@@ -402,7 +415,7 @@ func _tick_companion(delta: float) -> void:
 				companion.move_toward_point(behind, delta)
 			else:
 				companion.move_toward_point(companion.position, delta)
-	if target == null or _companion_cooldown > 0.0:
+	if target == null or _companion_cooldown > 0.0 or target.airborne():
 		return
 	if companion.position.distance_to(target.position) > companion.reach():
 		return
@@ -438,11 +451,16 @@ func _nearest_slime(from: Vector2) -> WildSlime:
 func _defeat(s: WildSlime) -> void:
 	slimes.erase(s)
 	var z: Dictionary = Config.HUNT_ZONES[zone]
+	if s.minion:
+		# 대장이 불러낸 새끼는 아무것도 남기지 않는다
+		s.queue_free()
+		GameState.touch()
+		return
 	if not s.boss and (not GameState.first_egg_done or _egg_roll() < z.get("egg_chance", 0.0)):
 		# 게임 전체 첫 처치는 알을 반드시 떨어뜨린다 (첫 사냥에서 막히지 않게). 그 뒤로는 드물게.
 		GameState.first_egg_done = true
 		var table := CreatureCatalog.HUNT_TABLE
-		drops.append({at = s.position, species = table[randi() % table.size()]})
+		drops.append({at = _reachable(s.position), species = table[randi() % table.size()]})
 		GameState.notify("%s을(를) 쓰러뜨리자 알이 떨어졌다!" % s.title)
 	elif s.boss and zone + 1 < Config.HUNT_ZONES.size():
 		GameState.notify("%s을(를) 쓰러뜨렸다! 위쪽 길이 열렸다. 길에서 F로 %d구역 %s, 아래 입구 F로 마을." % [s.title, zone + 2, Config.HUNT_ZONES[zone + 1].name])
@@ -458,7 +476,7 @@ func _defeat(s: WildSlime) -> void:
 	if s.boss and boss_egg != "" and _egg_roll() < z.get("boss_egg_chance", 0.0):
 		# 대장은 가끔 알을 남긴다 (금사리 금두꺼비 → 아기 금두꺼비 알, 2026-09-29 반드시 → 확률로 낮춤)
 		var sp: CreatureSpecies = load(boss_egg)
-		drops.append({at = s.position + Vector2(-10, 4), species = sp})
+		drops.append({at = _reachable(s.position + Vector2(-10, 4)), species = sp})
 		GameState.first_egg_done = true
 		GameState.notify("%s이(가) 알을 남겼다! 부화하면 %s." % [s.title, sp.display_name])
 	if s.boss and zone + 1 < Config.HUNT_ZONES.size():
@@ -468,7 +486,7 @@ func _defeat(s: WildSlime) -> void:
 		var d := HuntLoot.roll_for_boss(loot_rng, zone) if s.boss else HuntLoot.roll_for_kill(loot_rng, zone)
 		if not d.is_empty():
 			# 알과 겹치지 않게 살짝 옆에 떨어뜨린다
-			d.at = s.position + Vector2(10, 4)
+			d.at = _reachable(s.position + Vector2(10, 4))
 			loot.append(d)
 	s.queue_free()
 	if slimes.is_empty() and not boss_spawned:
@@ -490,9 +508,92 @@ func spawn_boss() -> WildSlime:
 	b.terrain = map
 	b.position = boss_at()
 	b.ai_enabled = _ai_on
+	b.slammed.connect(_on_slammed)
+	b.lashed.connect(_on_lashed)
 	add_child(b)
 	slimes.append(b)
 	return b
+
+
+## 무리 구역 (금사리): 하나가 모래에서 튀어나오면 근처에 숨은 것도 같이 튀어나와 몰려든다.
+func _pack_pop() -> void:
+	if not Config.HUNT_ZONES[zone].get("pack", false):
+		return
+	for s in slimes:
+		if not s.buried:
+			continue
+		for o in slimes:
+			if not o.buried and o.position.distance_to(s.position) <= Config.WILD_PACK_DISTANCE:
+				s.buried = false
+				break
+
+
+## 대장 슬라임이 내려찍었다: 그림자 원 안이면 다치고, 새끼가 둘 튀어나온다.
+func _on_slammed(at: Vector2) -> void:
+	var d := hunter.feet() - at
+	d.y *= 2.0
+	var boss := _boss()
+	if _invulnerable <= 0.0 and d.length() <= Config.SLAM_RADIUS and boss:
+		_hurt(at, boss.damage, boss.title, "%s이(가) 쿵 내려찍었다!" % boss.title)
+	if knocked:
+		return
+	var minions := slimes.filter(func(o: WildSlime) -> bool: return o.minion).size()
+	for i in mini(Config.SLAM_MINIONS, Config.SLAM_MINION_MAX - minions):
+		var m := WildSlime.new()
+		m.setup_zone(zone)
+		m.buried = false
+		m.make_minion()
+		m.area = monster_area()
+		m.terrain = map
+		m.position = m._stand(at + Vector2(-34 if i == 0 else 34, 10))
+		m.ai_enabled = _ai_on
+		add_child(m)
+		slimes.append(m)
+	GameState.touch()
+
+
+## 금두꺼비가 혀를 뻗었다: 선 위면 다치고, 혀가 지나간 자리에 금가루가 남는다.
+func _on_lashed(from: Vector2, to: Vector2) -> void:
+	var feet := hunter.feet()
+	var boss := _boss()
+	var near := Geometry2D.get_closest_point_to_segment(feet, from, to)
+	if _invulnerable <= 0.0 and near.distance_to(feet) <= Config.TONGUE_WIDTH / 2.0 + 4.0 and boss:
+		_hurt(from, boss.damage, boss.title, "%s의 혀 채찍에 맞았다!" % boss.title)
+	for k in [0.45, 0.75, 1.0]:
+		dust.append({at = from.lerp(to, k), t = Config.GOLD_DUST_TIME})
+
+
+## 사냥꾼 발이 설 수 있는 가까운 자리 (몬스터가 울타리·벽에 붙어 쓰러져도 떨어진 것을 주울 수 있게)
+func _reachable(p: Vector2) -> Vector2:
+	if map == null:
+		return p
+	for r in [0.0, 6.0, 12.0, 18.0, 24.0, 36.0]:
+		for k in 8:
+			var q: Vector2 = p + Vector2.RIGHT.rotated(k * TAU / 8.0) * r
+			if map.is_free(Rect2(q - Character.FEET_BOX / 2.0, Character.FEET_BOX)):
+				return q
+			if r == 0.0:
+				break
+	return p
+
+
+func _boss() -> WildSlime:
+	for s in slimes:
+		if s.boss:
+			return s
+	return null
+
+
+## 금가루가 사라져 가고, 밟고 있으면 사냥꾼이 느려진다.
+func _tick_dust(delta: float) -> void:
+	var slow := false
+	for i in range(dust.size() - 1, -1, -1):
+		dust[i].t -= delta
+		if dust[i].t <= 0.0:
+			dust.remove_at(i)
+		elif (dust[i].at as Vector2).distance_to(hunter.feet()) <= Config.GOLD_DUST_RADIUS:
+			slow = true
+	hunter.slow_mult = Config.GOLD_DUST_SLOW if slow else 1.0
 
 
 ## 드롭을 줍는다. 장비면 바로 입거나 가방에 넣고, 늘어난 하트 칸만큼 하트도 채운다.
@@ -512,8 +613,9 @@ func _take(d: Dictionary) -> bool:
 	return true
 
 
-func _hurt(from: Vector2) -> void:
-	hearts -= 1
+## what: 무엇에 다쳤는지 알림 첫마디 (비우면 "<who>에게 부딪혔다!")
+func _hurt(from: Vector2, damage := 1, who := "야생 슬라임", what := "") -> void:
+	hearts -= damage
 	_invulnerable = Config.HURT_INVULNERABLE_TIME
 	var away := (hunter.feet() - from).normalized()
 	if away == Vector2.ZERO:
@@ -524,7 +626,7 @@ func _hurt(from: Vector2) -> void:
 		GameState.notify("사냥꾼이 쓰러졌다... 마을 입구로 돌아왔다. 주운 것은 그대로 있다.")
 		knocked_out.emit()
 	else:
-		GameState.notify("야생 슬라임에게 부딪혔다! 남은 하트 %d." % hearts)
+		GameState.notify("%s 하트 -%d, 남은 하트 %d." % [what if what != "" else "%s에게 부딪혔다!" % who, damage, hearts])
 
 
 ## 떠날 때 아직 줍지 않은 알도 챙긴다 (알 보장이 헛되지 않게). 가져갈 알 목록을 돌려준다.
@@ -543,6 +645,37 @@ func collect_all() -> Array[CreatureSpecies]:
 
 
 func _draw() -> void:
+	# 금가루 (밟으면 느려짐)
+	for d in dust:
+		var a := minf(d.t / 1.0, 1.0)
+		var p: Vector2 = d.at
+		draw_set_transform(p, 0.0, Vector2(1.0, 0.5))
+		draw_circle(Vector2.ZERO, Config.GOLD_DUST_RADIUS, Color(0.95, 0.8, 0.3, 0.35 * a))
+		draw_set_transform(Vector2.ZERO)
+		for k in 6:
+			var r := Vector2(cos(k * 2.1), sin(k * 1.3) * 0.5) * (4.0 + k * 1.8)
+			draw_circle(p + r, 1.2, Color(1.0, 0.9, 0.45, a))
+	# 몬스터 공격 예고: 붉은 띠 (달려들기·혀) · 그림자 원 (내려찍기). 찰수록 진해진다.
+	for s in slimes:
+		var tg := s.telegraph()
+		if tg.is_empty():
+			continue
+		var fill := Color(1, 0.25, 0.2, 0.15 + 0.25 * tg.progress)
+		var edge := Color(1, 0.35, 0.3, 0.9)
+		if tg.kind == &"lane":
+			var from: Vector2 = tg.from
+			var to: Vector2 = tg.to
+			var side: Vector2 = (to - from).normalized().orthogonal() * tg.width / 2.0
+			var poly := PackedVector2Array([from + side, to + side, to - side, from - side])
+			draw_colored_polygon(poly, fill)
+			poly.append(from + side)
+			draw_polyline(poly, edge, 1.0)
+		else:
+			draw_set_transform(tg.at, 0.0, Vector2(1.0, 0.5))
+			draw_circle(Vector2.ZERO, tg.radius, fill)
+			draw_arc(Vector2.ZERO, tg.radius, 0, TAU, 40, edge, 1.5)
+			draw_arc(Vector2.ZERO, tg.radius * tg.progress, 0, TAU, 40, Color(1, 0.35, 0.3, 0.6), 1.0)
+			draw_set_transform(Vector2.ZERO)
 	for d in drops:
 		var p: Vector2 = d.at
 		draw_set_transform(p + Vector2(0, 6), 0.0, Vector2(1.0, 0.4))

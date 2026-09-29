@@ -30,6 +30,8 @@ var farm: Farm
 var walk_area := Rect2()
 ## 넓은 사냥터의 칸 지도. 있으면 깊은 물·바위·나무에 막히고 여울에서 느려진다.
 var terrain: HuntMap
+## 사냥터에서 금가루를 밟으면 느려진다 (1 = 보통)
+var slow_mult := 1.0
 ## 바라보는 칸 표시 (농사용). 사냥터에서는 끈다.
 var show_facing_cell := true
 ## 선택창이 열려 있는 동안처럼 조작 중이지만 걷지 않을 때 true
@@ -123,7 +125,7 @@ func _process(delta: float) -> void:
 	else:
 		facing = Vector2i(0, int(signf(dir.y)))
 	var ground_mult := terrain.speed_at(feet()) if terrain else 1.0
-	step(dir * Config.CHARACTER_SPEED * Wearables.speed_mult(who) * ground_mult * delta)
+	step(dir * Config.CHARACTER_SPEED * Wearables.speed_mult(who) * ground_mult * slow_mult * delta)
 	queue_redraw()
 
 

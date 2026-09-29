@@ -10,6 +10,15 @@ var farm: Farm
 var log_lines: Array[String] = []
 var days := 10
 var manual_actions := 0
+## 사냥 봇이 예고(붉은 띠·그림자 원)를 알아채기까지 걸리는 시간 (사람 반응 속도쯤, 초)
+const REACT := 0.3
+## 지난 사냥에서 쓰러진 구역 (다음 날은 한 구역 아래 웨이포인트부터)
+var knocked_zone := -1
+## 사냥 하루 합계 (끝에 요약)
+var hunt_days := 0
+var hunt_hurt := 0
+var hunt_knocked := 0
+var cleared_day := {}
 
 
 func _ready() -> void:
@@ -28,6 +37,7 @@ func _ready() -> void:
 	var trained := 0
 	for s: Creature in main.creatures:
 		trained += s.data.train_total()
+	_log("\n사냥: %d번 · 맞은 횟수 %d (하루 평균 %.1f) · 쓰러짐 %d번 · 대장 처음 쓰러뜨린 날 %s" % [hunt_days, hunt_hurt, float(hunt_hurt) / maxi(hunt_days, 1), hunt_knocked, cleared_day])
 	_log("\n최종: %d일째, 돈 %d원, 씨앗 %d, 크리처 %d (훈련 단계 합 %d), 밭 구역 %d, 웨이포인트 %s" % [GameState.day, GameState.money, GameState.seeds, main.creatures.size(), trained, GameState.open_plots, GameState.waypoints])
 	var out := OS.get_environment("OUT")
 	if out != "":
@@ -210,6 +220,12 @@ func incubate() -> void:
 
 # --- 사냥 봇 -----------------------------------------------------------
 
+## 구역 대장을 처음 쓰러뜨린 날을 적는다
+func _cleared(zone: int) -> void:
+	if not cleared_day.has(Config.HUNT_ZONES[zone].name):
+		cleared_day[Config.HUNT_ZONES[zone].name] = "%d일" % GameState.day
+
+
 func hunt_day() -> void:
 	main._set_active(main.hunter)
 	var pick: Creature = null
@@ -218,6 +234,9 @@ func hunt_day() -> void:
 		if pick == null or s.data.species.id == &"gold_toad" or (s.data.elements[0].id == &"earth" and pick.data.species.id != &"gold_toad"):
 			pick = s
 	var zone: int = GameState.waypoints.max()
+	if zone == knocked_zone and zone > 0:
+		# 어제 여기서 쓰러졌으면 한 구역 아래부터 (사람이라면 그럴 것)
+		zone = GameState.waypoints.filter(func(z: int) -> bool: return z < knocked_zone).max()
 	main.enter_hunt(pick, zone)
 	var h: HuntGround = main.hunt
 	h.set_process(false)
@@ -233,9 +252,17 @@ func hunt_day() -> void:
 	var gear0 := GameState.gear.size() + GameState.owned_wear.size()
 	var zone_times: Array[String] = []
 	var zone_t := 0.0
+	var seen := {}
+	var dodges := 0
 	while t < 900.0:
 		if h.knocked:
 			break
+		if t + 2 * DT >= 900.0 and t < 900.0 - DT:
+			for d in h.drops + h.loot:
+				_log("  ! 줍지 못한 것 칸 %s" % Vector2i(d.at / Config.TILE))
+			for s: WildSlime in h.slimes:
+				var c := Vector2i(s.position / Config.TILE)
+				_log("  ! 남은 %s%s 칸 %s '%s' · 사냥꾼 칸 %s" % [s.title, " (대장)" if s.boss else "", c, h.map.at(c) if h.map else "", Vector2i(main.hunter.feet() / Config.TILE)])
 		var hunter: Character = main.hunter
 		var feet := hunter.feet()
 		# 물약: 하트 2 이하면 마신다
@@ -251,6 +278,40 @@ func hunt_day() -> void:
 			if not d.has("full"):
 				pickups.append(d.at)
 		var nearest_s: WildSlime = h._nearest_slime(feet)
+		# 공격 예고: REACT 초가 지나야 알아채고, 그 안에 서 있으면 비켜선다
+		var escape := Vector2.ZERO
+		for s: WildSlime in h.slimes:
+			var tg := s.telegraph()
+			if tg.is_empty():
+				seen.erase(s)
+				continue
+			seen[s] = seen.get(s, 0.0) + DT
+			if seen[s] < REACT:
+				continue
+			if tg.kind == &"lane":
+				var near := Geometry2D.get_closest_point_to_segment(feet, tg.from, tg.to)
+				if near.distance_to(feet) <= tg.width / 2.0 + 6.0:
+					var axis: Vector2 = (tg.to - tg.from).normalized()
+					var side := axis.orthogonal()
+					escape += side * (1.0 if (feet - tg.from).dot(side) >= 0.0 else -1.0)
+			else:
+				var d: Vector2 = feet - tg.at
+				if Vector2(d.x, d.y * 2.0).length() <= tg.radius + 8.0:
+					escape += d.normalized() if d != Vector2.ZERO else Vector2.DOWN
+		if escape != Vector2.ZERO:
+			dodges += 1
+			var mult: float = (h.map.speed_at(feet) if h.map else 1.0) * Wearables.speed_mult(&"hunter") * hunter.slow_mult
+			var p0 := hunter.position
+			hunter.step(escape.normalized() * Config.CHARACTER_SPEED * mult * DT)
+			if hunter.position.distance_to(p0) < 0.01:
+				hunter.step(-escape.normalized().orthogonal() * Config.CHARACTER_SPEED * mult * DT)
+			h.tick(DT)
+			if h.hearts < last_hearts:
+				hurt += last_hearts - h.hearts
+			last_hearts = h.hearts
+			t += DT
+			zone_t += DT
+			continue
 		if not pickups.is_empty():
 			pickups.sort_custom(func(a: Vector2, b: Vector2) -> bool: return a.distance_to(feet) < b.distance_to(feet))
 			target = pickups[0]
@@ -265,6 +326,7 @@ func hunt_day() -> void:
 			target = h.exit_area().get_center()
 			goal = &"exit"
 		if goal == &"next" and h.near_next():
+			_cleared(h.zone)
 			zone_times.append("%s %.0f초" % [Config.HUNT_ZONES[h.zone].name, zone_t])
 			zone_t = 0.0
 			h.advance()
@@ -281,7 +343,7 @@ func hunt_day() -> void:
 				kills += 1
 		else:
 			var dir := _path_dir(h, feet, target)
-			var mult: float = (h.map.speed_at(feet) if h.map else 1.0) * Wearables.speed_mult(&"hunter")
+			var mult: float = (h.map.speed_at(feet) if h.map else 1.0) * Wearables.speed_mult(&"hunter") * hunter.slow_mult
 			var p0 := hunter.position
 			hunter.step(dir * Config.CHARACTER_SPEED * mult * DT)
 			if hunter.position.distance_to(p0) < 0.01:
@@ -303,6 +365,12 @@ func hunt_day() -> void:
 	zone_times.append("%s %.0f초" % [Config.HUNT_ZONES[h.zone].name, zone_t])
 	var hearts_left := h.hearts
 	var knocked := h.knocked
+	hunt_days += 1
+	hunt_hurt += hurt
+	hunt_knocked += int(knocked)
+	knocked_zone = h.zone if knocked else -1
+	if h.boss_spawned and h._boss() == null:
+		_cleared(h.zone)
 	var comp := h.companion.display_name() if h.companion else "혼자"
 	var picked := h.picked.size()
 	if main.hunt:
@@ -310,8 +378,8 @@ func hunt_day() -> void:
 	var eggs: Array[String] = []
 	for sp in GameState.hunter_eggs:
 		eggs.append(sp.display_name)
-	_log("사냥: 시작 %s · 동행 %s · %s · 처치 %d · 맞은 횟수 %d · 남은 하트 %d%s · 알 %s · 돈 %+d · 물약 %+d · 젤리 %+d · 장비 %+d" % [
-		Config.HUNT_ZONES[zone].name, comp, " → ".join(zone_times), kills, hurt, hearts_left, " (쓰러짐)" if knocked else "",
+	_log("사냥: 시작 %s · 동행 %s · %s · 처치 %d · 맞은 횟수 %d · 비킨 틱 %d · 남은 하트 %d%s · 알 %s · 돈 %+d · 물약 %+d · 젤리 %+d · 장비 %+d" % [
+		Config.HUNT_ZONES[zone].name, comp, " → ".join(zone_times), kills, hurt, dodges, hearts_left, " (쓰러짐)" if knocked else "",
 		eggs, GameState.money - money0, GameState.potions - potions0, GameState.junk - junk0, GameState.gear.size() + GameState.owned_wear.size() - gear0])
 	if t >= 900.0:
 		_log("  ! 사냥 봇이 15분 안에 끝내지 못함 (막힘?)")
