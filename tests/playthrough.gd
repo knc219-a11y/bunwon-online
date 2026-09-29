@@ -37,6 +37,11 @@ var total_creature_herbs := 0
 var total_roots := 0
 ## 채집 크리처가 사는 자리 (밭이 아니라 공급함 옆 풀밭)
 const FORAGE_HOME := Vector2i(15, 7)
+## 크리처 일 배분 (2026-09-29 선택 A+B): 열린 밭 구역이 모두 농사 크리처로 찬 첫날, 농사 크리처가 한가할 때 캔 나물,
+## 물 준 풀밭 덕분에 더 돋은 포기
+var full_day := -1
+var total_idle_herbs := 0
+var total_water_bonus := 0
 
 
 func _ready() -> void:
@@ -60,6 +65,7 @@ func _ready() -> void:
 	_log("\n사냥: %d번 · 맞은 횟수 %d (하루 평균 %.1f) · 쓰러짐 %d번 · 대장 처음 쓰러뜨린 날 %s" % [hunt_days, hunt_hurt, float(hunt_hurt) / maxi(hunt_days, 1), hunt_knocked, cleared_day])
 	_log("\n하루 끝 시각 (봇 · 사람 어림 x%.0f, 6시 시작, 실제 1초 = 게임 %s분): %s" % [HUMAN_MULT, Config.CLOCK_MINUTES_PER_SECOND, ", ".join(clock_ends)])
 	_log("\n들나물·채집 (14일 합계): 손일 %d번 · 들나물 손으로 %d포기 · 크리처가 %d포기 · 도라지 %d뿌리 (%d원)" % [total_manual, total_hand_herbs, total_creature_herbs, total_roots, total_roots * Config.ROOT_PRICE])
+	_log("\n크리처 일 배분 (14일 합계): 밭 4구역이 모두 농사로 찬 날 %s · 농사 크리처가 한가할 때 캔 나물·뿌리 %d · 물 준 풀밭 덕분에 더 돋은 나물 %d포기" % ["%d일" % full_day if full_day > 0 else "없음", total_idle_herbs, total_water_bonus])
 	_log("\n최종: %d일째, 돈 %d원, 씨앗 %d, 크리처 %d (훈련 단계 합 %d), 밭 구역 %d, 웨이포인트 %s" % [GameState.day, GameState.money, GameState.seeds, main.creatures.size(), trained, GameState.open_plots, GameState.waypoints])
 	var out := OS.get_environment("OUT")
 	if out != "":
@@ -104,6 +110,15 @@ func play_day() -> void:
 	total_manual += manual_actions
 	total_hand_herbs += herbs
 	total_creature_herbs += creature_herbs
+	var idle := 0
+	for s: Creature in main.creatures:
+		if s.job == CreatureJobs.FARM:
+			idle += s.picks
+		s.picks = 0
+	total_idle_herbs += idle
+	var farmers: int = main.creatures.filter(func(s: Creature) -> bool: return s.job == CreatureJobs.FARM).size()
+	var foragers: int = main.creatures.filter(func(s: Creature) -> bool: return s.job == CreatureJobs.FORAGE).size()
+	_log("크리처 일: 농사 %d · 채집 전담 %d (밭 구역 %d) · 농사 크리처가 한가할 때 캔 것 %d" % [farmers, foragers, GameState.open_plots, idle])
 	total_roots += GameState.displayed_roots
 	var planted := 0
 	var watered := 0
@@ -133,45 +148,49 @@ func play_day() -> void:
 		get_viewport().get_texture().get_image().save_png("%s/morning_day%02d.png" % [cap, GameState.day])
 		main._morning_card.visible = false
 	_log("밤 → 아침 카드: %s" % " / ".join(lines))
+	total_water_bonus += main.forage.bonus_today
 	_log("하루 수입 %+d원 · 부화 기다리는 알 %d개 (농부 %d · 공급함 %d)" % [GameState.money - money0, GameState.farmer_eggs.size() + GameState.village_eggs.size(), GameState.farmer_eggs.size(), GameState.village_eggs.size()])
 
 
-## 부화기 옆에 나온 새 크리처를 밭에 놓고 일을 정한다
+## 부화기 옆에 나온 새 크리처를 밭에 놓고 일을 정한다.
+## 크리처 일 배분 (2026-09-29 선택 A+B): 열린 밭 구역마다 농사 한 마리, 남는 크리처는 채집 전담.
+## 밭 구역이 새로 열리면 채집 전담 하나를 그 구역 농사로 옮긴다 (플레이어가 할 법한 배치).
 func place_new_creatures() -> void:
-	var jobs_have := {}
+	var farmers := 0
 	for s: Creature in main.creatures:
-		if s.home != main.HATCH_CELL:
-			jobs_have[s.job] = jobs_have.get(s.job, 0) + 1
+		if s.home != main.HATCH_CELL and s.job == CreatureJobs.FARM:
+			farmers += 1
+	for s: Creature in main.creatures:
+		if farmers >= GameState.open_plots:
+			break
+		if s.home != main.HATCH_CELL and s.job == CreatureJobs.FORAGE:
+			_assign(s, CreatureJobs.FARM, farmers)
+			farmers += 1
 	for s: Creature in main.creatures:
 		if s.home != main.HATCH_CELL:
 			continue
-		# 첫 슬라임은 급수. 다음부터는 수확 → 파종 → 새 구역 급수 순으로 채운다 (플레이어가 할 법한 순서)
-		# 채집 (2026-09-29 선택 B): 첫 땅속성은 도라지를 캐러 채집, 밭 일이 다 차면 남는 크리처도 채집
-		var want: StringName = s.job
-		if s.job == CreatureJobs.REST:
-			var earth := s.has_element(&"earth")
-			if earth and jobs_have.get(CreatureJobs.FORAGE, 0) == 0:
-				want = CreatureJobs.FORAGE
-			else:
-				for j in [CreatureJobs.HARVEST, CreatureJobs.SOW, CreatureJobs.WATER]:
-					if jobs_have.get(j, 0) < GameState.open_plots:
-						want = j
-						break
-				if want == CreatureJobs.REST:
-					want = CreatureJobs.FORAGE
-		var plot_i := clampi(jobs_have.get(want, 0), 0, GameState.open_plots - 1)
-		var plot := Config.FIELD_PLOTS[plot_i]
-		var at := plot.position + Vector2i(plot.size.x / 2, plot.size.y / 2)
-		if want == CreatureJobs.FORAGE:
-			at = FORAGE_HOME
-		main.farmer.position = Farm.center_of(s.home)
-		main.interact()
-		main.farmer.position = Farm.center_of(at)
-		main.interact()
-		while s.job != want:
-			s.next_job()
-		jobs_have[want] = jobs_have.get(want, 0) + 1
-		_log("크리처 배치: %s → %s 칸 %s" % [s.describe(), "풀밭" if want == CreatureJobs.FORAGE else Config.FIELD_PLOT_NAMES[plot_i], at])
+		if farmers < GameState.open_plots:
+			_assign(s, CreatureJobs.FARM, farmers)
+			farmers += 1
+		else:
+			_assign(s, CreatureJobs.FORAGE, 0)
+	if farmers >= Config.FIELD_PLOTS.size() and full_day < 0:
+		full_day = GameState.day
+
+
+## 크리처를 들어 옮기고 (F 두 번) 일을 R로 바꾼다. 농사면 plot_i 구역 가운데, 채집이면 풀밭.
+func _assign(s: Creature, want: StringName, plot_i: int) -> void:
+	var plot := Config.FIELD_PLOTS[plot_i]
+	var at := plot.position + Vector2i(plot.size.x / 2, plot.size.y / 2)
+	if want == CreatureJobs.FORAGE:
+		at = FORAGE_HOME
+	main.farmer.position = s.position
+	main.interact()
+	main.farmer.position = Farm.center_of(at)
+	main.interact()
+	while s.job != want:
+		s.next_job()
+	_log("크리처 배치: %s → %s 칸 %s" % [s.describe(), "풀밭" if want == CreatureJobs.FORAGE else Config.FIELD_PLOT_NAMES[plot_i], at])
 
 
 func let_creatures_work() -> void:
@@ -183,9 +202,12 @@ func let_creatures_work() -> void:
 		for s: Creature in main.creatures:
 			if s._busy:
 				busy = true
-			elif CreatureJobs.FARM_WORK.has(s.job) and farm.find_work(CreatureJobs.FARM_WORK[s.job], s.home, s.data.work_radius(), [], s.position) != null:
+			elif s.job == CreatureJobs.FARM and CreatureJobs.FARM_ORDER.any(func(t: StringName) -> bool: return farm.find_work(CreatureJobs.FARM_WORK[t], s.home, s.data.work_radius(), [], Farm.center_of(s.home)) != null):
 				busy = true
-			elif s.job == CreatureJobs.FORAGE and main.forage.nearest_target(s.position, s.has_element(&"earth")) != null:
+			elif s.job in [CreatureJobs.FARM, CreatureJobs.FORAGE] and main.forage.nearest_target(s.position, s.has_element(&"earth")) != null:
+				busy = true
+			elif s.job == CreatureJobs.FARM and s.position.distance_to(Farm.center_of(s.home)) > 1.0:
+				# 채집하고 제자리로 돌아가는 중
 				busy = true
 		if not busy:
 			break
