@@ -2,9 +2,18 @@ class_name Forage
 extends Node2D
 ## 들나물 캐기 (2026-09-29 사용자 선택 A, 초반 며칠 할 일): 아침마다 밭 밖 풀밭에 냉이·쑥·달래가 몇 포기 돋는다.
 ## 농부가 가까이서 F로 캐고, 마을 공급함에 진열하면 밤사이 팔린다. 그림은 임시 (코드로 그림).
+## 크리처 채집 (2026-09-29 사용자 선택 B): 채집 크리처가 캐서 바로 진열한다. 땅속 도라지 뿌리, 물 준 풀밭도 여기서 관리.
 
 ## 돋은 들나물: 칸 → 종류 번호 (Config.HERB_NAMES)
 var herbs: Dictionary[Vector2i, int] = {}
+## 땅속 도라지 뿌리 (2026-09-29 사용자 선택 B): 손으로는 못 캐고 땅속성 채집 크리처만 캔다
+var roots: Dictionary[Vector2i, bool] = {}
+## 오늘 물속성 채집 크리처가 물 준 풀밭 칸. 다음 날 아침 들나물이 그만큼 (최대 Config.HERB_WATER_BONUS_MAX) 더 돋는다.
+var watered: Dictionary[Vector2i, bool] = {}
+## 채집 크리처가 가는 중인 칸 (둘이 같은 칸으로 가지 않게)
+var claimed: Dictionary[Vector2i, bool] = {}
+## 오늘 아침 물 덕분에 더 돋은 포기 수 (아침 카드에 쓴다)
+var bonus_today := 0
 
 
 func _ready() -> void:
@@ -13,17 +22,70 @@ func _ready() -> void:
 
 
 ## 아침마다 새로 돋는다. 어제 캐지 않은 것은 시들어 없어진다.
+## 물 준 풀밭이 있으면 그 칸부터 먼저 돋고 포기 수가 는다. 도라지 뿌리도 새로 든다.
 func sprout(rng: RandomNumberGenerator) -> void:
 	herbs.clear()
-	var spots := Config.HERB_SPOTS.duplicate()
+	claimed.clear()
+	var spots := _shuffled(Config.HERB_SPOTS, rng)
+	# 물 준 칸을 앞으로
+	spots.sort_custom(func(a: Vector2i, b: Vector2i) -> bool: return watered.has(a) and not watered.has(b))
+	bonus_today = mini(watered.size(), Config.HERB_WATER_BONUS_MAX)
+	watered.clear()
+	var n := rng.randi_range(Config.HERBS_PER_DAY.x, Config.HERBS_PER_DAY.y) + bonus_today
+	for i in mini(n, spots.size()):
+		herbs[spots[i]] = rng.randi_range(0, Config.HERB_NAMES.size() - 1)
+	roots.clear()
+	var root_spots := _shuffled(Config.ROOT_SPOTS, rng)
+	for i in mini(rng.randi_range(Config.ROOTS_PER_DAY.x, Config.ROOTS_PER_DAY.y), root_spots.size()):
+		roots[root_spots[i]] = true
+	queue_redraw()
+
+
+func _shuffled(from: Array[Vector2i], rng: RandomNumberGenerator) -> Array[Vector2i]:
+	var spots := from.duplicate()
 	for i in spots.size():
 		var j := rng.randi_range(i, spots.size() - 1)
 		var t: Vector2i = spots[i]
 		spots[i] = spots[j]
 		spots[j] = t
-	var n := rng.randi_range(Config.HERBS_PER_DAY.x, Config.HERBS_PER_DAY.y)
-	for i in mini(n, spots.size()):
-		herbs[spots[i]] = rng.randi_range(0, Config.HERB_NAMES.size() - 1)
+	return spots
+
+
+## 채집 크리처가 갈 칸: pos 에서 가장 가까운 들나물 (dig_roots 면 도라지 뿌리도). 다른 크리처가 가는 칸은 뺀다. 없으면 null.
+func nearest_target(pos: Vector2, dig_roots: bool) -> Variant:
+	var best: Variant = null
+	var best_d := INF
+	var cells: Array[Vector2i] = herbs.keys()
+	if dig_roots:
+		cells.append_array(roots.keys())
+	for cell in cells:
+		if claimed.has(cell):
+			continue
+		var d := pos.distance_to(Farm.center_of(cell))
+		if d < best_d:
+			best_d = d
+			best = cell
+	return best
+
+
+## 손이 닿는 거리 안의 도라지 뿌리 칸 (농부에게 "손으로는 못 캔다"고 알려 줄 때). 없으면 null.
+func nearest_root(pos: Vector2) -> Variant:
+	for cell: Vector2i in roots:
+		if pos.distance_to(Farm.center_of(cell)) <= Config.INTERACT_DISTANCE:
+			return cell
+	return null
+
+
+## 도라지 뿌리를 캔다
+func dig_root(cell: Vector2i) -> void:
+	roots.erase(cell)
+	claimed.erase(cell)
+	queue_redraw()
+
+
+## 풀밭 칸에 물을 준다 (물속성 채집). 다음 날 아침 들나물이 더 돋는다.
+func water(cell: Vector2i) -> void:
+	watered[cell] = true
 	queue_redraw()
 
 
@@ -43,6 +105,7 @@ func nearest(pos: Vector2) -> Variant:
 func pick(cell: Vector2i) -> String:
 	var kind: int = herbs[cell]
 	herbs.erase(cell)
+	claimed.erase(cell)
 	queue_redraw()
 	return Config.HERB_NAMES[kind]
 
@@ -54,8 +117,24 @@ static func object_particle(word: String) -> String:
 
 
 func _draw() -> void:
+	for cell: Vector2i in watered:
+		# 물 준 풀밭: 젖은 흙빛 얼룩 (임시 그림)
+		draw_circle(Farm.center_of(cell) + Vector2(0, 4), 9, Color(0.3, 0.45, 0.6, 0.35))
+	for cell: Vector2i in roots:
+		_draw_root(Farm.center_of(cell) + Vector2(0, 2))
 	for cell: Vector2i in herbs:
 		_draw_herb(Farm.center_of(cell) + Vector2(0, 2), herbs[cell])
+
+
+## 땅속 도라지 뿌리 표시 (임시 그림): 갈라진 흙 + 보라 꽃봉오리 하나
+func _draw_root(at: Vector2) -> void:
+	draw_set_transform(at, 0, Vector2(1.5, 1.5))
+	draw_circle(Vector2(0, 3), 6, Color(0.5, 0.36, 0.22))
+	draw_line(Vector2(-4, 1), Vector2(4, 5), Color(0.25, 0.15, 0.08), 1.0)
+	draw_line(Vector2(3, 0), Vector2(-2, 6), Color(0.25, 0.15, 0.08), 1.0)
+	draw_line(Vector2(0, 2), Vector2(0, -5), Color(0.3, 0.6, 0.3), 1.5)
+	draw_circle(Vector2(0, -6), 2.2, Color(0.6, 0.45, 0.85))
+	draw_set_transform(Vector2.ZERO)
 
 
 ## 한 포기 (임시 그림): 0 냉이 흰 꽃 · 1 쑥 회녹색 잎 · 2 달래 가는 잎 + 흰 알뿌리

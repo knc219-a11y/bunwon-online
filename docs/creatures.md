@@ -7,7 +7,7 @@
 
 | 개념 | 파일 | 역할 |
 |---|---|---|
-| 일 (Job) | `scripts/creatures/creature_jobs.gd` | 크리처가 맡는 일의 id. 지금은 쉬기, 파종, 급수, 수확 |
+| 일 (Job) | `scripts/creatures/creature_jobs.gd` | 크리처가 맡는 일의 id. 지금은 쉬기, 파종, 급수, 수확, 채집 |
 | 속성 (Element) | `data/creatures/elements/*.tres` | 물, 비행 등. 일별 재능 배율과 이동 속도 배율 |
 | Trait | `data/creatures/traits/*.tres` | 개체 특성. 작업 속도, 이동 속도, 범위, 일별 재능 |
 | 종 (Species) | `data/creatures/species/*.tres` | 몬스터 종류. 가질 수 있는 속성 후보, 고유 재능, 부화 시 능력치 범위, Trait 후보 |
@@ -36,6 +36,18 @@
 예: 물속성(`water.tres`)은 급수 재능 1.5배라서, 같은 개체라도 급수를 맡기면 1.5배 빠르다.
 땅속성(`earth.tres`)은 파종 재능 1.5배, 대신 이동이 조금 느리다(0.9배).
 비행(`flying.tres`)은 이동 속도 1.6배라서 밭 사이를 더 빨리 오간다.
+
+## 채집 일 (2026-09-29 사용자 선택 B 속성별 채집)
+
+채집(`CreatureJobs.FORAGE`)은 밭 범위와 상관없이 마을 풀밭 전체를 돈다 (범위 네모를 그리지 않음). 가장 가까운 들나물로 깡충깡충 가서 캐고 공급함에 바로 진열한다. 할 게 없으면 놓아 준 자리로 돌아간다.
+속성마다 하나씩 더 한다 (`Creature._forage_once`, 속성 id로 판단):
+
+| 속성 | 채집에서 더 하는 일 |
+|---|---|
+| 땅 (`earth`) | 손으로는 못 캐는 땅속 도라지 뿌리도 캔다 (`Config.ROOT_*`) |
+| 물 (`water`) | 나물 캔 자리 풀밭에 물을 준다. 다음 날 아침 물 준 칸만큼 (최대 `Config.HERB_WATER_BONUS_MAX`) 나물이 더 돋는다 |
+
+채집 크리처 여럿이 같은 칸으로 가지 않도록 `Forage.claimed` 로 가는 칸을 잡아 둔다. 일 속도(간격)는 다른 일처럼 `work_speed(&"forage")`, 이동은 `move_speed()` 를 쓴다.
 
 ## 종 고유 능력 (선택)
 

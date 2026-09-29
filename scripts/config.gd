@@ -48,6 +48,20 @@ const HERB_SPOTS: Array[Vector2i] = [
 	Vector2i(16, 7), Vector2i(25, 10), Vector2i(24, 12), Vector2i(18, 12),
 ]
 
+## 크리처 채집 (2026-09-29 사용자 선택 B 속성별 채집): 채집을 맡긴 크리처는 밭 범위와 상관없이 마을 풀밭을 돌며
+## 돋은 들나물을 캐서 공급함에 바로 진열한다. 땅속성은 손으로 못 캐는 땅속 도라지 뿌리도 캐고,
+## 물속성은 나물 캔 자리에 물을 줘서 다음 날 들나물이 더 돋는다. 값·수·자리는 전부 임시.
+const ROOT_NAME := "도라지"
+const ROOT_PRICE := 60
+## 하루에 땅속에 드는 뿌리 수 [최소, 최대]
+const ROOTS_PER_DAY := Vector2i(2, 3)
+## 뿌리가 들 수 있는 풀밭 칸 (들나물 자리와 겹치지 않게)
+const ROOT_SPOTS: Array[Vector2i] = [
+	Vector2i(16, 2), Vector2i(26, 4), Vector2i(25, 7), Vector2i(21, 1), Vector2i(3, 11), Vector2i(10, 12),
+]
+## 물속성이 물 준 풀밭 한 칸마다 다음 날 들나물 +1포기, 최대 이만큼
+const HERB_WATER_BONUS_MAX := 3
+
 ## 도구 강화 (2026-09-27 후보 A 첫 조각): 마을 공급함에서 돈으로 한 번 사면 끝. 값은 전부 임시.
 ## 괭이·물뿌리개 1단계 = 바라보는 방향으로 앞 3칸 일자에 한 번에 쓴다.
 const TOOL_UPGRADE_REACH := 3
