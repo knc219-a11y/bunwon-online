@@ -61,6 +61,21 @@ var forge_boss_down := false
 var material := 0
 var scrap := 0
 var scrap_pile := 0
+## 약방 (2026-09-29): 0 = 없음, 1 = 무너진 터, 2 = 고침 (연금술사 열림 · 번천 길 호롱)
+var yak_state := 0
+## 2막 대장(도마리 장승 한 쌍)을 쓰러뜨린 적이 있는지. 다음 날 아침 약방 터가 드러난다.
+var yak_boss_down := false
+## 2막 대장 재료 (장승 조각), 약방에 모아 둔 도라지, 도라지밭에 남은 도라지
+var material2 := 0
+var roots := 0
+var herb_bed := 0
+## 연금술사가 만든 것: 호롱 기름 · 힘 물약 · 빠르기 물약 · 크리처 보약 (빨간 물약은 potions)
+var lamp_oil := 0
+var strength := 0
+var speed := 0
+var tonics := 0
+## 크리처 보약을 먹인 날 (그날 모든 크리처가 두 배 빠름). -1 = 없음
+var tonic_day := -1
 
 
 func _ready() -> void:
@@ -133,6 +148,16 @@ func reset() -> void:
 	material = 0
 	scrap = 0
 	scrap_pile = 0
+	yak_state = 0
+	yak_boss_down = false
+	material2 = 0
+	roots = 0
+	herb_bed = 0
+	lamp_oil = 0
+	strength = 0
+	speed = 0
+	tonics = 0
+	tonic_day = -1
 	changed.emit()
 
 

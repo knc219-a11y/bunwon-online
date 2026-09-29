@@ -104,7 +104,34 @@ func work_once() -> bool:
 		return _farm_once()
 	if job == CreatureJobs.SCRAP:
 		return _scrap_once()
+	if job == CreatureJobs.HERB:
+		return _herb_once()
 	return false
+
+
+## 도라지밭 가꾸기 한 번 (2026-09-29 약방 복구): 도라지밭까지 건너가 도라지 하나를 캐 약방에 둔다 (GameState.roots).
+## 밭이 비면 제자리로 돌아가 쉰다. 아침마다 다시 돋는다. 불속성은 두 배 빠르다 (fire.tres job_aptitude).
+func _herb_once() -> bool:
+	if GameState.yak_state < 2:
+		return false
+	if GameState.herb_bed <= 0:
+		if position.distance_to(Farm.center_of(home)) > 1.0:
+			_hop_to(Farm.center_of(home), func() -> void: pass)
+			return true
+		return false
+	var at := Farm.center_of(herb_spot()) + Vector2((scraps % 3 - 1) * 5, 0)
+	_hop_to(at, func() -> void:
+		if GameState.herb_bed > 0:
+			GameState.herb_bed -= 1
+			GameState.roots += 1
+			scraps += 1
+			GameState.touch())
+	return true
+
+
+## 도라지밭 위 칸 (크리처가 서서 캐는 자리)
+static func herb_spot() -> Vector2i:
+	return Config.HERB_BED_RECT.position + Vector2i.UP
 
 
 ## 고철 줍기 한 번 (2026-09-29 대장간 복구 A): 고물 더미까지 건너가 고철 하나를 주워 대장간에 둔다 (GameState.scrap).
@@ -180,7 +207,11 @@ func _forage_once() -> bool:
 				forage.water(target)
 		elif forage.roots.has(target):
 			forage.dig_root(target)
-			GameState.displayed_roots += 1
+			# 약방 터가 드러난 뒤로는 도라지를 팔지 않고 약방에 모은다 (복구 · 연금술 재료)
+			if GameState.yak_state >= 1:
+				GameState.roots += 1
+			else:
+				GameState.displayed_roots += 1
 		GameState.touch())
 	return true
 
@@ -237,6 +268,9 @@ func hop_time() -> float:
 func _reset_timer() -> void:
 	var speed_job := task if job == CreatureJobs.FARM and task != &"" else job
 	_timer = Config.CREATURE_WORK_INTERVAL / maxf(data.work_speed(speed_job), 0.01)
+	# 크리처 보약 (연금술사, 2026-09-29): 먹인 날은 모두 두 배 빠르다
+	if GameState.tonic_day == GameState.day:
+		_timer /= Config.TONIC_SPEED_MULT
 
 
 func _process(delta: float) -> void:
@@ -280,7 +314,7 @@ func _draw() -> void:
 		label += " ★%d" % data.train_total()
 	draw_string(ThemeDB.fallback_font, Vector2(-24, -26), label, HORIZONTAL_ALIGNMENT_CENTER, 48, 9)
 	# 채집은 범위 없이 마을 풀밭 전체를 돌므로 범위 네모를 그리지 않는다
-	if carried_by == null and job != CreatureJobs.FORAGE and job != CreatureJobs.SCRAP:
+	if carried_by == null and job != CreatureJobs.FORAGE and job != CreatureJobs.SCRAP and job != CreatureJobs.HERB:
 		# 작업 범위 표시
 		var radius := data.work_radius()
 		var r := Rect2(Vector2((home - Vector2i(radius, radius)) * Config.TILE), Vector2.ONE * (radius * 2 + 1) * Config.TILE)

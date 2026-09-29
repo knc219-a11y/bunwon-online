@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="CreatureSpecies" load_steps=7 format=3]
+
+[ext_resource type="Script" path="res://scripts/creatures/creature_species.gd" id="1"]
+[ext_resource type="Resource" path="res://data/creatures/traits/ordinary.tres" id="2"]
+[ext_resource type="Resource" path="res://data/creatures/traits/diligent.tres" id="3"]
+[ext_resource type="Resource" path="res://data/creatures/traits/keen_eye.tres" id="4"]
+[ext_resource type="Resource" path="res://data/creatures/elements/fire.tres" id="5"]
+[ext_resource type="Texture2D" path="res://assets/creatures/baby_will_o_fire.png" id="6"]
+
+[resource]
+script = ExtResource("1")
+id = &"will_o"
+display_name = "아기 도깨비불"
+possible_elements = Array[Resource]([ExtResource("5")])
+work_speed_range = Vector2(0.8, 1.2)
+radius_range = Vector2i(1, 2)
+traits = Array[Resource]([ExtResource("2"), ExtResource("3"), ExtResource("4")])
+companion_style = &"ember"
+sprite_sheets = {
+&"fire": ExtResource("6")
+}
+egg_color = Color(0.45, 0.55, 0.85, 1)
+egg_spot_color = Color(1, 0.72, 0.35, 1)
+color = Color(0.98, 0.6, 0.25, 1)

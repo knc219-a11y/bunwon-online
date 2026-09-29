@@ -9,6 +9,9 @@ const GOLD_TOAD: CreatureSpecies = preload("res://data/creatures/species/gold_to
 const SPARROW: CreatureSpecies = preload("res://data/creatures/species/sparrow.tres")
 ## 도마리(4구역) 2막 대장 장승 한 쌍을 쓰러뜨리면 가끔 나오는 알 (2026-09-29 사용자: "알은 나무정령알"). 농사 = 키우기.
 const TREE_SPIRIT: CreatureSpecies = preload("res://data/creatures/species/tree_spirit.tres")
+## 번천(5구역, 3막 첫 구역) 도깨비불 · 유령 막차를 쓰러뜨리면 가끔 나오는 알 (2026-09-29 사용자 선택 A). 첫 불 속성 종.
+## 사냥 동행 = 불빛 + 불씨, 약방 도라지밭 가꾸기가 두 배 (fire.tres job_aptitude).
+const WILL_O: CreatureSpecies = preload("res://data/creatures/species/will_o.tres")
 
 ## 게임 시작 시 마을 공급함에 들어 있는 알
 const STARTER_EGG := SLIME

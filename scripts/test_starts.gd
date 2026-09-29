@@ -59,6 +59,20 @@ const STARTS: Array[Dictionary] = [
 		armor = [[&"leather_hood", &"rare"], [&"hunter_jerkin", &"magic"], [&"leather_shoes", &"magic"]],
 		crafted = [&"work_cap", &"rain_suit", &"work_boots"],
 	},
+	{
+		id = &"act3", name = "3막 입구", note = "45일 · 약방 · 연금술사 · 번천 웨이포인트",
+		day = 45, money = 5200, seeds = 20, plots = 4, planted = true, scrap = 6, roots = 6, junk = 8, potions = 4, lamp_oil = 2,
+		creatures = [
+			[&"slime", &"farm", &"water", 2, 2], [&"slime", &"farm", &"", 2, 2], [&"slime", &"farm", &"", 2, 1], [&"tree_spirit", &"farm", &"", 1, 1],
+			[&"slime", &"forage", &"earth", 1, 1], [&"slime", &"forage", &"water", 0, 0], [&"gold_toad", &"forage", &"", 1, 0],
+			[&"gold_toad", &"forage", &"", 0, 0], [&"sparrow", &"forage", &"", 0, 0], [&"sparrow", &"forage", &"", 0, 0],
+			[&"slime", &"forage", &"earth", 0, 0], [&"slime", &"scrap", &"earth", 1, 1], [&"slime", &"herb", &"earth", 0, 0],
+		],
+		waypoints = [0, 1, 2, 3, 4], forge = 2, yak = 2, tools = true, knife = true,
+		weapons = [&"hunting_bow", &"water_staff", &"long_sword", &"crossbow"], shop = [&"straw_hat", &"ball_cap"],
+		armor = [[&"leather_hood", &"rare"], [&"hunter_jerkin", &"rare"], [&"leather_shoes", &"magic"]],
+		crafted = [&"work_cap", &"rain_suit", &"work_boots"],
+	},
 ]
 
 const SPECIES := {
@@ -66,6 +80,7 @@ const SPECIES := {
 	&"gold_toad": "res://data/creatures/species/gold_toad.tres",
 	&"sparrow": "res://data/creatures/species/sparrow.tres",
 	&"tree_spirit": "res://data/creatures/species/tree_spirit.tres",
+	&"will_o": "res://data/creatures/species/will_o.tres",
 }
 const ELEMENTS := {
 	&"water": "res://data/creatures/elements/water.tres",
@@ -137,6 +152,8 @@ static func apply(main: Node2D, id: StringName) -> bool:
 				at = plot.position + plot.size / 2
 			CreatureJobs.SCRAP:
 				at = Creature.scrap_spot()
+			CreatureJobs.HERB:
+				at = Creature.herb_spot()
 			_:
 				at = FORAGE_CELLS[forage_i % FORAGE_CELLS.size()]
 				forage_i += 1
@@ -156,6 +173,19 @@ static func apply(main: Node2D, id: StringName) -> bool:
 		GameState.material += Config.FORGE_COST_MATERIAL
 		main.restore_forge()
 	GameState.scrap = s.get("scrap", 0)
+	var yak_state: int = s.get("yak", 0)
+	if yak_state >= 1:
+		GameState.yak_boss_down = true
+		main.show_yak_site()
+	if yak_state >= 2:
+		GameState.money += Config.YAK_COST_MONEY
+		GameState.roots += Config.YAK_COST_ROOTS
+		GameState.material2 += Config.YAK_COST_MATERIAL
+		main.restore_yak()
+	GameState.roots = s.get("roots", 0)
+	GameState.junk = s.get("junk", 0)
+	GameState.potions = s.get("potions", 0)
+	GameState.lamp_oil = s.get("lamp_oil", 0)
 
 	for item: StringName in s.get("shop", []):
 		Wearables.gain_and_wear(item)

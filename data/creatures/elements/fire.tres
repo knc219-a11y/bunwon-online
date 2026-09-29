@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="CreatureElement" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/creatures/creature_element.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"fire"
+display_name = "불"
+color = Color(0.98, 0.6, 0.25, 1)
+job_aptitude = {
+&"herb": 2.0
+}
+move_speed_mult = 1.1

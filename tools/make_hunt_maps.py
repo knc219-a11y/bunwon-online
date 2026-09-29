@@ -17,6 +17,8 @@ data/hunt_maps/<이름>.txt 의 칸 지도를 읽어 assets/hunt/<이름>_ground
   h  볏짚 더미 (막힘)   w  곤포 볏짚 (흰 비닐, 막힘)   s  쌀 포대 더미 (막힘)
   H  창고 (막힘, 칸 덩어리 하나가 창고 한 채)   F  철망 울타리 (막힘)
   도마리 (나무꾼 벌목터): G 장작 쌓인 비닐하우스 (막힘, 칸 덩어리 하나가 한 동)   l 장작더미 (막힘)   u 그루터기 (막힘)
+  번천 (산 속 삼거리, 밤): a 아스팔트 도로   g 가드레일 (막힘)   L 가로등 (막힘, 불빛은 게임이 그림)
+     P 버스 정류장 (막힘, 칸 덩어리 하나가 한 채)
 
 실행: python3 tools/make_hunt_maps.py [지도.txt ...] [--out 폴더]  (Pillow, numpy 필요)
 """
@@ -31,7 +33,7 @@ ROOT = os.path.join(os.path.dirname(__file__), "..")
 T = 24
 tiles = np.array(Image.open(os.path.join(ROOT, "assets/tiles/farm_tiles.png")).convert("RGB")).astype(float)
 ## 구역 풀빛 (Config.HUNT_ZONES ground_tint 와 같게). 파일 이름 앞부분으로 고른다.
-GRASS_TINTS = {"geumsa": np.array([0.9, 0.86, 0.72]), "nonghyup": np.array([0.82, 0.9, 0.8]), "gwangdong": np.array([0.92, 0.88, 0.74]), "doma": np.array([0.78, 0.86, 0.7])}
+GRASS_TINTS = {"geumsa": np.array([0.9, 0.86, 0.72]), "nonghyup": np.array([0.82, 0.9, 0.8]), "gwangdong": np.array([0.92, 0.88, 0.74]), "doma": np.array([0.78, 0.86, 0.7]), "bunjeon": np.array([0.6, 0.72, 0.74])}
 
 PATH_D = np.array((188, 162, 124)); PATH_DD = np.array((160, 134, 104))
 WET = np.array((176, 150, 116))
@@ -54,11 +56,13 @@ ROOF = np.array((138, 156, 176)); ROOF_D = np.array((112, 128, 150)); ROOF_L = n
 WALL = np.array((232, 224, 204)); WALL_D = np.array((196, 186, 164)); DOOR = np.array((116, 104, 100)); DOOR_L = np.array((140, 128, 122))
 PLANK = np.array((176, 136, 94)); PLANK_D = np.array((136, 100, 70))
 POST = np.array((120, 120, 126)); MESH = np.array((150, 152, 160))
+ASPH = np.array((84, 88, 96)); ASPH_D = np.array((64, 66, 74)); LANE = np.array((222, 190, 86))
+RAIL = np.array((196, 200, 206)); RAIL_D = np.array((120, 124, 132))
 
-GRASS, SAND, DEEP, FORD, PADDY_K, STUB_K, FIELD_K, CONC_K, MAT_K = range(9)
+GRASS, SAND, DEEP, FORD, PADDY_K, STUB_K, FIELD_K, CONC_K, MAT_K, ROAD_K = range(10)
 BASE = {".": GRASS, "T": GRASS, "J": GRASS, ",": SAND, "S": SAND, "E": SAND, "N": SAND, "W": SAND,
         "~": DEEP, "o": DEEP, "b": DEEP, "=": FORD,
-        "p": PADDY_K, "x": STUB_K, "r": FIELD_K, "%": CONC_K, "H": CONC_K, "m": MAT_K}
+        "p": PADDY_K, "x": STUB_K, "r": FIELD_K, "%": CONC_K, "H": CONC_K, "m": MAT_K, "a": ROAD_K}
 
 
 def noise(w, h, cell, seed):
@@ -124,7 +128,7 @@ def rect(img, x0, y0, x1, y1, col, blend=1.0):
     h, w = img.shape[:2]
     x0, y0, x1, y1 = max(0, int(x0)), max(0, int(y0)), min(w, int(x1)), min(h, int(y1))
     if x1 > x0 and y1 > y0:
-        img[y0:y1, x0:x1] = img[y0:y1, x0:x1] * (1 - blend) + col * blend
+        img[y0:y1, x0:x1] = img[y0:y1, x0:x1] * (1 - blend) + np.asarray(col) * blend
 
 
 def bridge(img, x, y, grid):
@@ -248,7 +252,9 @@ def render(path):
     for y in range(ch):
         for x in range(cw):
             k = grid[y, x]
-            if k in BASE:
+            if k in "SEW" and os.path.basename(path).startswith("bunjeon"):
+                base[y, x] = ROAD_K
+            elif k in BASE:
                 base[y, x] = BASE[k]
             else:
                 # 바위·덤불·몬스터 자리는 이웃 중 많은 쪽 바닥 위에 (물·다리는 빼고)
@@ -265,6 +271,10 @@ def render(path):
     sx = np.clip(((xx + nx) // T).astype(int), 0, cw - 1)
     sy = np.clip(((yy + ny) // T).astype(int), 0, ch - 1)
     kind = base[sy, sx]
+    # 도로는 곧게 (흔들지 않음)
+    true_kind = base[np.clip(yy // T, 0, ch - 1), np.clip(xx // T, 0, cw - 1)]
+    straight = (true_kind == ROAD_K) | (kind == ROAD_K)
+    kind[straight] = true_kind[straight]
 
     def grass_pick(tx, ty):
         return [0, 0, 0, 1, 1, 2, 3][abs((tx * 73856093) ^ (ty * 19349663)) % 7]
@@ -282,6 +292,20 @@ def render(path):
     img[field] = FIELD
     img[field & stripe] = FIELD_D
     img[field & ((yy % 12) == 5) & ((xx % 8) < 3)] = LEAF
+    # 번천 도로: 아스팔트 + 가장자리 어두운 띠 + 가운데 노란 점선 (폭 3칸 도로의 가운데 줄)
+    road = kind == ROAD_K
+    img[road] = ASPH * (0.92 + 0.12 * fine[road, None])
+    img[road & ~(shift(road, 3, 0) & shift(road, -3, 0) & shift(road, 0, 3) & shift(road, 0, -3))] = ASPH_D
+    rc = np.pad(base == ROAD_K, 2)
+    for y in range(ch):
+        for x in range(cw):
+            X, Y, py, px = x * T, y * T, y + 2, x + 2
+            if not rc[py, px]:
+                continue
+            if rc[py - 1, px] and rc[py + 1, px] and not rc[py - 2, px] and not rc[py + 2, px] and x % 2 == 0:
+                img[Y + 11:Y + 13, X + 3:X + 21] = LANE
+            if rc[py, px - 1] and rc[py, px + 1] and not rc[py, px - 2] and not rc[py, px + 2] and y % 2 == 0:
+                img[Y + 3:Y + 21, X + 11:X + 13] = LANE
     stub = kind == STUB_K
     img[stub] = STUB * (0.95 + 0.08 * fine[stub, None])
     img[stub & ((yy % 6) < 2) & (((xx + (yy // 6) * 3) % 5) == 0)] = STUB_D
@@ -360,8 +384,14 @@ def render(path):
                 log_pile(img, cx, cy)
             elif k == "u":
                 tree_stump(img, cx, cy)
+            elif k == "g":
+                guardrail(img, x, y, grid)
+            elif k == "L":
+                lamp_base(img, cx, cy)
     for box in blocks(grid, "G"):
         vinyl_house(img, *box)
+    for box in blocks(grid, "P"):
+        bus_stop(img, *box)
     for box in blocks(grid, "H"):
         warehouse(img, *box)
     out = os.path.join(OUT or os.path.join(ROOT, "assets", "hunt"), name + "_ground.png")
@@ -412,6 +442,39 @@ def tree_stump(img, cx, cy):
         for xx in range(-6, 7):
             if (xx / 6) ** 2 + (yy / 3) ** 2 <= 1:
                 img[cy + yy, cx + xx] = (222, 196, 150) if (xx / 6) ** 2 + (yy / 3) ** 2 > 0.3 else (186, 150, 108)
+
+
+def guardrail(img, x, y, grid):
+    """번천: 도로 가 가드레일 (가로로 이어짐, 기둥 두 개)."""
+    X, Y = x * T, y * T
+    rect(img, X, Y + 15, X + T, Y + 19, SHADOW, 0.25)
+    for px in (X + 4, X + 16):
+        rect(img, px, Y + 8, px + 3, Y + 18, RAIL_D)
+    rect(img, X, Y + 7, X + T, Y + 12, RAIL)
+    rect(img, X, Y + 9, X + T, Y + 10, RAIL_D)
+
+
+def lamp_base(img, cx, cy):
+    """번천: 가로등 밑동 (기둥 · 불빛은 게임이 그린다)."""
+    ellipse(img, cx + 2, cy + 6, 8, 3, SHADOW, 0.3)
+    rect(img, cx - 4, cy + 1, cx + 4, cy + 6, POST)
+    rect(img, cx - 2, cy - 2, cx + 2, cy + 2, RAIL_D)
+
+
+def bus_stop(img, x0, y0, x1, y1):
+    """번천: 산골 버스 정류장 (칸 덩어리 하나 = 한 채). 위는 파란 지붕, 아래는 뒷벽 · 긴 의자."""
+    X0, Y0, X1, Y1 = x0 * T, y0 * T, x1 * T, y1 * T
+    rect(img, X0 + 4, Y1 - 2, X1 + 6, Y1 + 5, SHADOW, 0.3)
+    wall = Y1 - 22
+    rect(img, X0, Y0 + 4, X1, wall, (70, 110, 160))
+    rect(img, X0, Y0 + 4, X1, Y0 + 8, (110, 150, 196))
+    rect(img, X0 - 2, wall - 3, X1 + 2, wall + 1, (50, 80, 120))
+    rect(img, X0 + 2, wall + 1, X1 - 2, Y1, (150, 170, 180))
+    rect(img, X0 + 4, wall + 3, X1 - 4, Y1 - 10, (110, 136, 150))
+    rect(img, X0 + 6, Y1 - 9, X1 - 6, Y1 - 5, PLANK)
+    rect(img, X0 + 6, Y1 - 5, X1 - 6, Y1 - 4, PLANK_D)
+    rect(img, X0, wall + 1, X0 + 2, Y1, POST)
+    rect(img, X1 - 2, wall + 1, X1, Y1, POST)
 
 
 args = sys.argv[1:]

@@ -9,6 +9,9 @@
   forge_ruin.png 72 x 56  무너진 대장간 터, 3x2칸. 2026-09-29 임시 그림
   forge.png      72 x 76  고친 대장간 (벽돌 · 함석지붕 · 화덕 · 모루), 3x2칸
   scrap_pile.png 40 x 26  고물 더미 (녹슨 경운기 바퀴 · 삽 · 파이프), 2x1칸
+  yak_ruin.png   72 x 56  무너진 약방 터 (기와 지붕이 내려앉음), 3x2칸. 2026-09-29 임시 그림
+  yak.png        72 x 64  고친 약방 (기와지붕 · 약장 서랍 · 간판 · 약탕기 연기), 3x2칸
+  herb_bed.png   24 x 20  약방 옆 도라지밭 (작은 이랑), 1x1칸
 그림 맨 아래 줄이 차지하는 칸의 아래 끝(땅). 발밑 그림자는 넣지 않는다 (게임이 그림).
 
 실행: python3 tools/make_village_props.py  (Pillow 필요)
@@ -326,6 +329,85 @@ def scrap_pile():
     return c.img
 
 
+def _yak_draw(ruin, h):
+    img = Image.new("RGBA", (72, h), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    o = h - 64
+
+    def R(x0, y0, x1, y1, col):
+        d.rectangle([x0, y0 + o, x1 - 1, y1 - 1 + o], fill=col)
+
+    roof, roof_d, roof_l = (84, 88, 104), (60, 62, 76), (120, 126, 146)
+    wall, wall_d, wood, wood_d = (236, 226, 204), (200, 186, 160), (150, 104, 70), (110, 74, 50)
+    paper = (246, 238, 214)
+    R(6, 30, 66, 64, wall)
+    R(6, 60, 66, 64, wall_d)
+    for x in (6, 26, 46, 64):
+        R(x, 30, x + 2, 64, wood)
+    if not ruin:
+        # 약장 (서랍)이 보이는 열린 앞
+        R(28, 34, 46, 62, wood_d)
+        for yy in range(36, 60, 5):
+            for xx in range(29, 45, 5):
+                R(xx, yy, xx + 4, yy + 4, wood)
+                d.point((xx + 2, yy + 2 + o), fill=(230, 200, 120))
+        R(10, 36, 24, 52, paper)
+        R(48, 36, 62, 52, paper)
+        for xx in (17, 55):
+            R(xx, 36, xx + 1, 52, wood)
+        d.polygon([(0, 32 + o), (72, 32 + o), (62, 12 + o), (10, 12 + o)], fill=roof)
+        for x in range(2, 72, 5):
+            R(x, 14, x + 2, 32, roof_d)
+        R(0, 30, 72, 33, roof_d)
+        R(8, 10, 64, 13, roof_l)
+        # 간판 (붉은 글씨 자리)
+        R(26, 18, 46, 27, (60, 40, 30))
+        R(27, 19, 45, 26, (220, 190, 110))
+        R(30, 21, 33, 24, (170, 50, 40))
+        R(35, 21, 38, 24, (170, 50, 40))
+        R(40, 21, 42, 24, (170, 50, 40))
+        # 약탕기 + 김
+        R(64, 54, 70, 62, (90, 70, 60))
+        for x, y in ((66, 50), (68, 46), (66, 42)):
+            R(x, y, x + 2, y + 2, (220, 220, 220))
+    else:
+        # 내려앉은 기와 지붕 · 깨진 기와 · 잡초 · 쓰러진 간판
+        d.polygon([(0, 40 + o), (40, 26 + o), (56, 24 + o), (72, 40 + o)], fill=roof_d)
+        for x in range(4, 70, 6):
+            R(x, 34, x + 3, 40, roof)
+        R(30, 40, 50, 62, (90, 76, 60))
+        for x, y in ((8, 58), (20, 60), (50, 59), (60, 57), (14, 54)):
+            R(x, y, x + 5, y + 3, roof_l)
+        for x in range(4, 70, 7):
+            R(x, 58, x + 1, 64, (96, 150, 84))
+        R(52, 46, 64, 52, (160, 140, 120))
+        R(4, 46, 10, 62, wood_d)
+    return img
+
+
+def yak_ruin():
+    """무너진 약방 터 (3x2칸): 2막 대장(도마리 장승 한 쌍)을 처음 잡으면 다음 날 나타남."""
+    return _yak_draw(True, 56)
+
+
+def yak():
+    """고친 약방 (3x2칸): 기와지붕 · 약장 서랍 · 간판 · 옆에 약탕기."""
+    return _yak_draw(False, 64)
+
+
+def herb_bed():
+    """약방 옆 도라지밭 (1x1칸): 흙 이랑에 도라지 싹과 보라 꽃."""
+    img = Image.new("RGBA", (24, 20), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    d.rectangle([1, 6, 22, 19], fill=(150, 108, 76))
+    for y in (8, 13, 18):
+        d.rectangle([2, y, 21, y], fill=(120, 84, 60))
+    for x, y in ((5, 6), (12, 4), (19, 6), (8, 11), (16, 11)):
+        d.rectangle([x, y, x, y + 3], fill=(90, 150, 80))
+        d.rectangle([x - 1, y - 1, x + 1, y], fill=(150, 120, 210))
+    return img
+
+
 PROPS = {
     "incubator": incubator_b,
     "supply_box": supply_b,
@@ -334,6 +416,9 @@ PROPS = {
     "forge_ruin": forge_ruin,
     "forge": forge,
     "scrap_pile": scrap_pile,
+    "yak_ruin": yak_ruin,
+    "yak": yak,
+    "herb_bed": herb_bed,
 }
 
 
