@@ -53,6 +53,11 @@ var smith: Character
 ## 대장간 (터 → 고친 대장간)과 고물 더미. 나타나기 전에는 null.
 var forge: Prop
 var scrap_heap: Prop
+## 연금술사 (2026-09-29 약방 복구): 넷째 캐릭터. 약방을 고치면 나타나고 Tab 으로 바꾼다.
+var alchemist: Character
+## 약방 (터 → 고친 약방)과 도라지밭. 나타나기 전에는 null.
+var yak: Prop
+var herb_bed: Prop
 var incubator: Prop
 var supply_box: Prop
 var hunt_gate: Prop
@@ -120,6 +125,8 @@ func _ready() -> void:
 	hunter = _add_character("사냥꾼", preload("res://assets/characters/hunter.png"), Vector2i(20, 6), &"hunter")
 	smith = _add_character("대장장이", preload("res://assets/characters/smith.png"), Config.SMITH_CELL, &"smith")
 	smith.visible = false
+	alchemist = _add_character("연금술사", preload("res://assets/characters/alchemist.png"), Config.ALCHEMIST_CELL, &"alchemist")
+	alchemist.visible = false
 	_set_active(farmer)
 
 	_build_hud()
@@ -194,7 +201,7 @@ func update_fading() -> void:
 			continue
 		var pic := Rect2(p.picture_rect().position + p.position, p.picture_rect().size)
 		var hidden := false
-		for c: Character in [farmer, hunter, smith]:
+		for c: Character in [farmer, hunter, smith, alchemist]:
 			if not c.visible:
 				continue
 			hidden = hidden or (c.sort_y() < p.sort_y() and pic.intersects(Rect2(c.position + Vector2(-8, -30), Vector2(16, 40))))
@@ -274,9 +281,13 @@ func switch_character() -> void:
 	var order: Array[Character] = [farmer, hunter]
 	if GameState.forge_state >= 2:
 		order.append(smith)
+	if GameState.yak_state >= 2:
+		order.append(alchemist)
 	_set_active(order[(order.find(active) + 1) % order.size()])
 	if active == smith:
 		GameState.notify("대장장이로 전환했다. 대장간 모루에서 F로 장비를 만든다.")
+	elif active == alchemist:
+		GameState.notify("연금술사로 전환했다. 약방에서 F로 물약 · 크리처 보약을 만든다.")
 	else:
 		GameState.notify("%s(으)로 전환했다." % active.display_name)
 
@@ -341,12 +352,18 @@ func interact() -> void:
 		return
 	if forge and _near(forge) and _carried_creature() == null:
 		_forge_interact()
+	elif yak and _near(yak) and _carried_creature() == null:
+		_yak_interact()
 	elif scrap_heap and _near(scrap_heap) and _carried_creature() == null and active != hunter:
 		pick_scrap()
+	elif herb_bed and _near(herb_bed) and _carried_creature() == null and active != hunter:
+		pick_herb_bed()
 	elif active == farmer:
 		_farmer_interact()
 	elif active == hunter:
 		_hunter_interact()
+	elif active == alchemist:
+		GameState.notify("연금술사는 약방에서 F로 물약 · 크리처 보약을 만든다. 도라지는 도라지밭에서 F로 캐거나 크리처에게 맡긴다.")
 	else:
 		GameState.notify("대장장이는 대장간 모루에서 F로 장비를 만든다. 고철은 고물 더미에서 F로 줍거나 크리처에게 맡긴다.")
 	_refresh_props()
@@ -399,7 +416,10 @@ func _hunter_interact() -> void:
 		open_inventory(true)
 	elif _near(supply_box):
 		var has_gear := Wearables.rolled_in_bag(&"hunter") > 0
-		if GameState.hunter_eggs.is_empty() and GameState.junk <= 0:
+		# 약방을 고친 뒤로는 잡템을 JUNK_KEEP 개까지 연금술사 재료로 남기고 나머지만 판다
+		var keep := Config.JUNK_KEEP if GameState.yak_state >= 2 else 0
+		var sell := maxi(GameState.junk - keep, 0)
+		if GameState.hunter_eggs.is_empty() and sell <= 0:
 			if has_gear:
 				open_menu()
 			else:
@@ -410,12 +430,12 @@ func _hunter_interact() -> void:
 			GameState.village_eggs.append_array(GameState.hunter_eggs)
 			GameState.hunter_eggs.clear()
 			parts.append("마을 공급함에 알을 넣었다. 농부가 받아 갈 수 있다.")
-		if GameState.junk > 0:
-			# 사냥터 잡템(슬라임 젤리)은 공급함에 두면 바로 값이 나온다 (제작 소재가 아님)
-			var earned := GameState.junk * Config.JUNK_PRICE
-			parts.append("사냥 잡템 (젤리 · 껍데기 · 깃털 · 옹이) %d개를 팔았다. +%d원" % [GameState.junk, earned])
+		if sell > 0:
+			# 사냥터 잡템(슬라임 젤리)은 공급함에 두면 바로 값이 나온다 (약방을 고치기 전엔 제작 소재가 아님)
+			var earned := sell * Config.JUNK_PRICE
+			parts.append("사냥 잡템 (젤리 · 껍데기 · 깃털 · 옹이 · 불씨) %d개를 팔았다. +%d원%s" % [sell, earned, (" (약방 재료로 %d개 남김)" % keep) if keep > 0 else ""])
 			GameState.money += earned
-			GameState.junk = 0
+			GameState.junk -= sell
 		GameState.notify(" ".join(parts))
 		# 가방에 사냥터 등급 장비가 있으면 장비 팔기 선택창도 연다 (2026-09-28 사용자 선택 A)
 		if has_gear:
@@ -468,12 +488,23 @@ func enter_hunt(companion: Creature = null, zone := 0) -> bool:
 	hunter.farm = null
 	hunt.start(hunter, zone)
 	_pending_zone = 0
+	# 연금술사 물약 (2026-09-29): 힘 · 빠르기 물약은 사냥에 들어갈 때 하나씩 마신다
+	var drank: Array[String] = []
+	if GameState.strength > 0:
+		GameState.strength -= 1
+		hunt.strong = true
+		drank.append("힘 물약")
+	if GameState.speed > 0:
+		GameState.speed -= 1
+		hunt.quick = true
+		drank.append("빠르기 물약")
 	hunt.knocked_out.connect(leave_hunt)
+	var drank_text := (" %s을(를) 마셨다." % " · ".join(drank)) if not drank.is_empty() else ""
 	if companion:
 		_companion_source = companion
 		companion.process_mode = Node.PROCESS_MODE_DISABLED
 		var c := hunt.add_companion(companion)
-		GameState.notify("%s과(와) 사냥터에 들어왔다. 클릭(또는 Space)으로 휘두르면 %s도 알아서 돕는다!" % [c.display_name(), c.display_name()])
+		GameState.notify("%s과(와) 사냥터에 들어왔다. 클릭(또는 Space)으로 휘두르면 %s도 알아서 돕는다!%s" % [c.display_name(), c.display_name(), drank_text])
 		return true
 	if zone > 0:
 		GameState.notify("%s 웨이포인트에서 사냥을 시작했다. 클릭(또는 Space)으로 휘두른다!" % Config.HUNT_ZONES[zone].name)
@@ -627,6 +658,20 @@ func menu_confirm() -> void:
 		_pending_zone = String(id).trim_prefix("zone_").to_int()
 		_open_companion_or_enter()
 		return
+	if menu_kind == &"yak" or menu_kind == &"brew":
+		if id == &"close":
+			close_menu()
+			return
+		if id == &"restore":
+			if restore_yak():
+				close_menu()
+				return
+		elif id == &"feed_tonic":
+			feed_tonic()
+		else:
+			brew(id)
+		_rebuild_menu()
+		return
 	if menu_kind == &"forge" or menu_kind == &"craft":
 		if id == &"close":
 			close_menu()
@@ -766,8 +811,8 @@ func buy_wear(id: StringName) -> bool:
 ## 가방 창을 연다. stash 면 창고 칸도 옆에 붙인다 (마을 창고 궤짝에서 F).
 ## sell 이면 공급함 장비 팔기 창 (가방 칸 클릭 = 팔기).
 func open_inventory(stash := false, sell := false) -> void:
-	if active == smith:
-		GameState.notify("대장장이는 가방이 없다. 만든 장비는 입을 사람(농부 · 사냥꾼)에게 바로 간다.")
+	if active == smith or active == alchemist:
+		GameState.notify("%s는 가방이 없다. 가방은 농부 · 사냥꾼만 든다." % active.display_name)
 		return
 	close_menu()
 	active.frozen = true
@@ -936,6 +981,162 @@ func craft(base: StringName) -> StringName:
 	return id
 
 
+# --- 약방 복구 · 연금술사 (2026-09-29 사용자 선택: 한 번에 복구 + 물약 · 크리처 보약) ---
+
+## 아침에 약방 쪽에서 생긴 일 (아침 카드 한 줄, 없으면 ""). 2막 대장을 처음 잡은 다음 날 터가 드러나고,
+## 고친 뒤로는 도라지밭에 도라지가 다시 돋는다.
+func _yak_morning() -> String:
+	if GameState.yak_state == 0 and GameState.yak_boss_down:
+		show_yak_site()
+		return "장승이 쓰러진 뒤, 당산나무 옆에 무너진 약방 터가 드러났다. 터에서 F. 이제 캔 도라지는 팔지 않고 약방에 모은다."
+	if GameState.yak_state >= 2:
+		GameState.herb_bed = Config.HERB_BED_PER_DAY
+	return ""
+
+
+## 무너진 약방 터를 마을에 놓는다. 그 자리의 들나물 · 도라지 자리는 쓰지 않는다.
+func show_yak_site() -> void:
+	GameState.yak_state = maxi(GameState.yak_state, 1)
+	if yak == null:
+		yak = _add_prop("약방 터", preload("res://assets/props/yak_ruin.png"), Config.YAK_RECT)
+		yak.badge_side = true
+		forage.block(Config.YAK_RECT)
+		forage.block(Config.HERB_BED_RECT)
+	_refresh_props()
+
+
+## 복구에 드는 것: [이름, 가진 것, 필요한 것]
+func yak_costs() -> Array:
+	return [
+		["돈", GameState.money, Config.YAK_COST_MONEY],
+		[Config.ROOT_NAME + " (땅 크리처 채집)", GameState.roots, Config.YAK_COST_ROOTS],
+		[Config.BOSS_MATERIAL2_NAME + " (도마리 장승)", GameState.material2, Config.YAK_COST_MATERIAL],
+	]
+
+
+func can_restore_yak() -> bool:
+	return GameState.yak_state == 1 and yak_costs().all(func(c: Array) -> bool: return c[1] >= c[2])
+
+
+func yak_cost_lines() -> Array[String]:
+	var out: Array[String] = []
+	for c: Array in yak_costs():
+		out.append("  %s  %d / %d %s" % [c[0], mini(c[1], c[2]), c[2], "✔" if c[1] >= c[2] else ""])
+	out.append("다 모으면 한 번에 고친다 → 연금술사 (Tab) · 호롱")
+	return out
+
+
+func yak_options() -> Array[StringName]:
+	return [&"restore", &"close"]
+
+
+func brew_options() -> Array[StringName]:
+	var out: Array[StringName] = []
+	out.assign(Config.BREWS.keys())
+	if GameState.tonics > 0 and GameState.tonic_day != GameState.day:
+		out.append(&"feed_tonic")
+	out.append(&"close")
+	return out
+
+
+const BREW_COST_NAMES := {herbs = "나물", roots = Config.ROOT_NAME, junk = "잡템", crops = "무"}
+
+
+func brew_option_text(id: StringName) -> String:
+	match id:
+		&"restore":
+			return "고치기" if can_restore_yak() else "고치기 (아직 모자람)"
+		&"close":
+			return "닫기"
+		&"feed_tonic":
+			return "크리처 보약 먹이기 (오늘 모든 크리처 x2, 남은 보약 %d)" % GameState.tonics
+	var b: Dictionary = Config.BREWS[id]
+	var cost: Array[String] = []
+	for k: String in b.cost:
+		cost.append("%s %d" % [BREW_COST_NAMES[k], b.cost[k]])
+	return "%s   %s   (%s)" % [b.name, " · ".join(cost), b.effect]
+
+
+## 약방 터 · 약방에서 F. 터면 복구 창, 고친 약방이면 연금술사만 제작 창.
+func _yak_interact() -> void:
+	if GameState.yak_state == 1:
+		open_menu(&"yak")
+	elif active == alchemist:
+		open_menu(&"brew")
+	else:
+		GameState.notify("약방이다. Tab으로 연금술사를 골라 F로 물약 · 크리처 보약을 만든다.")
+
+
+## 한 번에 고친다 (선택창과 테스트가 함께 쓴다). 모자라면 무엇이 모자란지 알린다.
+func restore_yak() -> bool:
+	if GameState.yak_state != 1:
+		return false
+	if not can_restore_yak():
+		var short: Array[String] = []
+		for c: Array in yak_costs():
+			if c[1] < c[2]:
+				short.append("%s %d" % [String(c[0]).split(" ")[0], c[2] - c[1]])
+		GameState.notify("아직 모자라다: %s." % ", ".join(short))
+		return false
+	GameState.money -= Config.YAK_COST_MONEY
+	GameState.roots -= Config.YAK_COST_ROOTS
+	GameState.material2 -= Config.YAK_COST_MATERIAL
+	GameState.yak_state = 2
+	yak.label = "약방"
+	yak.texture = preload("res://assets/props/yak.png")
+	yak.queue_redraw()
+	herb_bed = _add_prop("도라지밭", preload("res://assets/props/herb_bed.png"), Config.HERB_BED_RECT)
+	GameState.herb_bed = Config.HERB_BED_PER_DAY
+	alchemist.visible = true
+	alchemist.position = Farm.center_of(Config.ALCHEMIST_CELL)
+	_refresh_props()
+	GameState.notify("약방을 고쳤다! 연금술사가 왔다 (Tab). 약방에서 물약 · 크리처 보약을 만든다. 도라지밭 가꾸기(R)도 맡길 수 있다. 연금술사가 호롱을 만들어 줘서 이제 도마리 윗길 너머 번천으로 갈 수 있다.")
+	return true
+
+
+## 도라지밭에서 손으로 도라지 하나 (농부 · 연금술사)
+func pick_herb_bed() -> bool:
+	if GameState.herb_bed <= 0:
+		GameState.notify("도라지밭이 비었다. 내일 아침 다시 돋는다.")
+		return false
+	GameState.herb_bed -= 1
+	GameState.roots += 1
+	GameState.notify("도라지를 하나 캤다 (%s %d). 크리처에게 도라지밭(R)을 맡기면 알아서 캔다." % [Config.ROOT_NAME, GameState.roots])
+	return true
+
+
+## 연금술사가 id 를 한 번 만든다. 만들었으면 true.
+func brew(id: StringName) -> bool:
+	if not Config.BREWS.has(id):
+		return false
+	var b: Dictionary = Config.BREWS[id]
+	var short: Array[String] = []
+	for k: String in b.cost:
+		if GameState.get(k) < b.cost[k]:
+			short.append("%s %d" % [BREW_COST_NAMES[k], b.cost[k] - GameState.get(k)])
+	if not short.is_empty():
+		GameState.notify("모자라다: %s." % ", ".join(short))
+		return false
+	for k: String in b.cost:
+		GameState.set(k, GameState.get(k) - b.cost[k])
+	var field: String = {&"potion": "potions", &"lamp_oil": "lamp_oil", &"strength": "strength", &"speed": "speed", &"tonic": "tonics"}[id]
+	GameState.set(field, GameState.get(field) + b.count)
+	GameState.notify("%s을(를) %s 만들었다! %s" % [b.name, "두 병" if b.count == 2 else "하나", b.effect])
+	return true
+
+
+## 크리처 보약을 먹인다: 오늘 하루 모든 크리처 일 속도 두 배
+func feed_tonic() -> bool:
+	if GameState.tonics <= 0 or GameState.tonic_day == GameState.day:
+		return false
+	GameState.tonics -= 1
+	GameState.tonic_day = GameState.day
+	for c in creatures:
+		c._reset_timer()
+	GameState.notify("크리처들에게 보약을 먹였다! 오늘 하루 모두 두 배 빠르다 (남은 보약 %d)." % GameState.tonics)
+	return true
+
+
 # --- 크리처 훈련 (2026-09-29 사용자 선택 A, 돈 쓸 곳 2단계) ---------------
 
 const TRAIN_STATS: Array[StringName] = [&"radius", &"speed"]
@@ -1066,9 +1267,12 @@ func _rebuild_menu() -> void:
 	var waypoint := menu_kind == &"waypoint"
 	var training := menu_kind == &"train"
 	var forging := menu_kind == &"forge" or menu_kind == &"craft"
+	var brewing := menu_kind == &"yak" or menu_kind == &"brew"
 	var starting := menu_kind == &"start"
 	if starting:
 		_menu_options = TestStarts.ids()
+	elif brewing:
+		_menu_options = yak_options() if menu_kind == &"yak" else brew_options()
 	elif forging:
 		_menu_options = forge_options() if menu_kind == &"forge" else craft_options()
 	elif training:
@@ -1085,6 +1289,10 @@ func _rebuild_menu() -> void:
 		head = "무너진 대장간 터"
 	elif menu_kind == &"craft":
 		head = "대장간 모루   고철 %d · 돈 %d원" % [GameState.scrap, GameState.money]
+	elif menu_kind == &"yak":
+		head = "무너진 약방 터"
+	elif menu_kind == &"brew":
+		head = "약방   나물 %d · %s %d · 잡템 %d · 무 %d" % [GameState.herbs, Config.ROOT_NAME, GameState.roots, GameState.junk, GameState.crops]
 	var lines: Array[String] = [head]
 	# 항목이 많으면 고른 줄 둘레만 보인다 (화면 밖으로 나가지 않게)
 	var first := clampi(menu_index - MENU_VISIBLE_ROWS / 2, 0, maxi(0, _menu_options.size() - MENU_VISIBLE_ROWS))
@@ -1100,6 +1308,8 @@ func _rebuild_menu() -> void:
 			text = train_option_text(o)
 		elif forging:
 			text = forge_option_text(o)
+		elif brewing:
+			text = brew_option_text(o)
 		else:
 			text = companion_option_text(o) if companion else (waypoint_option_text(o) if waypoint else supply_option_text(o))
 		lines.append(("▶ " if i == menu_index else "   ") + text)
@@ -1109,6 +1319,11 @@ func _rebuild_menu() -> void:
 		lines.append("크리처마다 따로 · 단계마다 값 두 배 (%s원)" % " → ".join(Config.TRAIN_PRICES.map(func(p: int) -> String: return str(p))))
 	if menu_kind == &"forge":
 		lines.append_array(forge_cost_lines())
+	elif menu_kind == &"yak":
+		lines.append_array(yak_cost_lines())
+	elif menu_kind == &"brew":
+		lines.append("가진 것: 빨간 물약 %d · 호롱 기름 %d · 힘 %d · 빠르기 %d · 보약 %d" % [GameState.potions, GameState.lamp_oil, GameState.strength, GameState.speed, GameState.tonics])
+		lines.append("힘 · 빠르기 물약은 다음 사냥에 들어갈 때 하나씩 마신다")
 	elif menu_kind == &"craft":
 		lines.append("만들 때마다 옵션 1~3개가 무작위로 붙는다 (디아블로2 제작처럼)")
 		lines.append("만든 장비는 칸이 비었으면 바로 입고, 아니면 그 사람 가방으로")
@@ -1125,6 +1340,8 @@ func _rebuild_menu() -> void:
 	var at := (hunt_gate.position + Vector2(-200, 8)) if companion or waypoint else supply_box.position + Vector2(36, -80)
 	if forging:
 		at = forge.position + Vector2(40, -150)
+	if brewing:
+		at = yak.position + Vector2(-260, -150)
 	if starting:
 		at = (Vector2(640, 360) - _menu.size) / 2
 	_menu.position = at.clamp(Vector2(4, 32), Vector2(636, 324) - _menu.size)
@@ -1207,6 +1424,9 @@ func next_day() -> Array[String]:
 	var forge_line := _forge_morning()
 	if forge_line != "":
 		lines.append(forge_line)
+	var yak_line := _yak_morning()
+	if yak_line != "":
+		lines.append(yak_line)
 	forage.sprout(_rng)
 	var herb_line := "밭 밖 풀밭에 들나물 %d포기가 돋았다." % forage.herbs.size()
 	if forage.bonus_today > 0:
@@ -1355,6 +1575,10 @@ func _refresh_props() -> void:
 		forge.set_badge("%s %d/%d" % [Config.BOSS_MATERIAL_NAME, GameState.material, Config.FORGE_COST_MATERIAL] if GameState.forge_state == 1 else ("고철 %d" % GameState.scrap))
 	if scrap_heap:
 		scrap_heap.set_badge("고철 %d" % GameState.scrap_pile if GameState.scrap_pile > 0 else "비었음")
+	if yak:
+		yak.set_badge("%s %d/%d" % [Config.BOSS_MATERIAL2_NAME, GameState.material2, Config.YAK_COST_MATERIAL] if GameState.yak_state == 1 else ("%s %d" % [Config.ROOT_NAME, GameState.roots]))
+	if herb_bed:
+		herb_bed.set_badge("%s %d" % [Config.ROOT_NAME, GameState.herb_bed] if GameState.herb_bed > 0 else "비었음")
 
 
 func _build_hud() -> void:
@@ -1434,6 +1658,8 @@ func _refresh_hud() -> void:
 		tool_text = Wearables.item(GameState.worn[&"hunter"][&"weapon"]).name
 	if active == smith:
 		tool_text = "망치"
+	if active == alchemist:
+		tool_text = "약탕기"
 	if hunt:
 		var buddy := hunt.companion.display_name() if hunt.companion else "혼자"
 		_status.text = "%d일째 %s | %s | 도구: %s | 동행: %s | 남은 몬스터 %d | 주운 알 %d | 돈 %d원 · 잡템 %d" % [GameState.day, GameState.clock_text(GameState.minutes), Config.HUNT_ZONES[hunt.zone].name, tool_text, buddy, hunt.slimes.size(), hunt.picked.size(), GameState.money, GameState.junk]
@@ -1447,3 +1673,7 @@ func _refresh_hud() -> void:
 		_status.text += " | 고철 %d" % GameState.scrap
 	elif GameState.material > 0:
 		_status.text += " | %s %d/%d" % [Config.BOSS_MATERIAL_NAME, GameState.material, Config.FORGE_COST_MATERIAL]
+	if GameState.yak_state >= 1:
+		_status.text += " | %s %d" % [Config.ROOT_NAME, GameState.roots]
+	if GameState.yak_state == 1:
+		_status.text += " · %s %d/%d" % [Config.BOSS_MATERIAL2_NAME, GameState.material2, Config.YAK_COST_MATERIAL]

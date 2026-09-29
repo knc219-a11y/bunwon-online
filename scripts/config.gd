@@ -383,13 +383,74 @@ const HUNT_ZONES: Array[Dictionary] = [
 		## 2막 대장이라 광동리보다 한 계단 더 (임시, 봇 50일로 맞춤). boss_hp 는 장승 하나 체력 (둘이라 합은 두 배)
 		count = 10, hp = 7, speed = 1.1, boss_hp = 22,
 		damage = 2, knockback = 4.0, windup = 0.4, pack = false, boss_pattern = &"log", disguise = true,
+		## 2막 대장 재료 (2026-09-29 약방 복구): 장승 한 쌍을 쓰러뜨릴 때마다 장승 조각 하나, 처음 잡으면 다음 날 마을에 약방 터
+		boss_material2 = true,
 		advice = "권장: 하트 10 · 제작 장비",
 		loot = {&"money": 38, &"potion": 25, &"junk": 19, &"gear": 18},
 		rarity = {&"normal": 35, &"magic": 44, &"rare": 21}, boss_rarity = {&"normal": 10, &"magic": 55, &"rare": 35},
 		money = [35, 70], boss_money = [90, 150],
 		monster_tint = Color.WHITE, boss_tint = Color.WHITE, ground_tint = Color(0.78, 0.86, 0.7), tree_tint = Color(0.66, 0.8, 0.6),
 	},
+	{
+		## 3막 첫 구역 (2026-09-29 사용자: "3막 첫구역은 번천이고 삼거리이지만 주변에 산이랑 도로만있어서 다른데보다 기온이 낮고 어두워
+		## / 밤에는 버스만다니고 사람이 안다녀 / 여기는 유령타입의 몬스터를 넣자", 후보 A 도깨비불 + 유령 막차 선택).
+		## 광주시 유래: 상번천리 = 번천이라는 냇물이 흐르고 산이 울타리. 산으로 둘러싸인 T자 삼거리 · 가드레일 · 가로등 · 버스 정류장 · 번천 냇물.
+		## 밤 구역 (night): 어둡고 가로등 · 호롱 불빛만 밝다. 유령 (ghost): 불빛 밖에선 반쯤 비쳐 무기가 지나간다.
+		## 도깨비불 (wisp): 둥둥 떠다니며 벽 · 물을 지나간다. 불빛 안에서 가까이 오면 부풀어 불똥 튀기기 (원 예고), 튀긴 뒤 쪼그라든 동안이 칠 틈.
+		## 대장 유령 막차 (bus): 전조등 긴 띠 예고 → 도로 따라 돌진, 멈춰 선 동안이 칠 틈, 두 번에 한 번 문이 열려 도깨비불 승객이 내린다.
+		name = "번천", junk_name = "도깨비 불씨", monster = "도깨비불", boss_monster = "유령 막차", waypoint = true,
+		map = "bunjeon",
+		labels = [[Vector2(18, 14.6), "번천"]],
+		sheet = "res://assets/creatures/wild_will_o.png", boss_sheet = "res://assets/creatures/ghost_bus.png", burrow = false,
+		night = true, ghost = true, wisp = true,
+		## 대장 그림 크기 (막차는 32칸 시트가 아니라 96x48 한 장, 대장 배율도 쓰지 않음)
+		boss_frame = Vector2i(96, 48),
+		## 알: 3막 일반 알 = 아기 도깨비불 (새 속성 불). 대장도 가끔 같은 알.
+		egg = "res://data/creatures/species/will_o.tres", boss_egg = "res://data/creatures/species/will_o.tres",
+		egg_chance = 0.03, boss_egg_chance = 0.2,
+		## 3막이라 도마리보다 한 계단 더 (임시). 도깨비불은 불빛 안에서만 맞아서 체력은 조금 낮게.
+		count = 12, hp = 6, speed = 1.2, boss_hp = 40,
+		damage = 2, knockback = 4.0, windup = 0.5, pack = false, boss_pattern = &"bus",
+		advice = "권장: 하트 11 · 호롱 기름",
+		loot = {&"money": 36, &"potion": 26, &"junk": 20, &"gear": 18},
+		rarity = {&"normal": 30, &"magic": 45, &"rare": 25}, boss_rarity = {&"normal": 5, &"magic": 55, &"rare": 40},
+		money = [40, 80], boss_money = [110, 180],
+		monster_tint = Color.WHITE, boss_tint = Color.WHITE, ground_tint = Color(0.6, 0.72, 0.74), tree_tint = Color(0.5, 0.66, 0.56),
+	},
 ]
+## 밤 구역 (2026-09-29 번천, 사용자: "주변에 산이랑 도로만있어서 다른데보다 기온이 낮고 어두워 / 밤에는 버스만다니고 사람이 안다녀").
+## 구역 데이터 night 면 화면 전체를 이 색으로 어둡게 하고, 가로등(칸 지도 L) · 사냥꾼 호롱 불빛만 밝다. 값은 전부 임시.
+const NIGHT_ZONE_COLOR := Color(0.2, 0.22, 0.36)
+## 가로등 · 호롱 불빛 반지름 (px). 이 안이 "불빛 안".
+const LAMP_LIGHT_RADIUS := 64.0
+const LANTERN_RADIUS := 44.0
+## 유령 (구역 데이터 ghost, 사용자: "여기는 유령타입의 몬스터를 넣자"): 불빛 밖에선 반쯤 비쳐 칼 · 화살 · 구슬 · 동행이 모두 지나간다.
+## 불빛(가로등 · 호롱) 안에 들어와야 맞는다. 대장은 늘 맞는다.
+const GHOST_FADE := 0.35
+## 도깨비불 (번천 wisp): 불빛 안에서 이 거리 안에 오면 부풀어 (구역 windup 초 예고) 둘레 WISP_BURST_RADIUS 에 불똥을 튀긴다.
+## 튀긴 뒤 WISP_RECOVER 초 쪼그라들어 멈춘다 (칠 틈). 도깨비불은 벽 · 물 · 가드레일을 지나 떠다닌다.
+const WISP_TRIGGER := 48.0
+const WISP_BURST_RADIUS := 40.0
+const WISP_RECOVER := 1.2
+const WISP_COOLDOWN := 1.8
+## 유령 막차 (번천 대장 bus): 사냥꾼 쪽 (가로 · 세로 중 먼 쪽 = 도로 방향) 긴 띠 예고 BUS_WINDUP 뒤 BUS_TIME 동안 BUS_LENGTH 만큼 돌진.
+## 버스에 닿으면 (띠 너비 BUS_WIDTH) 하트 -피해. 멈춰 선 BUS_RECOVER 초가 칠 틈. 두 번에 한 번 문이 열려 도깨비불 BUS_RIDERS 마리가 내린다.
+const BUS_RANGE := 260.0
+const BUS_WINDUP := 1.0
+const BUS_LENGTH := 260.0
+const BUS_TIME := 0.9
+const BUS_WIDTH := 40.0
+const BUS_COOLDOWN := 2.6
+const BUS_RECOVER := 1.8
+const BUS_RIDERS := 2
+## 막차 전조등 불빛 반지름 (px, 버스 앞)
+const BUS_LIGHT_RADIUS := 60.0
+## 호롱 기름 (연금술사, 2026-09-29 약방 A+B): 밤 구역에 들어갈 때 하나 쓰면 그 사냥 동안 호롱 불빛이 이 배율로 넓어진다
+const LAMP_OIL_MULT := 1.6
+## 아기 도깨비불 동행 (불빛 + 불씨): 둘레 COMPANION_EMBER_LIGHT 가 불빛 안이 되고, 불씨가 닿은 몬스터는 STAFF_BURN_DELAY 뒤 한 번 더 맞는다
+const COMPANION_EMBER_RANGE := 70.0
+const COMPANION_EMBER_INTERVAL := 1.8
+const COMPANION_EMBER_LIGHT := 56.0
 ## 넓은 맵의 여울(얕은 물)에서 걷기 빠르기 배율 (임시)
 const HUNT_FORD_SPEED := 0.6
 ## 넓은 맵의 물 댄 논에서 사냥꾼 걷기 빠르기 배율 (임시). 슬라임은 느려지지 않는다.
@@ -430,3 +491,37 @@ const CRAFT_COSTS := {
 	&"steel_sword": [5, 300], &"crossbow": [6, 350],
 }
 const CRAFT_AFFIX_WEIGHTS := {1: 50, 2: 35, 3: 15}
+
+## 약방 복구 · 연금술사 (2026-09-29 사용자 선택: 대장간처럼 한 번에 복구 + 연금술사 A+B "물약 · 크리처 보약"). 본편 둘째 시설. 값·자리·그림 전부 임시.
+## 2막 대장(도마리 장승 한 쌍)을 처음 쓰러뜨린 다음 날 아침, 당산나무 오른쪽 풀밭에 무너진 약방 터가 드러난다.
+## 터가 드러난 뒤로 땅 크리처가 캔 도라지는 공급함에 팔지 않고 약방에 모아 둔다 (GameState.roots).
+## 터에서 F → 돈 · 도라지 · 2막 대장 재료 장승 조각을 다 모았으면 한 번에 고친다.
+## 고치면 연금술사(넷째 캐릭터, Tab)가 오고, 호롱을 만들어 줘서 도마리 윗길 너머 캄캄한 번천으로 갈 수 있다.
+## 약방 옆에 도라지밭이 생겨 크리처에게 도라지밭 가꾸기를 맡길 수 있다 (불속성이 두 배 빠름).
+## 2막 대장 재료를 주는 구역 (Config.HUNT_ZONES 번호) = 약방 터를 여는 구역 = 번천 길이 캄캄한 구역
+const YAK_ZONE := 3
+const BOSS_MATERIAL2_NAME := "장승 조각"
+const YAK_RECT := Rect2i(15, 11, 3, 2)
+const HERB_BED_RECT := Rect2i(18, 12, 1, 1)
+## 연금술사가 처음 서는 칸 (약방 오른쪽 위, 공급함 아래)
+const ALCHEMIST_CELL := Vector2i(18, 10)
+## 복구에 드는 것 (로드맵: 약방 ≈ 4.5시간 ≈ 45일째). 장승 조각(장승 한 쌍을 잡을 때마다 1개)이 속도를 정한다.
+const YAK_COST_MONEY := 4000
+const YAK_COST_ROOTS := 20
+const YAK_COST_MATERIAL := 20
+## 약방을 고친 뒤 공급함에서 잡템을 팔 때 연금술사 재료로 남기는 수
+const JUNK_KEEP := 10
+## 도라지밭: 아침마다 이만큼 돋는다 (안 캔 것은 새로 채움). 농부가 F로 하나씩 캐도 된다.
+const HERB_BED_PER_DAY := 6
+## 연금술사 제작 (약방에서 연금술사 F). 재료: herbs 들나물 (농부가 든 것) · roots 도라지 · junk 잡템 · crops 무.
+## 만드는 것: potion 빨간 물약 · lamp_oil 호롱 기름 (밤 구역 불빛 x LAMP_OIL_MULT) · strength 힘 물약 (다음 사냥 한 번 공격 피해 +1)
+## · speed 빠르기 물약 (다음 사냥 한 번 걸음 x SPEED_POTION_MULT) · tonic 크리처 보약 (먹인 날 모든 크리처 일 속도 x TONIC_SPEED_MULT)
+const BREWS := {
+	&"potion": {name = "빨간 물약", count = 2, cost = {herbs = 2, junk = 1}, effect = "하트 +1 (1 키), 두 병"},
+	&"lamp_oil": {name = "호롱 기름", count = 1, cost = {roots = 2}, effect = "밤 구역 호롱 불빛이 넓어짐 (들어갈 때 하나)"},
+	&"strength": {name = "힘 물약", count = 1, cost = {roots = 3, junk = 1}, effect = "다음 사냥 한 번 공격 피해 +1"},
+	&"speed": {name = "빠르기 물약", count = 1, cost = {herbs = 2, junk = 1}, effect = "다음 사냥 한 번 걸음 +25%"},
+	&"tonic": {name = "크리처 보약", count = 1, cost = {crops = 5, roots = 2}, effect = "먹인 날 모든 크리처 일 속도 x2"},
+}
+const SPEED_POTION_MULT := 1.25
+const TONIC_SPEED_MULT := 2.0

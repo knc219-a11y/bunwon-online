@@ -17,6 +17,9 @@ const FORAGE := &"forage"
 ## 고철 줍기 (2026-09-29 대장간 복구 A): 대장간을 고치면 생기는 고물 더미에서 고철을 주워 대장장이에게 (Creature._scrap_once).
 ## 땅속성이 빠르다 (earth.tres job_aptitude). 대장간을 고친 뒤에만 R 목록에 나온다.
 const SCRAP := &"scrap"
+## 도라지밭 가꾸기 (2026-09-29 약방 복구): 약방을 고치면 생기는 도라지밭에서 도라지를 캐 약방에 둔다 (Creature._herb_once).
+## 불속성(아기 도깨비불)이 두 배 빠르다 (fire.tres job_aptitude). 약방을 고친 뒤에만 R 목록에 나온다.
+const HERB := &"herb"
 
 const NAMES := {
 	REST: "쉬는 중",
@@ -26,6 +29,7 @@ const NAMES := {
 	HARVEST: "수확",
 	FORAGE: "채집",
 	SCRAP: "고철 줍기",
+	HERB: "도라지밭",
 }
 
 ## 농장에서 R 키로 돌아가며 고르는 일
@@ -47,6 +51,8 @@ static func jobs() -> Array[StringName]:
 	var out := FARM_JOBS.duplicate()
 	if GameState.forge_state >= 2:
 		out.append(SCRAP)
+	if GameState.yak_state >= 2:
+		out.append(HERB)
 	return out
 
 

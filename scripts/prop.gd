@@ -15,6 +15,8 @@ var fade_behind := false
 var faded := false
 
 var badge := ""
+## 배지를 위 대신 오른쪽 옆에 쓴다 (약방: 위에 공급함 · 창고 이름이 있어 겹침)
+var badge_side := false
 
 
 ## 칸 묶음의 왼쪽 위 칸과 크기로 자리를 잡는다.
@@ -87,5 +89,7 @@ func _draw() -> void:
 		draw_texture(texture, Vector2(-size.x / 2, -size.y))
 		top = -size.y
 	draw_string(ThemeDB.fallback_font, Vector2(-40, 11), label, HORIZONTAL_ALIGNMENT_CENTER, 80, 9)
-	if badge != "":
+	if badge != "" and badge_side:
+		draw_string(ThemeDB.fallback_font, Vector2(half_w + 2, top / 2.0 + 4), badge, HORIZONTAL_ALIGNMENT_LEFT, -1, 9)
+	elif badge != "":
 		draw_string(ThemeDB.fallback_font, Vector2(-40, top - 3), badge, HORIZONTAL_ALIGNMENT_CENTER, 80, 9)

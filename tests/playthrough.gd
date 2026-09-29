@@ -73,6 +73,19 @@ const KITE_DISTANCE := 64.0
 ## 첫 무기를 든 날, 사냥에서 쏜 수
 var weapon_day := -1
 var shots_fired := 0
+## 약방 · 번천 (2026-09-29, 3막): 약방 터 · 복구한 날, 번천 첫 도착 · 사냥 수 · 맞은 횟수 · 쓰러짐, 도라지밭 크리처, 만든 것
+var yak_site_day := -1
+var yak_restore_day := -1
+var bun_day := -1
+var bun_hunts := 0
+var bun_hurt := 0
+var bun_knocked := 0
+var herb_creature: Creature = null
+var brewed := {}
+var tonic_days := 0
+const BUNJEON := 4
+## 밤 구역: 이보다 가까우면 물러서며 쏜다 (사람처럼 호롱 불빛 44 안에 두려다 불똥 원 40 가장자리에 걸치기도 함)
+const NIGHT_KITE := 40.0
 
 
 func _ready() -> void:
@@ -121,6 +134,11 @@ func _ready() -> void:
 	_log("\n도마리: 첫 도착 %s · 2막 대장(장승 한 쌍) 첫 처치 %s · 도마리 사냥 %d번 · 거기서 맞은 횟수 %d (한 번에 %.1f) · 쓰러짐 %d번 · 끝 돈 %s · 아기 나무 정령 %d마리" % [
 		"%d일" % doma_day if doma_day > 0 else "없음", cleared_day.get(Config.HUNT_ZONES[DOMA].name, "없음"), doma_hunts, doma_hurt,
 		float(doma_hurt) / maxi(doma_hunts, 1), doma_knocked, money_late, main.creatures.filter(func(c: Creature) -> bool: return c.data.species == CreatureCatalog.TREE_SPIRIT).size()])
+	_log("\n약방 · 번천: 약방 터 %s · 복구 %s (장승 조각 %d · 도라지 %d) · 번천 첫 도착 %s · 유령 막차 첫 처치 %s · 번천 사냥 %d번 · 거기서 맞은 횟수 %d (한 번에 %.1f) · 쓰러짐 %d번 · 만든 것 %s · 보약 먹인 날 %d · 도라지밭 %s · 아기 도깨비불 %d마리" % [
+		"%d일" % yak_site_day if yak_site_day > 0 else "없음", "%d일" % yak_restore_day if yak_restore_day > 0 else "없음", GameState.material2, GameState.roots,
+		"%d일" % bun_day if bun_day > 0 else "없음", cleared_day.get(Config.HUNT_ZONES[BUNJEON].name, "없음"), bun_hunts, bun_hurt,
+		float(bun_hurt) / maxi(bun_hunts, 1), bun_knocked, brewed, tonic_days, herb_creature.describe() if herb_creature else "없음",
+		main.creatures.filter(func(c: Creature) -> bool: return c.data.species == CreatureCatalog.WILL_O).size()])
 	_log("무기 (봇이 즐겨 듦: %s): 처음 든 날 %s · 쏜 화살 · 구슬 %d" % [weapon_pref, "%d일" % weapon_day if weapon_day > 0 else "없음", shots_fired])
 	_log("입은 장비: 농부 %s · 사냥꾼 %s" % [_worn_text(&"farmer"), _worn_text(&"hunter")])
 	_log("\n최종: %d일째, 돈 %d원, 씨앗 %d, 크리처 %d (훈련 단계 합 %d), 밭 구역 %d, 웨이포인트 %s" % [GameState.day, GameState.money, GameState.seeds, main.creatures.size(), trained, GameState.open_plots, GameState.waypoints])
@@ -154,6 +172,8 @@ func play_day() -> void:
 	spent_today = 0
 	if GameState.forge_state >= 1 and site_day < 0:
 		site_day = GameState.day
+	if GameState.yak_state >= 1 and yak_site_day < 0:
+		yak_site_day = GameState.day
 	_log("\n## %d일째 (시작 돈 %d, 씨앗 %d, 작물 %d)" % [GameState.day, GameState.money, GameState.seeds, GameState.crops])
 	main._set_active(main.farmer)
 	await place_new_creatures()
@@ -265,6 +285,26 @@ func place_new_creatures() -> void:
 		while pick.job != CreatureJobs.SCRAP:
 			pick.next_job()
 		_log("크리처 배치: %s → 고철 줍기" % pick.describe())
+	# 약방을 고쳤으면 크리처 하나에게 도라지밭 (아기 도깨비불 먼저, 없으면 땅속성 채집 전담 · 아무 채집 전담)
+	var want_herb: bool = GameState.yak_state >= 2 and (herb_creature == null or (herb_creature.data.species != CreatureCatalog.WILL_O and main.creatures.any(func(c: Creature) -> bool: return c.data.species == CreatureCatalog.WILL_O and c.home != main.HATCH_CELL)))
+	if want_herb:
+		var pick: Creature = null
+		for s: Creature in main.creatures:
+			if s.home == main.HATCH_CELL or s == scrap_creature or s.job == CreatureJobs.FARM or s.data.species == CreatureCatalog.SPARROW:
+				continue
+			if pick == null or s.data.species == CreatureCatalog.WILL_O or (s.has_element(&"earth") and pick.data.species != CreatureCatalog.WILL_O and not pick.has_element(&"earth")):
+				pick = s
+		if pick != null and pick != herb_creature:
+			if herb_creature != null:
+				_assign(herb_creature, CreatureJobs.FORAGE, 0)
+			herb_creature = pick
+			main.farmer.position = pick.position
+			main.interact()
+			main.farmer.position = Farm.center_of(Creature.herb_spot() + Vector2i(1, 0))
+			main.interact()
+			while pick.job != CreatureJobs.HERB:
+				pick.next_job()
+			_log("크리처 배치: %s → 도라지밭 (칸 %s)" % [pick.describe(), pick.home])
 	if farmers >= Config.FIELD_PLOTS.size() and full_day < 0:
 		full_day = GameState.day
 
@@ -298,6 +338,8 @@ func let_creatures_work() -> void:
 			elif s.job in [CreatureJobs.FARM, CreatureJobs.FORAGE] and main.forage.nearest_target(s.position, s.has_element(&"earth")) != null:
 				busy = true
 			elif s.job == CreatureJobs.SCRAP and (GameState.scrap_pile > 0 or s.position.distance_to(Farm.center_of(s.home)) > 1.0):
+				busy = true
+			elif s.job == CreatureJobs.HERB and (GameState.herb_bed > 0 or s.position.distance_to(Farm.center_of(s.home)) > 1.0):
 				busy = true
 			elif s.job == CreatureJobs.FARM and s.position.distance_to(Farm.center_of(s.home)) > 1.0:
 				# 채집하고 제자리로 돌아가는 중
@@ -364,6 +406,15 @@ func shop() -> Array[String]:
 			saving = false
 	var keep_crops := mini(GameState.crops, Config.FORGE_COST_CROPS) if saving else 0
 	var reserve := Config.FORGE_COST_MONEY if saving else 0
+	# 약방 (2026-09-29): 장승 조각이 다 모이면 돈을 남겨 두고, 도라지까지 모이면 고친다
+	if GameState.yak_state == 1 and GameState.material2 >= Config.YAK_COST_MATERIAL:
+		if main.can_restore_yak() and main.restore_yak():
+			yak_restore_day = GameState.day
+			did.append("약방 복구(%d원 · %s %d · %s %d)" % [Config.YAK_COST_MONEY, Config.ROOT_NAME, Config.YAK_COST_ROOTS, Config.BOSS_MATERIAL2_NAME, Config.YAK_COST_MATERIAL])
+		else:
+			reserve = maxi(reserve, Config.YAK_COST_MONEY)
+	if GameState.yak_state >= 2:
+		brew_day(did)
 	var held := false
 	if GameState.crops > keep_crops:
 		var shown := GameState.crops - keep_crops
@@ -423,6 +474,25 @@ func shop() -> Array[String]:
 	if held:
 		held_days.append(GameState.day)
 	return did
+
+
+## 연금술사 (2026-09-29 선택 A+B): 번천에 갈 만큼 호롱 기름 · 빨간 물약을 채우고, 무가 넉넉하면 보약을 먹인다.
+## 잡템은 판매 대신 여기 먼저 쓴다 (사람이라면 그럴 것).
+func brew_day(did: Array[String]) -> void:
+	var made: Array[String] = []
+	var wants: Array = [[&"lamp_oil", "lamp_oil", 2], [&"potion", "potions", 4], [&"strength", "strength", 1 if BUNJEON in GameState.waypoints else 0]]
+	for w: Array in wants:
+		while GameState.get(w[1]) < w[2] and main.brew(w[0]):
+			brewed[w[0]] = brewed.get(w[0], 0) + 1
+			made.append(Config.BREWS[w[0]].name)
+	if GameState.crops >= 20 and GameState.tonic_day != GameState.day and main.brew(&"tonic"):
+		brewed[&"tonic"] = brewed.get(&"tonic", 0) + 1
+		made.append(Config.BREWS[&"tonic"].name)
+	if GameState.tonics > 0 and main.feed_tonic():
+		tonic_days += 1
+		made.append("보약 먹임")
+	if not made.is_empty():
+		did.append("연금술사 %s" % ", ".join(made))
 
 
 ## 공급함 물건 값 (복구비를 남겨 둘 때 본다)
@@ -586,6 +656,12 @@ func hunt_day() -> void:
 				best = s if best == null or best.data.species != CreatureCatalog.TREE_SPIRIT else best
 		if best != null:
 			pick = best
+	# 번천은 캄캄하다: 아기 도깨비불(불빛 + 불씨)이 있으면 데려간다
+	if zone >= BUNJEON or (zone == DOMA and GameState.yak_state >= 2):
+		for s: Creature in main.creatures:
+			if s.data.species == CreatureCatalog.WILL_O and s != herb_creature:
+				pick = s
+				break
 	pick_weapon()
 	main.enter_hunt(pick, zone)
 	var h: HuntGround = main.hunt
@@ -608,6 +684,7 @@ func hunt_day() -> void:
 	var dodges := 0
 	var gwang_hurt0 := -1
 	var doma_hurt0 := -1
+	var bun_hurt0 := -1
 	## 가방 · 창고가 차서 못 주운 드롭 자리 (이번 사냥에선 다시 가지 않음. 안 그러면 한 걸음 떨어졌다 돌아가기를 되풀이)
 	var full_at := {}
 	while t < 900.0:
@@ -616,6 +693,11 @@ func hunt_day() -> void:
 			gwang_hunts += 1
 			if gwang_day < 0:
 				gwang_day = GameState.day
+		if h.zone == BUNJEON and bun_hurt0 < 0:
+			bun_hurt0 = hurt
+			bun_hunts += 1
+			if bun_day < 0:
+				bun_day = GameState.day
 		if h.zone == DOMA and doma_hurt0 < 0:
 			doma_hurt0 = hurt
 			doma_hunts += 1
@@ -649,6 +731,10 @@ func hunt_day() -> void:
 			elif not full_at.has(d.at):
 				pickups.append(d.at)
 		var nearest_s: WildSlime = h._nearest_slime(feet)
+		# 번천 유령: 불빛 안(맞힐 수 있는) 것부터, 없으면 가장 가까운 것에 다가가 호롱으로 비춘다
+		var lit_s: WildSlime = h._nearest_slime(feet, true)
+		if lit_s != null and h.is_night():
+			nearest_s = lit_s
 		# 나는 참새는 칼이 안 닿으니 땅에 앉은 것부터 노린다 (다 날고 있으면 가장 가까운 것을 따라감)
 		var grounded := h.slimes.filter(func(o: WildSlime) -> bool: return not o.airborne())
 		if not grounded.is_empty() and nearest_s != null and nearest_s.airborne():
@@ -691,7 +777,7 @@ func hunt_day() -> void:
 			continue
 		# 더 깊은 구역으로 넘어가기 전, 하트가 모자라면 물약을 마신다 (사람이라면 그럴 것)
 		var need_hearts := 5 if h.zone + 1 >= 2 else 3
-		if nearest_s == null and h.path_open and not h.bridge_broken() and h.hearts < need_hearts and GameState.potions > 0:
+		if nearest_s == null and h.path_open and h.path_block() == "" and h.hearts < need_hearts and GameState.potions > 0:
 			h.drink_potion()
 		if not pickups.is_empty():
 			pickups.sort_custom(func(a: Vector2, b: Vector2) -> bool: return a.distance_to(feet) < b.distance_to(feet))
@@ -700,7 +786,7 @@ func hunt_day() -> void:
 		elif nearest_s != null:
 			target = nearest_s.position
 			goal = &"fight"
-		elif h.path_open and not h.bridge_broken() and h.hearts >= (5 if h.zone + 1 >= 2 else 3):
+		elif h.path_open and h.path_block() == "" and h.hearts >= (5 if h.zone + 1 >= 2 else 3):
 			# 2막 구역(광동리 · 도마리)엔 하트가 넉넉할 때만 넘어간다 (사람이라면 반쯤 남은 하트로 더 센 구역에 들어가지 않음)
 			target = h.next_area().get_center()
 			goal = &"next"
@@ -725,14 +811,16 @@ func hunt_day() -> void:
 		# 활 · 지팡이: 사거리 안이고 막힌 게 없으면 서서 쏘고, 너무 가까우면 물러선다. 숨은 몬스터는 다가가 깨운다.
 		var away := false
 		var shoot := false
-		if goal == &"fight" and ranged and not (nearest_s.buried and not nearest_s.disguise):
+		if goal == &"fight" and ranged and not h.hittable(nearest_s):
+			pass
+		elif goal == &"fight" and ranged and not (nearest_s.buried and not nearest_s.disguise):
 			var hand := feet + Vector2(0, -8)
 			var body := nearest_s.position + Vector2(0, -8 * nearest_s.scale.y)
 			var d := hand.distance_to(body)
 			var clear := _clear_shot(h, hand, body)
 			if clear and d <= w.range * 0.85 and h._cooldown <= 0.0:
 				shoot = true
-			elif d < minf(KITE_DISTANCE * nearest_s.scale.x, w.range * 0.6) and not nearest_s.stunned():
+			elif d < (NIGHT_KITE if h.is_night() and not nearest_s.boss else minf(KITE_DISTANCE * nearest_s.scale.x, w.range * 0.6)) and not nearest_s.stunned():
 				away = true
 			elif clear and d <= w.range * 0.85:
 				# 쏠 틈을 기다린다 (제자리)
@@ -784,8 +872,11 @@ func hunt_day() -> void:
 		gwang_hurt += (doma_hurt0 if doma_hurt0 >= 0 else hurt) - gwang_hurt0
 		gwang_knocked += int(knocked and h.zone == 2)
 	if doma_hurt0 >= 0:
-		doma_hurt += hurt - doma_hurt0
+		doma_hurt += (bun_hurt0 if bun_hurt0 >= 0 else hurt) - doma_hurt0
 		doma_knocked += int(knocked and h.zone == DOMA)
+	if bun_hurt0 >= 0:
+		bun_hurt += hurt - bun_hurt0
+		bun_knocked += int(knocked and h.zone == BUNJEON)
 	if h.boss_spawned and h._boss() == null:
 		_cleared(h.zone)
 	var comp := h.companion.display_name() if h.companion else "혼자"

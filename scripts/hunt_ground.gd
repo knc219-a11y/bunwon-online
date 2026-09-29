@@ -97,6 +97,17 @@ var _mini_cell := Vector2i(-999, -999)
 var _map_trees: Array[Sprite2D] = []
 ## 금두꺼비 혀가 지나간 자리의 금가루 {at, t = 남은 시간}. 밟으면 느려진다.
 var dust: Array[Dictionary] = []
+## 밤 구역 (번천): 어둠 · 가로등 · 호롱 불빛 노드 (구역을 옮기면 지운다)
+var _night: Array[Node] = []
+var _lantern: PointLight2D
+## 유령 막차 전조등 불빛 (대장이 있을 때만)
+var _bus_light: PointLight2D
+## 이번 사냥에 쓴 연금술사 물약 (호롱 기름 · 힘 · 빠르기)
+var lamp_oil := false
+var strong := false
+var quick := false
+## 가로등 자리 (불빛 가운데, px)
+var lamps: Array[Vector2] = []
 
 
 func _ready() -> void:
@@ -170,6 +181,7 @@ func _fill_zone() -> void:
 		s.position = spots[i % spots.size()] if map else Farm.center_of(SLIME_CELLS[i % SLIME_CELLS.size()])
 		s.ai_enabled = _ai_on
 		s.swooped.connect(_on_swooped.bind(s))
+		s.burst.connect(_on_burst.bind(s))
 		add_child(s)
 		slimes.append(s)
 	for tree in _trees + _map_trees:
@@ -195,7 +207,109 @@ func _fill_zone() -> void:
 		sign_node.z_index = int(sign_node.position.y)
 		sign_node.draw.connect(_draw_sign.bind(sign_node, z.sign))
 		add_child(sign_node)
+	_setup_night(z)
 	_ground.queue_redraw()
+
+
+## 밤 구역 (2026-09-29 번천, 사용자: "주변에 산이랑 도로만있어서 다른데보다 기온이 낮고 어두워"):
+## 사냥터 전체를 어둡게 하고 가로등(칸 지도 L) · 사냥꾼 호롱 · 동행 불빛만 밝힌다.
+func _setup_night(z: Dictionary) -> void:
+	for n in _night:
+		n.queue_free()
+	_night.clear()
+	lamps.clear()
+	_lantern = null
+	_bus_light = null
+	if not z.get("night", false) or map == null:
+		return
+	var dark := CanvasModulate.new()
+	dark.color = Config.NIGHT_ZONE_COLOR
+	add_child(dark)
+	_night.append(dark)
+	for p in map.find("L"):
+		var post := Sprite2D.new()
+		post.texture = preload("res://assets/props/street_lamp.png")
+		post.centered = false
+		post.offset = Vector2(-8, -44)
+		post.position = p + Vector2(0, 8)
+		post.z_index = int(post.position.y)
+		add_child(post)
+		_night.append(post)
+		var head := p + Vector2(0, -26)
+		lamps.append(p)
+		_night.append(_add_light(head, Config.LAMP_LIGHT_RADIUS * 1.3, Color(1.0, 0.9, 0.6), 1.3))
+	_lantern = _add_light(Vector2.ZERO, Config.LANTERN_RADIUS * 1.4, Color(1.0, 0.75, 0.45), 1.1)
+	_night.append(_lantern)
+	if z.get("boss_pattern", &"") == &"bus":
+		_bus_light = _add_light(Vector2.ZERO, Config.BUS_LIGHT_RADIUS * 1.3, Color(1.0, 0.95, 0.7), 1.2)
+		_bus_light.visible = false
+		_night.append(_bus_light)
+	# 호롱 기름 (연금술사): 밤 구역에 들어갈 때 하나 쓴다
+	if not lamp_oil and GameState.lamp_oil > 0:
+		GameState.lamp_oil -= 1
+		lamp_oil = true
+		GameState.notify("호롱에 기름을 채웠다. 이번 사냥 동안 불빛이 넓다 (남은 호롱 기름 %d)." % GameState.lamp_oil)
+
+
+static var _light_tex: GradientTexture2D
+
+
+func _add_light(at: Vector2, radius: float, col: Color, energy: float) -> PointLight2D:
+	if _light_tex == null:
+		var g := Gradient.new()
+		g.set_color(0, Color(1, 1, 1, 1))
+		g.set_color(1, Color(1, 1, 1, 0))
+		_light_tex = GradientTexture2D.new()
+		_light_tex.gradient = g
+		_light_tex.fill = GradientTexture2D.FILL_RADIAL
+		_light_tex.fill_from = Vector2(0.5, 0.5)
+		_light_tex.fill_to = Vector2(0.5, 0.0)
+		_light_tex.width = 128
+		_light_tex.height = 128
+	var l := PointLight2D.new()
+	l.texture = _light_tex
+	l.texture_scale = radius * 2.0 / 128.0
+	l.color = col
+	l.energy = energy
+	l.position = at
+	add_child(l)
+	return l
+
+
+## 밤 구역인지 (어둡고 유령이 불빛 안에서만 맞음)
+func is_night() -> bool:
+	return Config.HUNT_ZONES[zone].get("night", false)
+
+
+## 이 자리가 불빛 안인지: 가로등 · 사냥꾼 호롱 · 불빛 동행. 밤 구역이 아니면 늘 밝다.
+func in_light(p: Vector2) -> bool:
+	if not is_night():
+		return true
+	if hunter and p.distance_to(hunter.feet()) <= lantern_radius():
+		return true
+	if companion and companion.light_radius() > 0.0 and p.distance_to(companion.position) <= companion.light_radius():
+		return true
+	if _bus_light and _bus_light.visible and p.distance_to(_bus_light.position) <= Config.BUS_LIGHT_RADIUS:
+		return true
+	for l in lamps:
+		if p.distance_to(l) <= Config.LAMP_LIGHT_RADIUS:
+			return true
+	return false
+
+
+## 사냥꾼 호롱 불빛 반지름 (px)
+func lantern_radius() -> float:
+	return Config.LANTERN_RADIUS * (Config.LAMP_OIL_MULT if lamp_oil else 1.0)
+
+
+## 사냥꾼 한 번 공격의 피해 (힘 물약을 마셨으면 +1)
+func power() -> int:
+	return 2 if strong else 1
+
+
+## 무기 · 동행이 이 몬스터를 맞힐 수 있는지. 유령(ghost 구역)은 불빛 밖에서 반쯤 비쳐 다 지나간다.
+func hittable(s: WildSlime) -> bool:
+	return not (Config.HUNT_ZONES[zone].get("ghost", false) and not s.boss and not in_light(s.position))
 
 
 ## 사냥꾼을 사냥터로 데려온다.
@@ -324,12 +438,27 @@ func bridge_broken() -> bool:
 	return zone == Config.FORGE_ZONE and GameState.forge_state < 2
 
 
+## 캄캄한 번천 길 (2026-09-29 약방 복구 추천): 도마리 장승을 잡아도 번천 쪽은 너무 어두워, 약방을 고쳐 연금술사가
+## 호롱을 만들어 줘야 넘어간다. 3막이 로드맵(약방 ≈ 45일째)보다 일찍 열리던 것(활로 장승 14~18일째)을 막는다.
+func road_dark() -> bool:
+	return zone == Config.YAK_ZONE and GameState.yak_state < 2
+
+
+## 위쪽 길이 막혔으면 그 까닭 (비었으면 안 막힘)
+func path_block() -> String:
+	if bridge_broken():
+		return "쇠다리가 끊겨 있어 건널 수 없다. 대장간을 고치면 대장장이가 이어 줄 것 같다."
+	if road_dark():
+		return "번천 쪽은 너무 캄캄해서 한 발짝도 못 가겠다. 약방을 고치면 연금술사가 호롱을 만들어 줄 것 같다."
+	return ""
+
+
 ## 위쪽 길로 다음 구역에 들어간다 (같은 날, 하트 그대로). 땅에 남은 것은 챙겨 간다.
 func advance() -> bool:
 	if not path_open or zone + 1 >= Config.HUNT_ZONES.size():
 		return false
-	if bridge_broken():
-		GameState.notify("쇠다리가 끊겨 있어 건널 수 없다. 대장간을 고치면 대장장이가 이어 줄 것 같다.")
+	if path_block() != "":
+		GameState.notify(path_block())
 		return false
 	for d in drops:
 		picked.append(d.species)
@@ -369,16 +498,27 @@ func tick(delta: float) -> void:
 	_follow_camera()
 	_reveal_minimap()
 	var feet := hunter.feet()
+	if _lantern:
+		_lantern.position = feet + Vector2(0, -10)
+		_lantern.texture_scale = lantern_radius() * 2.8 / 128.0
+	if _bus_light:
+		var b := _boss()
+		_bus_light.visible = b != null
+		if b:
+			_bus_light.position = b.position + Vector2(-40.0 if b._sprite.flip_h else 40.0, -12)
 	var popped := false
 	for s: WildSlime in slimes.duplicate():
 		var was_buried := s.buried
+		s.lit = in_light(s.position)
 		s.tick(delta, feet)
 		popped = popped or (was_buried and not s.buried)
+		s.modulate.a = 1.0 if hittable(s) else Config.GHOST_FADE
 		if knocked:
 			return
 		# 대장은 몸에 닿아도 안 다친다 (2026-09-29 사용자: "보스몬스터에 부딪히기만 해도 체력이 감소하는건 근거리를 좋아하는 유저에겐 힘들거같아").
 		# 대장은 예고가 있는 패턴(내려찍기 · 혀 · 짚단 · 통나무)으로만 다치게 한다.
-		if _invulnerable <= 0.0 and not s.boss and not s.buried and not s.flyer and not s.stunned() and not s.airborne() and s.position.distance_to(feet) <= Config.WILD_SLIME_TOUCH_DISTANCE * s.scale.x:
+		# 어둠 속 유령은 몸도 닿지 않는다 (불빛 안에서만 서로 닿음)
+		if _invulnerable <= 0.0 and not s.boss and not s.buried and not s.flyer and not s.stunned() and not s.airborne() and hittable(s) and s.position.distance_to(feet) <= Config.WILD_SLIME_TOUCH_DISTANCE * s.scale.x:
 			_hurt(s.position, s.damage, s.title)
 	if popped:
 		_pack_pop()
@@ -429,9 +569,9 @@ func swing(dir := Vector2.ZERO) -> int:
 	var center: Vector2 = hand + _swing_dir * w.reach
 	var hits := 0
 	for s in slimes.duplicate():
-		if not s.airborne() and s.position.distance_to(center) <= w.radius:
+		if not s.airborne() and hittable(s) and s.position.distance_to(center) <= w.radius:
 			hits += 1
-			if s.hit(hunter.feet()):
+			if s.hit(hunter.feet(), power()):
 				_defeat(s)
 	return hits
 
@@ -451,7 +591,7 @@ func _tick_shots(delta: float) -> void:
 			continue
 		_burns.remove_at(i)
 		var s: WildSlime = b.slime
-		if is_instance_valid(s) and s in slimes and s.hit(s.position + Vector2(0, -4)):
+		if is_instance_valid(s) and s in slimes and hittable(s) and s.hit(s.position + Vector2(0, -4)):
 			_defeat(s)
 	for i in range(shots.size() - 1, -1, -1):
 		var sh: Dictionary = shots[i]
@@ -462,7 +602,7 @@ func _tick_shots(delta: float) -> void:
 		var hit_r := Config.ARROW_HIT_RADIUS if sh.kind == &"arrow" else Config.ORB_HIT_RADIUS
 		var target: WildSlime = null
 		for s in slimes:
-			if (s.buried and not s.disguise) or (s.airborne() and not (sh.kind == &"arrow" and s.in_air())):
+			if (s.buried and not s.disguise) or (s.airborne() and not (sh.kind == &"arrow" and s.in_air())) or not hittable(s):
 				continue
 			# 몬스터 몸 가운데 (발보다 조금 위, 큰 대장은 더 넓게)
 			if (s.position + Vector2(0, -8 * s.scale.y)).distance_to(sh.at) <= hit_r * s.scale.x:
@@ -474,7 +614,7 @@ func _tick_shots(delta: float) -> void:
 			continue
 		shots.remove_at(i)
 		if sh.kind == &"arrow":
-			if target != null and target.hit(sh.at - sh.dir * 10.0):
+			if target != null and target.hit(sh.at - sh.dir * 10.0, power()):
 				_defeat(target)
 		else:
 			_burst(sh.at, sh.blast, sh.element)
@@ -484,9 +624,9 @@ func _tick_shots(delta: float) -> void:
 func _burst(at: Vector2, radius: float, element: StringName) -> void:
 	_blasts.append({at = at, radius = radius, element = element, t = 0.3})
 	for s in slimes.duplicate():
-		if s.airborne() or (s.position + Vector2(0, -6)).distance_to(at) > radius + 8.0 * s.scale.x:
+		if s.airborne() or not hittable(s) or (s.position + Vector2(0, -6)).distance_to(at) > radius + 8.0 * s.scale.x:
 			continue
-		if s.hit(at):
+		if s.hit(at, power()):
 			_defeat(s)
 			continue
 		match element:
@@ -504,7 +644,7 @@ var _companion_cooldown := 0.0
 ## 동행 크리처: 사냥꾼 뒤를 따라가다가 닿는 야생 슬라임이 있으면 공격한다.
 func _tick_companion(delta: float) -> void:
 	_companion_cooldown = maxf(_companion_cooldown - delta, 0.0)
-	var target := _nearest_slime(companion.position)
+	var target := _nearest_slime(companion.position, true)
 	if companion_ai:
 		var chase := companion.style == HuntCompanion.Style.BUMP and target != null \
 			and target.position.distance_to(hunter.feet()) <= Config.COMPANION_CHASE_DISTANCE
@@ -531,6 +671,9 @@ func companion_attack(target: WildSlime) -> void:
 		_defeat(target)
 	elif companion.style == HuntCompanion.Style.PECK:
 		pass
+	elif companion.style == HuntCompanion.Style.EMBER:
+		# 불씨: 잠시 뒤 한 번 더 맞는다 (불의 지팡이와 같은 불붙음)
+		_burns.append({slime = target, t = Config.STAFF_BURN_DELAY})
 	elif companion.style == HuntCompanion.Style.BIND:
 		# 덩굴 묶기: 잠깐 붙잡는다 (못 움직이고 부딪혀도 안 다침, 사냥꾼 칼 칠 틈)
 		target.stun(Config.COMPANION_BIND_STUN)
@@ -547,9 +690,11 @@ func companion_attack(target: WildSlime) -> void:
 		target.position = (target.position + away * 10.0).clamp(target.area.position, target.area.end)
 
 
-func _nearest_slime(from: Vector2) -> WildSlime:
+func _nearest_slime(from: Vector2, only_hittable := false) -> WildSlime:
 	var best: WildSlime = null
 	for s in slimes:
+		if only_hittable and not hittable(s):
+			continue
 		if best == null or s.position.distance_to(from) < best.position.distance_to(from):
 			best = s
 	return best
@@ -575,6 +720,13 @@ func _defeat(s: WildSlime) -> void:
 		if zone == Config.FORGE_ZONE and not GameState.forge_boss_down:
 			GameState.forge_boss_down = true
 			material_text += " 마을 쪽에서 무언가 무너지는 소리가 들렸다..."
+	# 2막 대장 재료 (2026-09-29 약방 복구): 장승 한 쌍을 잡을 때마다 장승 조각 하나, 처음 잡으면 다음 날 마을에 약방 터
+	if last_boss and z.get("boss_material2", false):
+		GameState.material2 += 1
+		material_text += " %s을(를) 얻었다 (%d개)." % [Config.BOSS_MATERIAL2_NAME, GameState.material2]
+		if not GameState.yak_boss_down:
+			GameState.yak_boss_down = true
+			material_text += " 마을 쪽에서 약 달이는 냄새가 희미하게 났다..."
 	if not s.boss and (not GameState.first_egg_done or _egg_roll() < z.get("egg_chance", 0.0)):
 		# 게임 전체 첫 처치는 알을 반드시 떨어뜨린다 (첫 사냥에서 막히지 않게). 그 뒤로는 드물게.
 		GameState.first_egg_done = true
@@ -587,6 +739,8 @@ func _defeat(s: WildSlime) -> void:
 		GameState.notify("%s이(가) 쓰러졌다! 남은 %s을(를) 마저 쓰러뜨리자." % [s.title, slimes.filter(func(o: WildSlime) -> bool: return o.boss)[0].title])
 	elif s.boss and bridge_broken():
 		GameState.notify("%s을(를) 쓰러뜨렸다! 위쪽 길이 보이지만 %d구역 %s로 가는 쇠다리가 끊겨 있다. 대장간을 고치면 이어질 것 같다.%s" % [who, zone + 2, Config.HUNT_ZONES[zone + 1].name, material_text])
+	elif s.boss and road_dark():
+		GameState.notify("%s을(를) 쓰러뜨렸다! 위쪽 길 너머 %d구역 %s 쪽은 캄캄하다. 약방을 고치면 연금술사가 호롱을 만들어 줄 것 같다.%s" % [who, zone + 2, Config.HUNT_ZONES[zone + 1].name, material_text])
 	elif s.boss and zone + 1 < Config.HUNT_ZONES.size():
 		GameState.notify("%s을(를) 쓰러뜨렸다! 위쪽 길이 열렸다. 길에서 F로 %d구역 %s, 아래 입구 F로 마을.%s" % [who, zone + 2, Config.HUNT_ZONES[zone + 1].name, material_text])
 	elif s.boss:
@@ -649,6 +803,7 @@ func _new_boss(at: Vector2) -> WildSlime:
 	b.bale_landed.connect(_on_bale_landed)
 	b.called.connect(_on_called)
 	b.rolled.connect(_on_rolled.bind(b))
+	b.rammed.connect(_on_rammed.bind(b))
 	add_child(b)
 	slimes.append(b)
 	return b
@@ -705,6 +860,20 @@ func _on_rolled(at: Vector2, boss: WildSlime) -> void:
 		_hurt(at, boss.damage, boss.title, "%s이(가) 굴린 통나무에 치였다!" % boss.title)
 
 
+## 도깨비불이 불똥을 튀겼다: 원 안이면 다친다.
+func _on_burst(at: Vector2, s: WildSlime) -> void:
+	if _in_circle(at, Config.WISP_BURST_RADIUS) and _invulnerable <= 0.0 and not knocked:
+		_hurt(at, s.damage, s.title, "%s이(가) 불똥을 튀겼다!" % s.title)
+
+
+## 유령 막차가 달린다: 버스에 닿으면 다친다 (다친 뒤 잠깐 무적이라 한 번만).
+func _on_rammed(at: Vector2, boss: WildSlime) -> void:
+	var feet := hunter.feet()
+	var d := feet - at
+	if _invulnerable <= 0.0 and not knocked and absf(d.x) <= 44.0 and absf(d.y) <= Config.BUS_WIDTH / 2.0 + 4.0:
+		_hurt(at, boss.damage, boss.title, "%s에 치였다!" % boss.title)
+
+
 ## 허수아비 장수의 짚단이 떨어졌다: 원 안이면 다친다.
 func _on_bale_landed(at: Vector2) -> void:
 	var boss := _boss()
@@ -726,10 +895,12 @@ func _on_called(at: Vector2) -> void:
 		m.position = (at + Vector2(-40 if i == 0 else 40, -20)).clamp(m.area.position, m.area.end)
 		m.ai_enabled = _ai_on
 		m.swooped.connect(_on_swooped.bind(m))
+		m.burst.connect(_on_burst.bind(m))
 		add_child(m)
-		m._fly = 1.0
+		if m.flyer:
+			m._fly = 1.0
 		slimes.append(m)
-	GameState.notify("허수아비 장수가 깃발을 흔들자 참새가 몰려왔다!")
+	GameState.notify("허수아비 장수가 깃발을 흔들자 참새가 몰려왔다!" if Config.HUNT_ZONES[zone].get("boss_pattern") == &"straw" else "막차 문이 열리고 도깨비불 승객이 내렸다!")
 	GameState.touch()
 
 
@@ -781,7 +952,7 @@ func _tick_dust(delta: float) -> void:
 			dust.remove_at(i)
 		elif (dust[i].at as Vector2).distance_to(hunter.feet()) <= Config.GOLD_DUST_RADIUS:
 			slow = true
-	hunter.slow_mult = Config.GOLD_DUST_SLOW if slow else 1.0
+	hunter.slow_mult = (Config.GOLD_DUST_SLOW if slow else 1.0) * (Config.SPEED_POTION_MULT if quick else 1.0)
 
 
 ## 드롭을 줍는다. 장비면 바로 입거나 가방에 넣고, 늘어난 하트 칸만큼 하트도 채운다.
@@ -912,7 +1083,7 @@ func _draw() -> void:
 		draw_arc(c, _swing_radius + 2.0, a - 1.0, a + 1.0, 10, Color(1, 1, 1, 0.85), 2.5)
 
 
-const SHOT_BLOCK := "THG"
+const SHOT_BLOCK := "THGP"
 const ELEMENT_COLORS := {&"water": Color(0.4, 0.65, 1.0), &"earth": Color(0.7, 0.5, 0.25), &"fire": Color(1.0, 0.5, 0.2)}
 
 
@@ -1049,6 +1220,8 @@ func _draw_hud() -> void:
 		var pt := "▲ 위쪽 길: %d구역 %s (F)" % [zone + 2, Config.HUNT_ZONES[zone + 1].name]
 		if bridge_broken():
 			pt = "▲ 위쪽 길: 쇠다리가 끊김 (대장간을 고치면 이어짐)"
+		elif road_dark():
+			pt = "▲ 위쪽 길: 캄캄함 (약방을 고치면 연금술사가 호롱을 만들어 줌)"
 		var pw := font.get_string_size(pt, HORIZONTAL_ALIGNMENT_LEFT, -1, 9).x
 		_hud.draw_rect(Rect2(13 * T - pw / 2 - 3, 2 * T - 10, pw + 6, 13), Color(0, 0, 0, 0.55))
 		_hud.draw_string(font, Vector2(13 * T - pw / 2, 2 * T), pt, HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(1.0, 0.9, 0.35))
@@ -1064,6 +1237,7 @@ const MINI_COLORS := {
 	"m": Color(0.78, 0.66, 0.4), "H": Color(0.5, 0.58, 0.68), "F": Color(0.55, 0.55, 0.6), "s": Color(0.9, 0.88, 0.8),
 	"h": Color(0.85, 0.72, 0.4), "w": Color(0.95, 0.95, 0.95),
 	"G": Color(0.85, 0.9, 0.88), "l": Color(0.62, 0.45, 0.3), "u": Color(0.7, 0.55, 0.38),
+	"a": Color(0.36, 0.37, 0.42), "g": Color(0.75, 0.77, 0.8), "L": Color(1.0, 0.9, 0.55), "P": Color(0.3, 0.45, 0.65),
 }
 ## 사냥꾼 둘레 이만큼(칸, 가로·세로 반지름)이 작은 지도에 드러난다. 화면 절반쯤 (임시)
 const MINI_REVEAL := Vector2i(12, 7)

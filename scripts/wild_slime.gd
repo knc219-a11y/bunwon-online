@@ -87,6 +87,20 @@ var _dive_t := -1.0
 var _dive_from := Vector2.ZERO
 var _dive_to := Vector2.ZERO
 var _angle := 0.0
+## 도깨비불 (번천 wisp, 2026-09-29 선택 A): 떠다니며 벽 · 물을 지나간다. 불빛 안(lit)에서 가까이 오면 부풀어 불똥을 튀긴다.
+var wisp := false
+## 지금 불빛 안인지 (HuntGround 가 틱마다 알려 줌. 밤 구역이 아니면 늘 true)
+var lit := true
+## 부푸는 예고 남은 시간 (-1 = 아님)
+var _burst := -1.0
+## 유령 막차 (번천 대장 bus): 예고 남은 시간(-1 = 아님) → 돌진 진행(0~1, -1 = 아님), 돌진 길, 돌진 횟수 (두 번에 한 번 승객)
+var _bus_aim := -1.0
+var _bus_t := -1.0
+var _bus_from := Vector2.ZERO
+var _bus_to := Vector2.ZERO
+var _runs := 0
+## 대장 그림이 32칸 시트가 아닐 때 한 장 크기 (유령 막차 96x48). ZERO 면 32칸 시트.
+var boss_frame := Vector2i.ZERO
 ## 허수아비 장수 짚단 던지기: 떨어질 짚단들 {at, t = 남은 시간}, 던진 횟수 (두 번에 한 번 참새 부르기)
 var _bales: Array[Dictionary] = []
 var _throws := 0
@@ -106,18 +120,21 @@ signal called(at: Vector2)
 signal slammed(at: Vector2)
 ## 통나무가 굴러가는 중 (지금 통나무 자리). HuntGround 가 받아 닿은 사냥꾼을 다치게 한다.
 signal rolled(at: Vector2)
+## 도깨비불이 불똥을 튀겼다 (도깨비불 자리). HuntGround 가 받아 원 안의 사냥꾼을 다치게 한다.
+signal burst(at: Vector2)
+## 유령 막차가 달리는 중 (지금 버스 자리). HuntGround 가 받아 닿은 사냥꾼을 다치게 한다.
+signal rammed(at: Vector2)
 ## 대장이 혀를 뻗었다 (입 → 혀끝). HuntGround 가 받아 선 위의 사냥꾼을 다치게 하고 금가루를 뿌린다.
 signal lashed(from: Vector2, to: Vector2)
 
 
 func _ready() -> void:
 	_sprite = Sprite2D.new()
-	_sprite.texture = sheet
 	_sprite.centered = false
-	_sprite.hframes = sheet.get_width() / FRAME_SIZE
 	_sprite.modulate = _tint
 	_sprite.position = Vector2(-FRAME_SIZE / 2.0, BOTTOM_Y - FRAME_SIZE)
 	add_child(_sprite)
+	_apply_sheet()
 	_rest = randf_range(0.3, Config.WILD_SLIME_REST_TIME)
 
 
@@ -136,6 +153,7 @@ func setup_zone(zone: int) -> void:
 	knockback = z.get("knockback", 14.0)
 	windup_time = z.get("windup", 0.6)
 	flyer = z.get("flyer", false)
+	wisp = z.get("wisp", false)
 	_angle = randf() * TAU
 
 
@@ -154,9 +172,23 @@ func make_boss(zone := 0) -> void:
 	damage = z.get("damage", 1)
 	knockback = z.get("knockback", 14.0)
 	pattern = z.get("boss_pattern", &"")
+	wisp = false
 	sheet = load(z.boss_sheet)
+	boss_frame = z.get("boss_frame", Vector2i.ZERO)
+	if boss_frame != Vector2i.ZERO:
+		# 큰 한 장 그림 (유령 막차): 대장 배율 없이 그대로
+		scale = Vector2.ONE
 	if _sprite:
-		_sprite.texture = sheet
+		_apply_sheet()
+
+
+## 시트를 스프라이트에 입힌다 (32칸 시트 또는 큰 한 장)
+func _apply_sheet() -> void:
+	_sprite.texture = sheet
+	if boss_frame != Vector2i.ZERO:
+		_sprite.hframes = 1
+		_sprite.position = Vector2(-boss_frame.x / 2.0, BOTTOM_Y - boss_frame.y)
+	else:
 		_sprite.hframes = sheet.get_width() / FRAME_SIZE
 
 
@@ -187,7 +219,7 @@ func make_minion() -> void:
 
 
 ## 한 대 맞는다. 쓰러지면 true. 웅크리는 중이면 밀려나도 달려들기는 멈추지 않는다.
-func hit(from: Vector2) -> bool:
+func hit(from: Vector2, amount := 1) -> bool:
 	buried = false
 	if flyer:
 		if in_air():
@@ -200,12 +232,12 @@ func hit(from: Vector2) -> bool:
 		else:
 			# 맞으면 조금만 더 쪼다가 날아오른다
 			_rest = minf(_rest, Config.SWOOP_HIT_RECOVER)
-	hp -= 1
+	hp -= amount
 	_flash = 0.25
 	var away := (position - from).normalized()
 	if away == Vector2.ZERO:
 		away = Vector2.UP
-	if _air_t < 0.0:
+	if _air_t < 0.0 and _bus_t < 0.0 and boss_frame == Vector2i.ZERO:
 		position = _stand(position + away * knockback)
 	_hop_t = -1.0
 	if not flyer:
@@ -267,6 +299,12 @@ func _telegraph_one() -> Dictionary:
 		return {kind = &"lane", from = position, to = _tongue_to, width = Config.TONGUE_WIDTH, progress = 1.0 - _aim / Config.TONGUE_WINDUP}
 	if _log_aim >= 0.0:
 		return {kind = &"lane", from = _log_from, to = _log_to, width = Config.LOG_WIDTH, progress = 1.0 - _log_aim / Config.LOG_WINDUP}
+	if _burst >= 0.0:
+		return {kind = &"circle", at = position, radius = Config.WISP_BURST_RADIUS, progress = 1.0 - _burst / windup_time}
+	if _bus_aim >= 0.0:
+		return {kind = &"lane", from = _bus_from, to = _bus_to, width = Config.BUS_WIDTH, progress = 1.0 - _bus_aim / Config.BUS_WINDUP}
+	if _bus_t >= 0.0:
+		return {kind = &"lane", from = position, to = _bus_to, width = Config.BUS_WIDTH, progress = 1.0}
 	if _log_t >= 0.0:
 		# 굴러가는 중: 남은 길을 계속 보여 준다 (봇이 비킬 수 있게)
 		return {kind = &"lane", from = log_at(), to = _log_to, width = Config.LOG_WIDTH, progress = 1.0}
@@ -343,7 +381,24 @@ func tick(delta: float, target: Vector2) -> void:
 		col = HOP_COLUMNS[int(_anim_time * 10.0) % 4] if in_air() else (BURIED_COLUMNS if _rest > 0.0 else IDLE_COLUMNS)[int(_anim_time * 3.0) % 2]
 	elif not _bales.is_empty() or _log_aim >= 0.0 or _log_t >= 0.0:
 		col = BURIED_COLUMNS[int(_anim_time * 6.0) % 2]
+	if wisp:
+		# 도깨비불: 부푸는 동안 6열, 튀긴 뒤 쪼그라든 동안 7열
+		if _burst >= 0.0:
+			col = BURIED_COLUMNS[0]
+		elif _recover > 0.0:
+			col = BURIED_COLUMNS[1]
+		else:
+			col = HOP_COLUMNS[int(_anim_time * 4.0) % 4] if _hop_t >= 0.0 else IDLE_COLUMNS[int(_anim_time * 3.0) % 2]
+	if boss_frame != Vector2i.ZERO:
+		col = 0
+		if _bus_t >= 0.0 or _bus_aim >= 0.0:
+			_sprite.flip_h = _bus_to.x < position.x
 	_sprite.frame = col
+	if boss_frame != Vector2i.ZERO:
+		z_index = int(sort_y())
+		_sprite.modulate = Color(1, 1, 1) * 2.0 if _flash > 0.0 and int(_flash * 20) % 2 == 0 else _tint
+		queue_redraw()
+		return
 	# 내려찍기: 공중에서 그림을 위로 띄운다 (그림자는 제자리). 참새는 나는 동안 FLY_HEIGHT 만큼.
 	var lift := sin(_air_t * PI) * 60.0 / scale.y if _air_t >= 0.0 else 0.0
 	if flyer and in_air():
@@ -351,6 +406,10 @@ func tick(delta: float, target: Vector2) -> void:
 	_sprite.position = Vector2(-FRAME_SIZE / 2.0, BOTTOM_Y - FRAME_SIZE - lift)
 	# 웅크림: 납작해졌다가 튀어나간다
 	_sprite.scale = Vector2(1.15, 0.85) if _windup >= 0.0 or _aim >= 0.0 or _log_aim >= 0.0 else Vector2.ONE
+	if wisp:
+		# 도깨비불은 둥둥 떠 있다
+		_sprite.position.y -= 3.0 + sin(_anim_time * 3.0 + _angle) * 2.0
+		_sprite.scale = Vector2.ONE
 	_sprite.modulate = Color(1, 1, 1) * 2.0 if _flash > 0.0 and int(_flash * 20) % 2 == 0 else _tint
 	if _slow > 0.0 and _flash <= 0.0:
 		# 물의 지팡이에 느려진 동안 푸르게
@@ -417,6 +476,31 @@ func _tick_attack(delta: float, target: Vector2) -> bool:
 			_recover = Config.LOG_RECOVER
 			_pattern_cd = Config.LOG_COOLDOWN
 		return true
+	if _burst >= 0.0:
+		_burst -= delta
+		if _burst < 0.0:
+			burst.emit(position)
+			_recover = Config.WISP_RECOVER
+			_lunge_cd = Config.WISP_COOLDOWN
+		return true
+	if _bus_aim >= 0.0:
+		_bus_aim -= delta
+		if _bus_aim < 0.0:
+			_bus_t = 0.0
+		return true
+	if _bus_t >= 0.0:
+		_bus_t = minf(_bus_t + delta / Config.BUS_TIME, 1.0)
+		# 유령 버스는 가드레일 · 나무도 뚫고 지나간다 (영역 안에서만)
+		position = _bus_from.lerp(_bus_to, _bus_t)
+		rammed.emit(position)
+		if _bus_t >= 1.0:
+			_bus_t = -1.0
+			_recover = Config.BUS_RECOVER
+			_pattern_cd = Config.BUS_COOLDOWN
+			_runs += 1
+			if _runs % 2 == 0:
+				called.emit(position)
+		return true
 	if not _bales.is_empty():
 		for i in range(_bales.size() - 1, -1, -1):
 			_bales[i].t -= delta
@@ -454,9 +538,25 @@ func _tick_attack(delta: float, target: Vector2) -> bool:
 			_log_to = (_log_from + dir * Config.LOG_LENGTH).clamp(area.position, area.end)
 			_log_aim = Config.LOG_WINDUP
 			return true
+		if pattern == &"bus" and _pattern_cd <= 0.0 and d <= Config.BUS_RANGE:
+			# 도로 방향으로: 가로 · 세로 중 사냥꾼이 더 먼 쪽으로 달린다
+			var v := target - position
+			var dir := Vector2(signf(v.x), 0) if absf(v.x) >= absf(v.y) else Vector2(0, signf(v.y))
+			if dir == Vector2.ZERO:
+				dir = Vector2.LEFT
+			_bus_from = position
+			_bus_to = (position + dir * Config.BUS_LENGTH).clamp(area.position, area.end)
+			_bus_aim = Config.BUS_WINDUP
+			return true
 		if pattern == &"tongue" and _pattern_cd <= 0.0 and d <= Config.TONGUE_RANGE:
 			_tongue_to = position + (target - position).normalized() * Config.TONGUE_RANGE
 			_aim = Config.TONGUE_WINDUP
+			return true
+		return false
+	if wisp:
+		# 도깨비불: 불빛 안에서만 부풀어 튀긴다 (어둠 속에선 그냥 떠다님)
+		if lit and _lunge_cd <= 0.0 and d <= Config.WISP_TRIGGER:
+			_burst = windup_time
 			return true
 		return false
 	if _lunge_cd <= 0.0 and d <= Config.LUNGE_TRIGGER:
@@ -510,10 +610,24 @@ func _tick_fly(delta: float, target: Vector2) -> void:
 ## to 로 옮길 수 있으면 to, 못 서는 곳(물 등)이면 지금 자리. 영역 밖은 안으로 당긴다.
 func _stand(to: Vector2) -> Vector2:
 	to = to.clamp(area.position, area.end)
+	if wisp:
+		# 도깨비불은 떠다녀서 물 · 나무 · 가드레일을 지나간다
+		return to
 	# 이미 못 서는 곳에 있으면 (혀에 끌려 물가에 떨어졌을 때) 어디로든 빠져나오게 둔다
 	var feet := Vector2(0, BOTTOM_Y - 2)
 	if terrain and not terrain.monster_ok(to + feet) and terrain.monster_ok(position + feet):
 		return position
+	return to
+
+
+## dir 쪽으로 한 번 뛸 자리. 내려앉을 곳만이 아니라 뛰는 길 중간이 물 위면 (물가 모퉁이를 가로지름) 못 뜀.
+func _hop_dest(dir: Vector2) -> Vector2:
+	var to := _stand(position + dir * Config.WILD_SLIME_HOP_DISTANCE)
+	if wisp or terrain == null or to == position or not terrain.monster_ok(position + Vector2(0, BOTTOM_Y - 2)):
+		return to
+	for k in [0.25, 0.5, 0.75]:
+		if not terrain.monster_ok(position.lerp(to, k) + Vector2(0, BOTTOM_Y - 2)):
+			return position
 	return to
 
 
@@ -523,10 +637,10 @@ func _start_hop(target: Vector2) -> void:
 		dir = (target - position).normalized()
 	else:
 		dir = Vector2.RIGHT.rotated(randf() * TAU)
-	var to := _stand(position + dir * Config.WILD_SLIME_HOP_DISTANCE)
+	var to := _hop_dest(dir)
 	if to == position:
 		# 물가에 막히면 옆으로 비껴 뛴다
-		to = _stand(position + dir.rotated(PI / 2 * (1 if randf() < 0.5 else -1)) * Config.WILD_SLIME_HOP_DISTANCE)
+		to = _hop_dest(dir.rotated(PI / 2 * (1 if randf() < 0.5 else -1)))
 	_hop_from = position
 	_hop_to = to
 	_hop_t = 0.0
@@ -537,15 +651,20 @@ func _draw() -> void:
 	draw_circle(Vector2.ZERO, 10.0, Color(0.27, 0.16, 0.33, 0.25))
 	draw_set_transform(Vector2.ZERO)
 	# 남은 체력 (맞은 뒤에만 보임)
+	var top := -boss_frame.y + 4.0 if boss_frame != Vector2i.ZERO else 0.0
 	if hp < max_hp:
-		draw_rect(Rect2(-10, -24, 20, 3), Color(0.25, 0.2, 0.2))
-		draw_rect(Rect2(-10, -24, 20.0 * hp / max_hp, 3), Color(0.9, 0.5, 0.3))
+		draw_rect(Rect2(-10, -24 + top, 20, 3), Color(0.25, 0.2, 0.2))
+		draw_rect(Rect2(-10, -24 + top, 20.0 * hp / max_hp, 3), Color(0.9, 0.5, 0.3))
 	# 멈춤 (혀 당기기): 머리 위에 빙글 도는 별 셋
 	if _stun > 0.0:
 		for i in 3:
 			var a := _anim_time * 6.0 + i * TAU / 3.0
 			draw_circle(Vector2(cos(a) * 8.0, -22 + sin(a) * 2.0), 2.0, Color(1.0, 0.92, 0.45))
 	# 달려들기·혀 채찍 예고: 머리 위 느낌표
+	if _bus_aim >= 0.0:
+		# 막차 전조등: 앞쪽에 노란 빛 두 줄
+		var fw := signf(_bus_to.x - position.x) if absf(_bus_to.x - position.x) > 1.0 else 0.0
+		draw_circle(Vector2(fw * 44.0, -12), 5.0, Color(1.0, 0.95, 0.6, 0.9))
 	if _windup >= 0.0 or _aim >= 0.0 or _log_aim >= 0.0:
 		draw_circle(Vector2(0, -30), 6.0, Color(1.0, 0.92, 0.5))
 		draw_arc(Vector2(0, -30), 6.0, 0, TAU, 16, Color(0.6, 0.15, 0.1), 1.0)
@@ -570,5 +689,5 @@ func _draw() -> void:
 	if boss:
 		var font := ThemeDB.fallback_font
 		var w := font.get_string_size(title, HORIZONTAL_ALIGNMENT_LEFT, -1, 6).x
-		draw_rect(Rect2(-w / 2 - 1.5, -35.5, w + 3, 7), Color(0, 0, 0, 0.55))
-		draw_string(font, Vector2(-w / 2, -30), title, HORIZONTAL_ALIGNMENT_LEFT, -1, 6, Color(0.95, 0.85, 0.45))
+		draw_rect(Rect2(-w / 2 - 1.5, -35.5 + top, w + 3, 7), Color(0, 0, 0, 0.55))
+		draw_string(font, Vector2(-w / 2, -30 + top), title, HORIZONTAL_ALIGNMENT_LEFT, -1, 6, Color(0.95, 0.85, 0.45))
