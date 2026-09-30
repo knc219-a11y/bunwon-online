@@ -761,9 +761,14 @@ func _draw() -> void:
 		for e in [at - side, at + side]:
 			draw_circle(e, 4.0 / scale.x, Color(0.86, 0.74, 0.55))
 			draw_circle(e, 1.5 / scale.x, Color(0.6, 0.44, 0.3))
-	# 대장 이름표 (디아블로2 챔피언처럼 금색)
+	# 대장 이름표 (디아블로2 챔피언처럼 금색). 대장은 1.8배로 키워져 있어서 글씨는 키움을 되돌려 갈무리9 제 크기(10)로 쓴다.
+	# (예전엔 크기 6 을 1.8배로 늘려 픽셀 글꼴이 깨져 보였다, 2026-09-30 사용자: "허수아비 장군 글씨 깨진거")
 	if boss:
 		var font := ThemeDB.fallback_font
-		var w := font.get_string_size(title, HORIZONTAL_ALIGNMENT_LEFT, -1, 6).x
-		draw_rect(Rect2(-w / 2 - 1.5, -35.5 + top, w + 3, 7), Color(0, 0, 0, 0.55))
-		draw_string(font, Vector2(-w / 2, -30 + top), title, HORIZONTAL_ALIGNMENT_LEFT, -1, 6, Color(0.95, 0.85, 0.45))
+		var k := 1.0 / scale.x
+		var y := (-30.0 + top) * scale.x + 4.0
+		var w := font.get_string_size(title, HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2(k, k))
+		draw_rect(Rect2(roundf(-w / 2) - 2, roundf(y) - 10, w + 4, 13), Color(0, 0, 0, 0.55))
+		draw_string(font, Vector2(roundf(-w / 2), roundf(y)), title, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.95, 0.85, 0.45))
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)

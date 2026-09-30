@@ -28,7 +28,7 @@
   --kind baby --colors 24 --eyes 0.518,0.181,0.882,0.159 --cheeks 0.465,0.353,0.934,0.345 --mouth 0.75,0.40
 광동리 (그림 원본: /mnt/project-files/design/gwangdong-ai/ai_*.png, 사용자 AI 그림 2026-09-30)
   ai_crow.png --kind sparrow --fly ai_crow_fly.png --flip --colors 24 --eyes 0.2,0.31 --fly-eyes 0.2,0.53 --eye-color 230,50,60
-  ai_scarecrow.png --kind scarecrow --colors 28 --eyes 0.43,0.35,0.6,0.35 --eye-color 230,50,60
+  ai_scarecrow.png --kind scarecrow --colors 28   (눈은 AI 그림 그대로: 다시 찍은 빨간 눈은 사용자가 이상하다고 함)
   ai_baby.png --kind baby_sparrow --fly ai_baby_fly.png --flip --colors 24 --eyes 0.37,0.4 --fly-eyes 0.41,0.4 --eye-color 200,40,56
 """
 import argparse
