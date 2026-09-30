@@ -263,10 +263,29 @@ def outline_color(c):
 
 
 def apply_patch(views, patch):
-    """patch: {"colors": {"r": [r,g,b], ...}, "down": [{"at": [x, y], "rows": ["..rr..", ...]}], "up": [...], "side": [...]}
+    """patch: {"neutral_purple": true (선택), "hue_shift": [[h0, h1, dh, sat]] (선택), "colors": {"r": [r,g,b], ...}, "down": [{"at": [x, y], "rows": ["..rr..", ...]}], "up": [...], "side": [...]}
     rows 의 글자 하나가 픽셀 하나, '.' 는 그대로 둔다."""
     cols = {k: tuple(v) + (255,) for k, v in patch.get("colors", {}).items()}
     for view, img in views.items():
+        for h0, h1, dh, smul in patch.get("hue_shift", []):
+            # [시작 색상각, 끝 색상각, 옮길 각도, 채도 배율]: P1 보정에서 누렇게 뜬 옷 색을 제 색으로 (예: 쑥색 두루마기)
+            px = img.load()
+            for y in range(img.height):
+                for x in range(img.width):
+                    r, g, b, a = px[x, y]
+                    hh, ss, vv = colorsys.rgb_to_hsv(r / 255, g / 255, b / 255)
+                    if a and ss > 0.12 and h0 <= hh * 360 <= h1:
+                        nr, ng, nb = colorsys.hsv_to_rgb((hh + dh / 360) % 1, min(1, ss * smul), vv)
+                        px[x, y] = (round(nr * 255), round(ng * 255), round(nb * 255), a)
+        if patch.get("neutral_purple"):
+            # 회색 · 흰 머리의 짙은 그늘이 P1 보정에서 보랏빛이 되는 것을 같은 밝기의 따뜻한 회색으로 되돌린다
+            px = img.load()
+            for y in range(img.height):
+                for x in range(img.width):
+                    r, g, b, a = px[x, y]
+                    if a and b > r + 8 and b > g + 20:
+                        l = int(lum((r, g, b)))
+                        px[x, y] = (min(255, l + 10), l, max(0, l - 4), a)
         for block in patch.get(view, []):
             x0, y0 = block["at"]
             for j, row in enumerate(block["rows"]):
