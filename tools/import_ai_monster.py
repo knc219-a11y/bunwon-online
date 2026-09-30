@@ -12,7 +12,13 @@
   3. 까만 선은 이웃 색을 어둡게 한 보랏빛 선으로 누그러뜨리고 P1 파스텔 보정.
   4. 모래 더미 (게 숨기) · 혀 · 사금 반짝은 코드로 그린다. --redraw-eyes 면 눈 · 입을 지우고 둥근 눈 + 반짝으로 다시 그린다.
 
-실행: python3 tools/import_ai_monster.py 그림.png --kind crab|boss|baby [--width 24] [--colors 20] [--preview 미리보기.png]
+광동리 세트 (2026-09-30, 참새 → 요괴 까마귀로 바뀜): 프롬프트는 /mnt/project-files/design/gwangdong-ai/prompt.md.
+  sparrow      → assets/creatures/wild_sparrow.png (256x32): 0-1 앉아 쪼기, 2-5 날갯짓, 6-7 낟알 쪼기 (요괴 까마귀)
+  scarecrow    → assets/creatures/wild_scarecrow.png (256x32): 0-1 흔들, 2-5 깡충, 6-7 짚단 던지기. 게임에서 1.8배
+  baby_sparrow → assets/creatures/baby_sparrow_flying.png (320x32): 0-1 대기, 2-5 날기, 6-9 쪼기 (아기 까마귀)
+  까마귀 둘은 왼쪽을 보는 옆모습: 앉은 그림 + --fly 날개 편 그림 (없으면 앉은 그림만 흔든다). 오른쪽을 보면 --flip.
+
+실행: python3 tools/import_ai_monster.py 그림.png --kind crab|boss|baby|sparrow|scarecrow|baby_sparrow [--width 24] [--colors 20] [--preview 미리보기.png]
       (--sand 숨은그림.png: 모래에 파묻힌 게 그림이 따로 있으면 숨기 칸에 그걸 쓴다)
 
 지금 시트를 만든 명령 (그림 원본: /mnt/project-files/design/gumsa-ai/ai_*.png, 사용자 AI 그림 2026-09-30)
@@ -60,11 +66,36 @@ KINDS = {
         dict(sx=1.1, sy=0.9, lift=0, work=0), dict(sx=0.95, sy=1.06, lift=0, work=1),
         dict(sx=1.0, sy=1.0, lift=0, work=2), dict(sx=1.035, sy=0.955, lift=0, work=3),
     ]),
+    # 광동리 세트 (2026-09-30). 참새 둘은 왼쪽을 보는 옆모습, 앉은 그림 + 날개 편 그림 (--fly) 두 장.
+    #   rot: 발밑 가운데를 축으로 기울임 (도, + 는 머리가 왼쪽 아래로 = 쪼기), fly: 날개 편 그림을 쓴다
+    #   fw: 날개 편 그림의 가로 px (날개 폭이 넓어서 따로)
+    "sparrow": dict(out="wild_sparrow", width=20, fw=26, frames=[
+        dict(sx=1.0, sy=1.0, lift=0), dict(sx=1.0, sy=1.0, lift=0, rot=22),
+        dict(fly=True, sx=1.0, sy=1.0, lift=2), dict(fly=True, sx=1.04, sy=0.72, lift=3),
+        dict(fly=True, sx=1.0, sy=1.0, lift=3), dict(fly=True, sx=1.04, sy=0.72, lift=2),
+        dict(sx=1.0, sy=1.0, lift=0, rot=22), dict(sx=1.03, sy=0.96, lift=0),
+    ]),
+    # 정면. 게임에서 1.8배. 짚단 · 떨어질 자리 원은 게임이 그린다
+    "scarecrow": dict(out="wild_scarecrow", width=28, max_h=30, frames=[
+        dict(sx=1.0, sy=1.0, lift=0), dict(sx=1.0, sy=1.0, lift=0, rot=-4, dx=1),
+        dict(sx=1.03, sy=0.94, lift=1), dict(sx=0.97, sy=1.0, lift=2),
+        dict(sx=1.0, sy=0.97, lift=1), dict(sx=1.03, sy=0.95, lift=0),
+        dict(sx=1.0, sy=1.0, lift=0, rot=9, dx=-1), dict(sx=1.0, sy=1.0, lift=0),
+    ]),
+    "baby_sparrow": dict(out="baby_sparrow_flying", width=15, fw=20, frames=[
+        dict(sx=1.0, sy=1.0, lift=0), dict(sx=1.04, sy=0.95, lift=0),
+        dict(fly=True, sx=1.0, sy=1.0, lift=6), dict(fly=True, sx=1.04, sy=0.72, lift=9),
+        dict(fly=True, sx=1.0, sy=1.0, lift=9), dict(fly=True, sx=1.04, sy=0.72, lift=6),
+        dict(sx=1.0, sy=1.0, lift=0, rot=22), dict(sx=1.0, sy=1.0, lift=0),
+        dict(sx=1.0, sy=1.0, lift=0, rot=22), dict(sx=1.03, sy=0.96, lift=0),
+    ]),
 }
 
 
-def load_figure(src):
+def load_figure(src, flip=False):
     fig = peel_halo(largest_blob(white_to_alpha(Image.open(src))))
+    if flip:
+        fig = fig.transpose(Image.FLIP_LEFT_RIGHT)
     fig = fig.resize((WORK_W, round(WORK_W * fig.height / fig.width)), Image.LANCZOS)
     fig.putalpha(fig.getchannel("A").point(lambda v: 255 if v > 128 else 0))
     return fig
@@ -138,11 +169,27 @@ def spot_face(l, left, top, W, H, eyes, size, ring, cheeks, lid=False):
             l.px(ex, ey + 1, GLINT)
 
 
+def tilt(body, deg):
+    """발밑 가운데를 축으로 기울인다 (쪼기 · 짚단 던지기). 칸 크기는 그대로, 넘치면 잘린다."""
+    w, h = body.size
+    big = Image.new("RGBA", (w * 2, h * 2), (0, 0, 0, 0))
+    big.alpha_composite(body, (w // 2, h - 1))
+    big = big.rotate(deg, resample=Image.NEAREST, center=(w, h * 2 - 1))
+    box = big.getbbox()
+    return big.crop(box) if box else body
+
+
 def build(src, kind, width=None, colors=20, redraw_eyes=False, sand_src=None, mouth=(0.5, 0.62),
-          spot_eyes=None, eye_size=2, eye_ring=False, cheeks=(), eye_lid=False):
+          spot_eyes=None, eye_size=2, eye_ring=False, cheeks=(), eye_lid=False, fly_src=None, flip=False,
+          fly_eyes=None):
     spec = KINDS[kind]
     width = width or spec["width"]
-    fig = load_figure(src)
+    fig = load_figure(src, flip)
+    fly = None
+    if fly_src:
+        fly = load_figure(fly_src, flip)
+        fly_pal = fly.convert("RGB").quantize(colors, method=Image.Quantize.FASTOCTREE)
+        fly_h = round(spec["fw"] * fly.height / fly.width)
     eyes = None
     if redraw_eyes:
         eyes, found_mouth, erase = find_face(fig)
@@ -151,6 +198,8 @@ def build(src, kind, width=None, colors=20, redraw_eyes=False, sand_src=None, mo
     pal_img = fig.convert("RGB").quantize(colors, method=Image.Quantize.FASTOCTREE)
     pal = pal_img.getpalette()
     base_h = round(width * fig.height / fig.width)
+    if spec.get("max_h") and base_h > spec["max_h"]:
+        width, base_h = round(width * spec["max_h"] / base_h), spec["max_h"]
     frames = spec["frames"]
     bodies = Image.new("RGBA", (CELL * len(frames), CELL), (0, 0, 0, 0))
     over = Image.new("RGBA", bodies.size, (0, 0, 0, 0))
@@ -161,12 +210,21 @@ def build(src, kind, width=None, colors=20, redraw_eyes=False, sand_src=None, mo
         if "sand" in f:
             placed.append(None)
             continue
-        W = max(8, round(width * f["sx"]))
-        H = max(8, min(CELL - f["lift"], round(base_h * f["sy"])))
-        body = pixelize(fig, pal_img, pal, W, H)
+        use_fly = f.get("fly") and fly is not None
+        src_fig, src_pal, bw, bh = (fly, fly_pal, spec["fw"], fly_h) if use_fly else (fig, pal_img, width, base_h)
+        if f.get("fly") and fly is None:
+            # 날개 편 그림이 없으면 앉은 그림을 위아래로만 흔든다
+            f = dict(f, sx=1.0, sy=1.0 if f["sy"] >= 1.0 else 0.94)
+        W = max(8, round(bw * f["sx"]))
+        H = max(8, min(CELL - f["lift"], round(bh * f["sy"])))
+        body = pixelize(src_fig, src_pal, src_pal.getpalette(), W, H)
         had_line = soften_edges(body) and had_line
         if f.get("step"):
             body = shove_legs(body, f["step"])
+        if f.get("rot"):
+            body = tilt(body, f["rot"])
+            W, H = body.size
+            H = min(H, CELL - f["lift"])
         if stalks is None and kind == "crab":
             stalks = eye_stalks(body)
         left = CELL // 2 - W // 2 + f.get("dx", 0)
@@ -212,8 +270,9 @@ def build(src, kind, width=None, colors=20, redraw_eyes=False, sand_src=None, mo
         left, top, W, H = p
         if eyes:
             draw_face(l, left, top, W, H, eyes, mouth)
-        if spot_eyes:
-            spot_face(l, left, top, W, H, spot_eyes, eye_size, eye_ring, cheeks, eye_lid)
+        use_eyes = (fly_eyes if f.get("fly") and fly is not None else spot_eyes) if not f.get("rot") else None
+        if use_eyes:
+            spot_face(l, left, top, W, H, use_eyes, eye_size, eye_ring, cheeks if not f.get("fly") else (), eye_lid)
         if "work" in f:
             draw_tongue(l, int(round(left + mouth[0] * W)), int(round(top + mouth[1] * H)), f["work"])
         sheet.alpha_composite(l.img, (i * CELL, 0))
@@ -234,13 +293,16 @@ def main():
     ap.add_argument("--eye-lid", action="store_true", help="반쯤 감은 눈꺼풀 (금두꺼비 대장)")
     ap.add_argument("--cheeks", help="볼 자리 몸 비율 x1,y1,x2,y2")
     ap.add_argument("--sand", help="모래에 파묻힌 게 그림 (crab 숨기 칸)")
+    ap.add_argument("--fly", help="날개 편 그림 (sparrow · baby_sparrow 날갯짓 칸)")
+    ap.add_argument("--fly-eyes", help="날개 편 그림의 눈 자리 (몸 비율 x,y, 옆모습이라 하나)")
+    ap.add_argument("--flip", action="store_true", help="그림을 좌우로 뒤집는다 (참새가 오른쪽을 보고 나왔을 때)")
     ap.add_argument("--out", help="기본: assets/creatures/<규격 이름>.png")
     ap.add_argument("--preview", help="4배 확대 미리보기 PNG")
     a = ap.parse_args()
     mouth = tuple(float(v) for v in a.mouth.split(","))
     pairs = lambda t: [tuple(v) for v in zip(*[iter(float(x) for x in t.split(","))] * 2)] if t else []
     sheet = build(a.src, a.kind, a.width, a.colors, a.redraw_eyes, a.sand, mouth,
-                  pairs(a.eyes), a.eye_size, a.eye_ring, pairs(a.cheeks), a.eye_lid)
+                  pairs(a.eyes), a.eye_size, a.eye_ring, pairs(a.cheeks), a.eye_lid, a.fly, a.flip, pairs(a.fly_eyes))
     out = a.out or os.path.join(ROOT, "assets", "creatures", KINDS[a.kind]["out"] + ".png")
     sheet.save(out)
     print(out)

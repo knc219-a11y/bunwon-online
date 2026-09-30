@@ -10,7 +10,7 @@
 [resource]
 script = ExtResource("1")
 id = &"sparrow"
-display_name = "아기 참새"
+display_name = "아기 까마귀"
 possible_elements = Array[Resource]([ExtResource("5")])
 job_aptitude = {
 &"forage": 1.5

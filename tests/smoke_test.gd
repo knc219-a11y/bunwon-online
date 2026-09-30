@@ -908,7 +908,7 @@ func _ready() -> void:
 	_check(sh.bridge_broken() and not sh.advance() and sh.zone == 1, "대장간을 고치기 전엔 금사리 쇠다리가 끊겨 광동리로 못 감")
 	GameState.forge_state = 2
 	_check(not sh.bridge_broken(), "대장간을 고치면 쇠다리가 이어짐")
-	_check(sh.advance() and sh.zone == 2 and 2 in GameState.waypoints and sh.slimes[0].title == "참새", "위쪽 길로 3구역 광동리 (웨이포인트 켜짐, 참새)")
+	_check(sh.advance() and sh.zone == 2 and 2 in GameState.waypoints and sh.slimes[0].title == "요괴 까마귀", "위쪽 길로 3구역 광동리 (웨이포인트 켜짐, 요괴 까마귀)")
 	GameState.forge_state = br_state
 	main.hunter.position = sh.exit_area().get_center()
 	main.interact()
@@ -1712,7 +1712,7 @@ func _ready() -> void:
 	_check(not main.inventory.visible, "대장장이는 가방이 없음")
 	main._set_active(main.farmer)
 
-	# 36) 광동리 (2026-09-29 사용자: "3구역은 광동리다", 후보 B. 동지벌 군량 벌판): 참새 떼 · 허수아비 장수 · 아기 참새
+	# 36) 광동리 (2026-09-29 사용자: "3구역은 광동리다", 후보 B. 동지벌 군량 벌판): 요괴 까마귀 떼 · 허수아비 장수 · 아기 까마귀
 	close_all(main)
 	var g_z: Dictionary = Config.HUNT_ZONES[2]
 	_check(g_z.name == "광동리" and g_z.map == "gwangdong" and g_z.flyer, "3구역 광동리: 넓은 맵 + 나는 몬스터")
@@ -1726,7 +1726,7 @@ func _ready() -> void:
 	var gh: HuntGround = main.hunt
 	gh.set_ai(false)
 	gh.set_process(false)
-	_check(gh.slimes.size() == g_z.count and gh.slimes[0].flyer and gh.slimes[0].sheet.resource_path.ends_with("wild_sparrow.png"), "참새 %d마리" % g_z.count)
+	_check(gh.slimes.size() == g_z.count and gh.slimes[0].flyer and gh.slimes[0].sheet.resource_path.ends_with("wild_sparrow.png"), "까마귀 %d마리" % g_z.count)
 	var sp_a: WildSlime = gh.slimes[0]
 	for o in gh.slimes:
 		if o != sp_a:
@@ -1741,7 +1741,7 @@ func _ready() -> void:
 	GameState.worn[&"hunter"].erase(&"weapon")  # 드롭으로 무기를 들었으면 사냥칼로 (이 아래는 칼 휘두르기 점검)
 	sp_a.position = main.hunter.feet() + Vector2(0, -8 - Config.SWING_REACH)
 	gh._cooldown = 0.0
-	_check(gh.swing(Vector2.UP) == 0 and sp_a.hp == g_z.hp, "나는 참새는 칼에 안 맞음")
+	_check(gh.swing(Vector2.UP) == 0 and sp_a.hp == g_z.hp, "나는 까마귀는 칼에 안 맞음")
 	sp_a._fly = 0.0
 	gh.tick(0.05)
 	_check(sp_a._swoop >= 0.0 and not sp_a.telegraph().is_empty() and sp_a.telegraph().kind == &"circle", "맴돌다가 발밑에 그림자 원 예고")
@@ -1755,7 +1755,7 @@ func _ready() -> void:
 	_check(not sp_a.in_air() and sp_a._rest > 0.0, "내려앉아 낟알을 쫌 (칠 틈)")
 	gh._cooldown = 0.0
 	sp_a.position = main.hunter.feet() + Vector2(0, -8 - Config.SWING_REACH)
-	_check(gh.swing(Vector2.UP) == 1 and sp_a.hp == g_z.hp - 1, "앉은 참새는 칼에 맞음")
+	_check(gh.swing(Vector2.UP) == 1 and sp_a.hp == g_z.hp - 1, "앉은 까마귀는 칼에 맞음")
 	_check(sp_a._rest <= Config.SWOOP_HIT_RECOVER, "맞으면 곧 다시 날아오름")
 	# 내려꽂기 원 밖이면 안 다침
 	sp_a._rest = 0.0
@@ -1769,7 +1769,7 @@ func _ready() -> void:
 	for i in 40:
 		gh.tick(0.05)
 	_check(gh.hearts == g_h1, "비켜서면 내려꽂기에 안 맞음")
-	# 대장 허수아비 장수: 짚단 셋 + 두 번에 한 번 참새 부르기
+	# 대장 허수아비 장수: 짚단 셋 + 두 번에 한 번 까마귀 부르기
 	for o in gh.slimes.duplicate():
 		gh.slimes.erase(o)
 		o.queue_free()
@@ -1794,10 +1794,10 @@ func _ready() -> void:
 		gh.tick(0.05)
 		if gh.slimes.size() > 1:
 			break
-	_check(gh.slimes.filter(func(o: WildSlime) -> bool: return o.minion and o.flyer).size() == Config.STRAW_CALL, "두 번째 던지기 뒤 참새 %d마리를 부름" % Config.STRAW_CALL)
+	_check(gh.slimes.filter(func(o: WildSlime) -> bool: return o.minion and o.flyer).size() == Config.STRAW_CALL, "두 번째 던지기 뒤 까마귀 %d마리를 부름" % Config.STRAW_CALL)
 	main.leave_hunt()
 	HuntGround.loot_enabled = true
-	# 알: 광동리 몬스터 알 = 아기 참새 (게임 첫 알은 그대로 슬라임)
+	# 알: 광동리 몬스터 알 = 아기 까마귀 (게임 첫 알은 그대로 슬라임)
 	GameState.hunts_today = 0
 	main.next_day()
 	main.enter_hunt(null, 2)
@@ -1811,20 +1811,20 @@ func _ready() -> void:
 	g_s.hp = 1
 	g_s.position = main.hunter.feet() + Vector2(0, -8 - Config.SWING_REACH)
 	gh.swing(Vector2.UP)
-	_check(gh.drops.size() == 1 and gh.drops[0].species == CreatureCatalog.SPARROW, "광동리 알 = 아기 참새")
+	_check(gh.drops.size() == 1 and gh.drops[0].species == CreatureCatalog.SPARROW, "광동리 알 = 아기 까마귀")
 	HuntGround.egg_roll = -1.0
 	HuntGround.loot_enabled = true
 	main.leave_hunt()
-	# 아기 참새: 비행 속성만, 채집 1.5배 + 빨리 날아다님, 동행 = 날아가 쪼기 (나는 몬스터도), 아침마다 씨앗
+	# 아기 까마귀: 비행 속성만, 채집 1.5배 + 빨리 날아다님, 동행 = 날아가 쪼기 (나는 몬스터도), 아침마다 씨앗
 	var g_rng := RandomNumberGenerator.new()
 	g_rng.seed = 36
 	var g_fly := true
 	for i in 30:
 		var gd := CreatureData.hatch(CreatureCatalog.SPARROW, g_rng)
 		g_fly = g_fly and gd.elements.size() == 1 and gd.elements[0].id == &"flying"
-	_check(g_fly, "아기 참새는 비행 속성만")
+	_check(g_fly, "아기 까마귀는 비행 속성만")
 	var g_c: Creature = main._hatch(CreatureCatalog.SPARROW, Vector2i(16, 12))
-	_check(g_c.data.species.sprite_sheets.has(&"flying") and g_c.data.move_speed() > 1.4, "아기 참새 부화 (비행 그림, 빨리 날아다님)")
+	_check(g_c.data.species.sprite_sheets.has(&"flying") and g_c.data.move_speed() > 1.4, "아기 까마귀 부화 (비행 그림, 빨리 날아다님)")
 	_check(is_equal_approx(g_c.data.aptitude(CreatureJobs.FORAGE), 1.5 * g_c.data.creature_trait.job_aptitude.get(CreatureJobs.FORAGE, 1.0)), "채집 재능 1.5배")
 	_check(HuntCompanion.style_for(g_c.data) == HuntCompanion.Style.PECK and HuntCompanion.style_name(g_c.data) == "날아가 쪼기", "동행은 날아가 쪼기")
 	g_c.job = CreatureJobs.FORAGE
@@ -1853,7 +1853,7 @@ func _ready() -> void:
 	g_t.position = gh.companion.position + Vector2(90, 0)
 	gh._companion_cooldown = 0.0
 	gh._tick_companion(0.01)
-	_check(g_t.hp == 1 and not g_t.in_air() and g_t._rest > 0.0, "아기 참새가 날던 참새를 쪼아 떨어뜨림")
+	_check(g_t.hp == 1 and not g_t.in_air() and g_t._rest > 0.0, "아기 까마귀가 날던 까마귀를 쪼아 떨어뜨림")
 	main.leave_hunt()
 
 	# 37. 도마리 (4구역, 2막 마지막 구역): 고목 그루터기 · 장승 한 쌍 · 아기 나무 정령 (2026-09-29)
@@ -1952,7 +1952,7 @@ func _ready() -> void:
 	var d_boost: int = main.boost_growth()
 	d_sp.grow_chance = d_ch0
 	_check(d_boost >= 1 and main.farm.get_cell(d_cell).growth == d_g0 + 1, "아기 나무 정령 키우기: 물 준 작물이 하루 더 자람")
-	# 잡템 이름은 구역 몬스터에 맞춤 (금사리 모래게 껍데기 · 광동리 참새 깃털 · 도마리 고목 옹이)
+	# 잡템 이름은 구역 몬스터에 맞춤 (금사리 모래게 껍데기 · 광동리 까마귀 깃털 · 도마리 고목 옹이)
 	var j_rng := RandomNumberGenerator.new()
 	var j_names := {}
 	for zi in 4:
@@ -1961,7 +1961,7 @@ func _ready() -> void:
 			if jd.get("kind") == &"junk":
 				j_names[zi] = HuntLoot.label(jd)
 				break
-	_check(j_names.get(0) == "슬라임 젤리" and j_names.get(1) == "모래게 껍데기" and j_names.get(2) == "참새 깃털" and j_names.get(3) == "고목 옹이", "잡템 이름이 구역마다 다름 %s" % j_names)
+	_check(j_names.get(0) == "슬라임 젤리" and j_names.get(1) == "모래게 껍데기" and j_names.get(2) == "까마귀 깃털" and j_names.get(3) == "고목 옹이", "잡템 이름이 구역마다 다름 %s" % j_names)
 
 	# 무기 (2026-09-29 사용자: 근거리 · 활 · 지팡이). 무기 칸이 비면 사냥칼.
 	GameState.reset()
@@ -2046,7 +2046,7 @@ func _ready() -> void:
 	wph._cooldown = 0.0
 	_check(wph.swing(Vector2.RIGHT) == 1 and w_t.hp == 4, "전투 도끼: 사냥칼이 안 닿는 옆까지 벰")
 	main.leave_hunt()
-	# 나는 참새도 화살엔 맞는다
+	# 나는 까마귀도 화살엔 맞는다
 	GameState.worn[&"hunter"][&"weapon"] = &"gear_1"
 	GameState.hunts_today = 0
 	main.hunter.position = main.hunt_gate.position
@@ -2069,7 +2069,7 @@ func _ready() -> void:
 	wpg.swing(Vector2.RIGHT)
 	for i in 30:
 		wpg.tick(1.0 / 30.0)
-	_check(w_sp.hp == w_sp_hp - 1 and not w_sp.in_air(), "화살은 나는 참새도 맞혀 떨어뜨림")
+	_check(w_sp.hp == w_sp_hp - 1 and not w_sp.in_air(), "화살은 나는 까마귀도 맞혀 떨어뜨림")
 	main.leave_hunt()
 	# 대장간: 강철 검 · 쇠뇌
 	GameState.scrap = 20
