@@ -151,3 +151,23 @@
 - 집·나무 그림이 캐릭터나 크리처를 가리면 그 그림이 45% 불투명도로 옅어진다 (`fade_behind`).
 - 크리처는 곧게 깡충 뛰는 길에 막는 범위가 있는 칸 일은 하지 않는다 (울타리·집을 넘어 뛰지 않음, `Farm.line_clear`).
 - 새 그림으로 바꿀 때 밑동 위치나 벽 높이가 달라지면 `*_BLOCK` 값만 고치면 된다.
+
+
+# 그래픽 시범 (2026-09-30, 마을 + 분원농협)
+
+생성기 `tools/make_polish_sprites.py` · `tools/make_ui_skin.py`. 같은 크기 PNG로 바꾸면 코드 수정 없이 바뀐다.
+
+| 파일 | 크기 | 내용 |
+|---|---|---|
+| `assets/props/forage.png` | 120 x 24 (24칸 5) | 냉이 · 쑥 · 달래 · 도라지 싹 · 물 준 풀밭 |
+| `assets/tiles/ground_deco.png` | 160 x 16 (16칸 10) | 개망초 · 민들레 · 제비꽃 · 토끼풀 · 풀포기 둘 · 조약돌 · 이끼 돌 · 잡초 덤불 · 큰 돌 |
+| `assets/tiles/yard_deco.png` | 96 x 16 (16칸 6) | 분원농협 마당: 금 · 금 사이 잡초 · 기름 얼룩 · 웅덩이 · 볏짚 · 낙엽 |
+| `assets/props/plot_sign.png` | 24 x 24 | 잠긴 밭 팻말 (값은 게임이 씀) |
+| `assets/hunt/drops.png` | 80 x 16 (16칸 5) | 알 (흰 바탕, 종 색으로 물듦) · 빨간 물약 · 슬라임 젤리 · 돈 · 잡템 보따리 |
+| `assets/ui/window.png` | 32 x 32 | 선택창 · 아침 카드 (9칸 나눔 여백 9, 작은 지도 테두리는 6) |
+| `assets/ui/bar.png` | 16 x 16 | 위 · 아래 줄 (여백 5) |
+| `assets/ui/chip.png` | 14 x 14 | 위 줄 알약 (여백 5) |
+| `assets/ui/icons.png` | 192 x 12 (12칸 16) | 해 · 달 · 돈 · 씨앗 · 무 · 나물 · 알 · 크리처 · 도구 · 하트 · 빈 하트 · 물약 · 깃발 · 몬스터 · 잡템 · 사람 (`UiSkin.Icon`) |
+| `assets/fonts/Galmuri9.ttf` | | 게임 전체 글씨 (크기 10이 제 크기). `Galmuri11.ttf` 는 제목용 예비 |
+
+조명 · 날씨는 그림 파일 없이 `scripts/ambience.gd` 가 그린다 (시각별 색표 `DAY_COLORS`, 불빛은 `add_light`).
