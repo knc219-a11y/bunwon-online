@@ -168,6 +168,6 @@
 | `assets/ui/bar.png` | 16 x 16 | 위 · 아래 줄 (여백 5) |
 | `assets/ui/chip.png` | 14 x 14 | 위 줄 알약 (여백 5) |
 | `assets/ui/icons.png` | 192 x 12 (12칸 16) | 해 · 달 · 돈 · 씨앗 · 무 · 나물 · 알 · 크리처 · 도구 · 하트 · 빈 하트 · 물약 · 깃발 · 몬스터 · 잡템 · 사람 (`UiSkin.Icon`) |
-| `assets/fonts/Galmuri9.ttf` | | 게임 전체 글씨 (크기 10이 제 크기). `Galmuri11.ttf` 는 제목용 예비 |
+| `assets/fonts/Galmuri9.ttf` | | 게임 전체 글씨 (크기 10이 제 크기) |
 
 조명 · 날씨는 그림 파일 없이 `scripts/ambience.gd` 가 그린다 (시각별 색표 `DAY_COLORS`, 불빛은 `add_light`).
