@@ -23,7 +23,10 @@
       (--sand 숨은그림.png: 모래에 파묻힌 게 그림이 따로 있으면 숨기 칸에 그걸 쓴다)
 
 지금 시트를 만든 명령 (그림 원본: /mnt/project-files/design/gumsa-ai/ai_*.png, 사용자 AI 그림 2026-09-30)
-  --kind crab --width 28 --colors 24 --eyes 0.402,0.283,0.594,0.283 --eye-ring
+  (옛 주황 모래게: --kind crab --width 28 --colors 24 --eyes 0.402,0.283,0.594,0.283 --eye-ring)
+  ai_crab_demon.png --kind crab --width 30 --colors 32 --eyes 0.43,0.51,0.58,0.51 --eye-color 255,56,40 --angry --peek 0.6
+    (2026-09-30 요괴 모래게: 사용자 "금사리 게도 너무 약해 보여". 프롬프트 design/gumsa-ai/crab2-prompt.md A.
+     숨기 칸은 대기 칸의 뿔 · 빨간 눈을 잘라 모래 더미 위로 빼꼼)
   --kind boss --colors 24 --eyes 0.545,0.17,0.849,0.16 --eye-lid
   --kind baby --colors 24 --eyes 0.518,0.181,0.882,0.159 --cheeks 0.465,0.353,0.934,0.345 --mouth 0.75,0.40
 광동리 (그림 원본: /mnt/project-files/design/gwangdong-ai/ai_*.png, 사용자 AI 그림 2026-09-30)
@@ -167,7 +170,10 @@ def draw_tongue(l, mx, my, stage):
 LID = (150, 96, 40)
 
 
-def spot_face(l, left, top, W, H, eyes, size, ring, cheeks, lid=False, eye=EYE):
+BROW = (70, 24, 34)
+
+
+def spot_face(l, left, top, W, H, eyes, size, ring, cheeks, lid=False, eye=EYE, angry=False):
     """정해 준 자리 (몸 비율)에 둥근 눈 + 반짝을 새로 찍는다. 22~30px 로 줄이면 AI 눈이 뭉개져서."""
     for fx, fy in cheeks:
         cx, cy = int(round(left + fx * W)), int(round(top + fy * H))
@@ -178,6 +184,14 @@ def spot_face(l, left, top, W, H, eyes, size, ring, cheeks, lid=False, eye=EYE):
         if ring:
             l.rect(ex - 1, ey - 1, ex + size, ey + size + 1, RING)
         l.rect(ex, ey, ex + size - 1, ey + size, eye)
+        if angry:
+            # 요괴 모래게: 반짝 대신 밝은 눈동자 한 점 + 가운데로 내려오는 성난 눈썹
+            inner = 1 if fx < 0.5 else -1
+            l.px(ex + (size - 1 if inner > 0 else 0), ey + 1, (255, 200, 120))
+            for k in range(size + 1):
+                bx = ex - 1 + k if inner > 0 else ex + size - k
+                l.px(bx, ey - 1 + (k * 2) // (size + 1), BROW)
+            continue
         l.px(ex, ey, GLINT)
         if size >= 3:
             l.px(ex + 1, ey, GLINT)
@@ -206,7 +220,7 @@ def tilt(body, deg):
 
 def build(src, kind, width=None, colors=20, redraw_eyes=False, sand_src=None, mouth=(0.5, 0.62),
           spot_eyes=None, eye_size=2, eye_ring=False, cheeks=(), eye_lid=False, fly_src=None, flip=False,
-          fly_eyes=None, eye_color=EYE):
+          fly_eyes=None, eye_color=EYE, peek=None, angry=False):
     spec = KINDS[kind]
     width = width or spec["width"]
     fig = load_figure(src, flip, spec.get("mist", False))
@@ -277,6 +291,18 @@ def build(src, kind, width=None, colors=20, redraw_eyes=False, sand_src=None, mo
                 grade_p1(img)
                 sheet.alpha_composite(img, (i * CELL + CELL // 2 - sw // 2, CELL - sh))
                 continue
+            if peek:
+                # 요괴 모래게: 눈을 새로 찍은 대기 칸에서 가운데 윗부분 (뿔 · 빨간 눈)을 잘라 모래 더미 뒤에서 빼꼼
+                left0, top0, W0, H0, _ = placed[0]
+                x0, x1 = left0 + round(W0 * 0.3), left0 + round(W0 * 0.7)
+                head = sheet.crop((x0, top0, x1, top0 + round(H0 * peek)))
+                sheet.alpha_composite(head, (i * CELL + x0, 27 - f["sand"] - head.height))
+                sand_mound(l, f["sand"])
+                mound = l.img
+                outline(mound, CELL)
+                grade_p1(mound)
+                sheet.alpha_composite(mound, (i * CELL, 0))
+                continue
             peek = f["sand"]
             if spot_eyes:
                 # 모래 더미 + 빼꼼 나온 눈자루는 코드 그림 그대로 (눈은 위에서 새로 찍은 것과 같은 모양)
@@ -302,7 +328,7 @@ def build(src, kind, width=None, colors=20, redraw_eyes=False, sand_src=None, mo
         if use_eyes and move:
             use_eyes = [move(fx, fy) for fx, fy in use_eyes]
         if use_eyes:
-            spot_face(l, left, top, W, H, use_eyes, eye_size, eye_ring, cheeks if not f.get("fly") else (), eye_lid, eye_color)
+            spot_face(l, left, top, W, H, use_eyes, eye_size, eye_ring, cheeks if not f.get("fly") else (), eye_lid, eye_color, angry)
         if "work" in f:
             draw_tongue(l, int(round(left + mouth[0] * W)), int(round(top + mouth[1] * H)), f["work"])
         sheet.alpha_composite(l.img, (i * CELL, 0))
@@ -323,6 +349,8 @@ def main():
     ap.add_argument("--eye-lid", action="store_true", help="반쯤 감은 눈꺼풀 (금두꺼비 대장)")
     ap.add_argument("--cheeks", help="볼 자리 몸 비율 x1,y1,x2,y2")
     ap.add_argument("--sand", help="모래에 파묻힌 게 그림 (crab 숨기 칸)")
+    ap.add_argument("--angry", action="store_true", help="반짝 대신 밝은 눈동자 + 성난 눈썹 (요괴 모래게)")
+    ap.add_argument("--peek", type=float, help="crab 숨기 칸: 대기 칸 가운데 위에서 이 비율만큼 (뿔 · 눈) 잘라 모래 위로 빼꼼 (요괴 모래게)")
     ap.add_argument("--fly", help="날개 편 그림 (sparrow · baby_sparrow 날갯짓 칸)")
     ap.add_argument("--fly-eyes", help="날개 편 그림의 눈 자리 (몸 비율 x,y, 옆모습이라 하나)")
     ap.add_argument("--eye-color", help="눈 색 r,g,b (요괴 까마귀 붉은 눈)")
@@ -334,7 +362,7 @@ def main():
     pairs = lambda t: [tuple(v) for v in zip(*[iter(float(x) for x in t.split(","))] * 2)] if t else []
     sheet = build(a.src, a.kind, a.width, a.colors, a.redraw_eyes, a.sand, mouth,
                   pairs(a.eyes), a.eye_size, a.eye_ring, pairs(a.cheeks), a.eye_lid, a.fly, a.flip, pairs(a.fly_eyes),
-                  tuple(int(v) for v in a.eye_color.split(",")) if a.eye_color else EYE)
+                  tuple(int(v) for v in a.eye_color.split(",")) if a.eye_color else EYE, a.peek, a.angry)
     out = a.out or os.path.join(ROOT, "assets", "creatures", KINDS[a.kind]["out"] + ".png")
     sheet.save(out)
     print(out)
