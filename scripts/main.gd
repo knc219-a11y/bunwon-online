@@ -110,6 +110,8 @@ var _rng := RandomNumberGenerator.new()
 var _status: Label
 ## 위 줄 알약 (그래픽 시범 2026-09-30). _status 글줄은 숨긴 채 같은 내용을 유지한다.
 var _hud_bar: HudBar
+## 하루 빛 · 불빛 · 구름 그림자 · 날리는 잎 (그래픽 시범 C)
+var ambience: Ambience
 var _message: Label
 
 
@@ -132,6 +134,14 @@ func _ready() -> void:
 	supply_box = _add_prop("마을 공급함", preload("res://assets/props/supply_box.png"), SUPPLY_RECT)
 	hunt_gate = _add_prop("사냥터 입구", preload("res://assets/props/hunt_gate.png"), HUNT_GATE_RECT)
 	stash_box = _add_prop("창고", preload("res://assets/props/stash.png"), STASH_RECT)
+
+	ambience = Ambience.new()
+	add_child(ambience)
+	var warm := Color(1.0, 0.78, 0.48)
+	ambience.add_light(house.position + Vector2(-32, -44), 46, warm)
+	ambience.add_light(house.position + Vector2(30, -44), 46, warm)
+	ambience.add_light(incubator.position + Vector2(10, -40), 34, Color(1.0, 0.55, 0.4))
+	ambience.add_light(supply_box.position + Vector2(0, -20), 30, warm)
 
 	farmer = _add_character("농부", preload("res://assets/characters/player.png"), Vector2i(14, 6), &"farmer")
 	hunter = _add_character("사냥꾼", preload("res://assets/characters/hunter.png"), Vector2i(20, 6), &"hunter")
@@ -2083,6 +2093,8 @@ func _build_hud() -> void:
 	_dusk.color = Color(0.1, 0.08, 0.3, 0.0)
 	_dusk.size = Vector2(640, 360)
 	_dusk.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# 저녁 어둡기는 Ambience 가 화면 색으로 그린다 (수치만 남김)
+	_dusk.visible = false
 	layer.add_child(_dusk)
 	layer.move_child(_dusk, 0)
 	# 잠잘 때 화면 전체를 덮는 밤 색. 평소에는 투명.

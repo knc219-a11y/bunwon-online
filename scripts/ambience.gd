@@ -92,7 +92,7 @@ static func color_at(m: float) -> Color:
 
 func _draw_clouds(n: Node2D) -> void:
 	# 낮에만 또렷하고 밤엔 옅게
-	var a := 0.13 * clampf(inverse_lerp(21 * 60, 17 * 60, GameState.minutes), 0.0, 1.0)
+	var a := 0.32 * clampf(inverse_lerp(21 * 60, 17 * 60, GameState.minutes), 0.0, 1.0)
 	if a <= 0.0:
 		return
 	for c in _clouds:
@@ -104,6 +104,7 @@ func _radial(size: int, col: Color) -> GradientTexture2D:
 	var g := Gradient.new()
 	g.set_color(0, col)
 	g.set_color(1, Color(col, 0.0))
+	g.add_point(0.55, Color(col, 0.75))
 	var t := GradientTexture2D.new()
 	t.gradient = g
 	t.fill = GradientTexture2D.FILL_RADIAL
@@ -125,8 +126,8 @@ func _dot(w: int, h: int, cols: Array[Color]) -> ImageTexture:
 ## 바람에 날리는 감잎 · 꽃잎
 func _leaves() -> CPUParticles2D:
 	var p := CPUParticles2D.new()
-	p.texture = _dot(3, 2, [Color(0.95, 0.6, 0.35), Color(0.98, 0.78, 0.45)])
-	p.amount = maxi(10, int(area.x * area.y / 16000.0))
+	p.texture = _dot(4, 3, [Color(0.95, 0.6, 0.35), Color(0.98, 0.78, 0.45), Color(0.9, 0.5, 0.3)])
+	p.amount = maxi(16, int(area.x * area.y / 11000.0))
 	p.lifetime = 9.0
 	p.preprocess = 9.0
 	p.emission_shape = CPUParticles2D.EMISSION_SHAPE_RECTANGLE

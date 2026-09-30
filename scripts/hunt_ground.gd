@@ -224,6 +224,12 @@ func _setup_night(z: Dictionary) -> void:
 	lamps.clear()
 	_lantern = null
 	_bus_light = null
+	if zone == 0 and map:
+		# 분원농협: 마을과 같은 하루 빛 · 구름 그림자 · 날리는 잎 (그래픽 시범 C)
+		var amb := Ambience.new()
+		amb.area = map.pixel_size()
+		add_child(amb)
+		_night.append(amb)
 	if z.has("shade") and not z.get("night", false):
 		# 그늘 구역 (밀목 솔숲): 조금 어둡기만 하고 불빛 규칙은 없다
 		var shade := CanvasModulate.new()
