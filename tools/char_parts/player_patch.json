@@ -1,28 +1,30 @@
 {
-  "note": "48px 에서 뭉개지는 얼굴 손질 (둥근 안경 · 눈 · 볼 · 입). 좌표는 그림 한 장(정면 30x46, 옆 30x46) 기준. rows 의 '.' 는 그대로 둔다.",
+  "note": "48px 에서 뭉개지는 얼굴 손질 (네모난 안경 · 큰 눈 · 볼 · 웃는 입). 좌표는 그림 한 장(정면 30x46, 옆 27x46, 오른쪽을 보게 뒤집은 뒤) 기준. rows 의 '.' 는 그대로 둔다.",
   "colors": {
-    "s": [249, 216, 188], "r": [60, 48, 62], "l": [238, 226, 218], "e": [52, 40, 54],
-    "c": [240, 170, 160], "m": [186, 110, 102], "h": [85, 71, 84]
+    "s": [250, 212, 180], "r": [74, 50, 62], "l": [252, 234, 218], "e": [58, 38, 50],
+    "c": [244, 164, 150], "m": [176, 96, 92]
   },
   "down": [
     {"at": [7, 12], "rows": [
-      "shssssshssssshss",
-      "ssrrrssssssrrrss",
-      "srlelrrrrrrlelrs",
-      "srlelrssssrlelrs",
-      "ssrrrssssssrrrss",
-      "scsssssssssssscs"
+      "ssssssssssssssss",
+      "ssrrrrssssrrrrss",
+      "srleelrrrrleelrs",
+      "srleelrssrleelrs",
+      "ssrrrrssssrrrrss",
+      "sccssssssssssccs",
+      "ssssssmssmssssss"
     ]},
-    {"at": [8, 18], "rows": ["ssssssmmssssss"]}
+    {"at": [9, 19], "rows": ["sssssmmsssss"]}
   ],
   "side": [
-    {"at": [17, 13], "rows": [
-      "ssssrrrss..",
-      "rrrrlelrss.",
-      "sssrlelrss.",
-      "ssssrrrssss",
-      "ssssscssss.",
-      "sssssssssm."
+    {"at": [12, 12], "rows": [
+      ".sssssssssss.",
+      ".sssssssrrrs.",
+      "rrrrrrrrlelr.",
+      ".ssssssrlelrs",
+      ".sssssssrrrs.",
+      ".ssssssscsss.",
+      ".ssssssssssm."
     ]}
   ]
 }

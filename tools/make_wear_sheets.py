@@ -375,15 +375,29 @@ def paint_ramp(img, row, col, body, pts, edge, ramp):
     line = (int(m[0] * 0.35 + 15.6), int(m[1] * 0.35 + 14.4), int(m[2] * 0.35 + 28.8))
     p = img.load()
     for (x, y), v in lm.items():
-        t = (v - lo) / max(1, hi - lo)
+        t = (v - lo) / (hi - lo) if hi - lo > 30 else 0.7  # 한 가지 색 옷이면 중간 색으로
         c = line if (x, y) in edge or t < 0.22 else (d if t < 0.5 else (m if t < 0.85 else l))
         p[col * CELL + x, row * CELL + y] = (*c, 255)
 
 
-def hands(pp, top):
-    """윗도리 아래쪽 살색 = 손. 왼손 · 오른손 (옆모습은 하나) 의 x 범위 (가슴의 끈 같은 살색은 뺀다)"""
+def hands(pp, top, row):
+    """윗도리 아래쪽 살색 = 손 (맨팔이면 팔). 왼손 · 오른손 (옆모습은 하나) 의 x 범위.
+    정면 · 뒷모습은 몸 가장자리에서 이어진 살색만 센다 (가슴 끈 · 맨살 허리 같은 가운데 살색은 뺀다)."""
     _, _, _, ty1 = bbox(top)
-    xs = sorted({x for x, y in pp["skin"] if ty1 - 5 <= y <= ty1 + 2})
+    skin = {p for p in pp["skin"] if ty1 - 5 <= p[1] <= ty1 + 2}
+    if row == 2:
+        xs = sorted({x for x, _ in skin})
+    else:
+        body = set().union(*pp.values())
+        xs = set()
+        for y in {y for _, y in skin}:
+            line = sorted(x for x, yy in body if yy == y)
+            for seq in (line, line[::-1]):
+                for x in seq:
+                    if (x, y) not in skin:
+                        break
+                    xs.add(x)
+        xs = sorted(xs)
     groups = []
     for x in xs:
         if groups and x - groups[-1][1] <= 1:
@@ -411,15 +425,23 @@ def fit_top(ramp, vest=False, pocket=None, stripe=None):
         top = pp["top"]
         tx0, ty0, tx1, ty1 = bbox(top)
         pts = set(top)
-        hs = hands(pp, top)
+        hs = hands(pp, top, row)
         mid = (tx0 + tx1) / 2
-        if vest:
+        # 소매가 있을 때만 팔을 남긴다. 윗도리 줄 가운데쯤에서 몸 가장자리가 살색이면 맨팔
+        body_px = set().union(*pp.values())
+        bare = 0
+        for y in range(ty0 + 2, ty1 - 3):
+            line = sorted(x for x, yy in body_px if yy == y)
+            if line and (line[0], y) in pp["skin"] and (line[-1], y) in pp["skin"]:
+                bare += 1
+        sleeves = row != 2 and bare < 2
+        if vest and sleeves:
             for a, b in hs:
                 # 소매: 손 위 세로줄 + 몸 쪽으로 2줄
                 a, b = (a, b + 2) if b < mid else (a - 2, b)
                 pts = {(x, y) for x, y in pts if not (a <= x <= b and y > ty0 + 1)}
-            if row == 0:
-                    pts = {(x, y) for x, y in pts if abs(x + 0.5 - mid) > 1.6 or y < ty0 + 2}
+        if vest and row == 0:  # 앞섶을 열어 안의 옷이 보이게
+            pts = {(x, y) for x, y in pts if abs(x + 0.5 - mid) > 1.6 or y < ty0 + 2}
         paint_ramp(img, row, col, body, pts, edge, ramp)
         c = Canvas(img, col * CELL, row * CELL)
         if pocket and row != 1:

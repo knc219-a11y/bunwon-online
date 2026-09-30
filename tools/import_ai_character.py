@@ -33,10 +33,9 @@ PARTS_DIR = os.path.join(os.path.dirname(__file__), "char_parts")
 # 부위 지도 색 (make_wear_sheets.py 와 같이 쓴다)
 PART_COLORS = {
     "hair": (40, 40, 40), "skin": (250, 200, 160), "top": (160, 160, 160), "pants": (70, 100, 200),
-    "shoes": (120, 60, 20), "detail": (255, 255, 255), "face": (220, 60, 60),
+    "shoes": (120, 60, 20),
 }
 PART_OF = {v: k for k, v in PART_COLORS.items()}
-HEAD, FEET = 0.42, 0.91  # 이 높이 위는 머리, 아래는 신발 (그림 높이 비율)
 
 
 def lum(c):
@@ -85,23 +84,51 @@ def white_to_alpha(im):
     return im
 
 
-def classify(c, yf):
-    """색과 높이(0 머리끝 ~ 1 발끝)로 부위를 고른다. 어두운 선은 None (이웃 부위를 따른다)."""
-    h, l, s = colorsys.rgb_to_hls(*(v / 255 for v in c))
-    hue = h * 360
-    if 10 <= hue <= 45 and s > 0.35 and l > 0.5:
-        return "skin"
-    if yf < HEAD:
-        return "hair" if l < 0.6 else "detail"
-    if l > 0.85 and s < 0.3:
-        return "detail"
-    if 190 <= hue <= 235 and s > 0.2 and l > 0.15 and 0.55 < yf <= FEET:
-        return "pants"
-    if l < 0.3:
-        return "shoes" if yf > FEET else None
-    if yf > FEET:
-        return "shoes"
-    return "top"
+# 부위별 색을 뽑는 정면 그림 속 자리 (가로 x0, x1, 세로 y0, y1 비율). 어떤 옷이든 색으로 나눈다.
+PROBES = {
+    "hair": [(0.3, 0.7, 0.02, 0.12)],
+    "skin": [(0.4, 0.6, 0.36, 0.41)],
+    "top": [(0.35, 0.65, 0.52, 0.6), (0.4, 0.6, 0.64, 0.68)],
+    "pants": [(0.2, 0.4, 0.72, 0.8), (0.6, 0.8, 0.72, 0.8)],
+    "shoes": [(0.1, 0.9, 0.95, 1.0)],
+}
+# 부위가 나올 수 있는 높이 (0 머리끝 ~ 1 발끝)
+SPAN = {"hair": (0, 0.5), "skin": (0, 1), "top": (0.3, 0.85), "pants": (0.55, 1), "shoes": (0.85, 1)}
+
+
+def part_refs(front):
+    """정면 그림에서 부위마다 대표 색 (가장 많은 색 3개). 한 색은 가장 많이 나온 부위 하나에만."""
+    w, h = front.size
+    px = front.load()
+    count = {}
+    for part, boxes in PROBES.items():
+        c = Counter()
+        for x0, x1, y0, y1 in boxes:
+            for y in range(int(y0 * h), max(int(y0 * h) + 1, int(y1 * h))):
+                for x in range(int(x0 * w), max(int(x0 * w) + 1, int(x1 * w))):
+                    p = px[x, min(y, h - 1)]
+                    if p[3] and (part in ("hair", "shoes") or lum(p) >= 60):
+                        c[p[:3]] += 1
+        count[part] = c
+    refs = {}
+    for part, c in count.items():
+        refs[part] = [col for col, n in c.most_common(3) if all(n >= count[o][col] for o in count if o != part)]
+    return refs
+
+
+def classify(c, yf, refs):
+    """가장 가까운 부위 대표 색으로 고른다. 어두운 선은 None (이웃 부위를 따른다)."""
+    best, bd = None, 1e9
+    for part, cols in refs.items():
+        if not SPAN[part][0] <= yf <= SPAN[part][1]:
+            continue
+        for r in cols:
+            d = sum((a - b) ** 2 for a, b in zip(c, r))
+            if d < bd:
+                best, bd = part, d
+    if lum(c) < 60 and best not in ("hair", "shoes"):
+        return None
+    return best
 
 
 def soften(c, lift, sat):
@@ -145,7 +172,7 @@ def fill_holes(img):
                 px[x, y] = px[x - 1, y]
 
 
-def part_map(img):
+def part_map(img, refs):
     """부위 지도. 어두운 선은 가장 많은 이웃 부위를 따른다."""
     w, h = img.size
     src = img.load()
@@ -153,7 +180,7 @@ def part_map(img):
     for y in range(h):
         for x in range(w):
             if src[x, y][3]:
-                lab[x, y] = classify(src[x, y][:3], y / (h - 1))
+                lab[x, y] = classify(src[x, y][:3], y / (h - 1), refs)
     for _ in range(4):
         for (x, y), v in list(lab.items()):
             if v is None:
@@ -161,10 +188,11 @@ def part_map(img):
                 ns.pop(None, None)
                 if ns:
                     lab[x, y] = ns.most_common(1)[0][0]
-    # 바지 윗줄 아래로 내려온 윗도리 · 살색 (다리 사이 틈 등) 은 바지로
-    pants_top = min((y for (x, y), v in lab.items() if v == "pants"), default=h)
+    # 바지 윗줄 아래로 내려온 윗도리 색 (다리 사이 선 등) 은 바지로
+    rows = [Counter(v for (x, yy), v in lab.items() if yy == y) for y in range(h)]
+    pants_top = next((y for y in range(h) if rows[y]["pants"] > max(2, rows[y]["top"])), h)
     for (x, y), v in lab.items():
-        if (v == "top" and y > pants_top + 1) or (v == "skin" and y > pants_top + 3):
+        if v == "top" and y > pants_top + 1:
             lab[x, y] = "pants"
     parts = Image.new("RGBA", (w, h), (0, 0, 0, 0))
     dst = parts.load()
@@ -286,7 +314,17 @@ def main():
     for key, f in zip(("down", "up", "side"), figs):
         views[key] = pixelize(f, pal_img, pal, max(1, round(f.width * sx)), a.height)
         fill_holes(views[key])
-    parts = {k: part_map(v) for k, v in views.items()}
+    refs = part_refs(views["down"])
+    # 옆모습은 오른쪽을 봐야 한다. 얼굴(살색)이 머리카락보다 왼쪽이면 뒤집는다.
+    pm = part_map(views["side"], refs).load()
+    sw = views["side"].width
+    cx = lambda part: sum(x for x in range(sw) for y in range(a.height // 2) if pm[x, y][:3] == PART_COLORS[part]) / max(1, sum(
+        1 for x in range(sw) for y in range(a.height // 2) if pm[x, y][:3] == PART_COLORS[part]))
+    if cx("skin") < cx("hair"):
+        views["side"] = views["side"].transpose(Image.Transpose.FLIP_LEFT_RIGHT)
+        print("옆모습이 왼쪽을 봐서 뒤집음")
+    print("부위 색", refs)
+    parts = {k: part_map(v, refs) for k, v in views.items()}
     for k, v in views.items():
         for x, y in recolor_body(v, parts[k], a.lift, a.sat):
             p = parts[k].getpixel((x, y))
