@@ -4,9 +4,9 @@
 
 ## 파일
 - `assets/characters/player.png` 플레이어(농부). 곱슬머리, 네모 안경, 흰 민소매, 초록 체크 반바지, 갈색 신 (2026-09-30 사용자 AI 그림에서 가져옴)
-- `assets/characters/hunter.png` 사냥꾼. 외형 미정이라 후드 색만 초록으로 바꾼 임시본
+- `assets/characters/hunter.png` 사냥꾼. 포니테일 갈색 머리, 빨간 체크 셔츠, 청 멜빵바지, 갈색 신 (2026-09-30 사용자 AI 그림에서 가져옴)
 
-사냥꾼 · 대장장이 · 연금술사 · 목축인은 `tools/make_character_sheet.py`가 코드로 그린 **임시 그림**이다.
+대장장이 · 연금술사 · 목축인은 `tools/make_character_sheet.py`가 코드로 그린 **임시 그림**이다.
 최종 아트는 아래 규격을 지킨 PNG로 같은 경로의 파일만 덮어쓰면 된다. 코드는 바꿀 필요 없다.
 
 ## AI 그림에서 가져오기 (2026-09-30~, 농부부터)
@@ -14,8 +14,17 @@ AI가 그린 정면 · 뒷모습 · 옆모습 한 장을 `tools/import_ai_charac
 
 ```
 python3 tools/import_ai_character.py tools/char_parts/player_src.png --name player --patch tools/char_parts/player_patch.json
+python3 tools/import_ai_character.py tools/char_parts/hunter_src.png --name hunter --order down,side,up \
+    --hair-span 0.75 --front-hair 0.42 --dark-hair 0.42 --sleeves --patch tools/char_parts/hunter_patch.json
 python3 tools/make_wear_sheets.py   # 이 캐릭터의 장비 덧그림을 새 몸에 맞춰 다시 만든다
 ```
+
+- 그림 순서가 정면 · 옆 · 뒤면 `--order down,side,up`.
+- 포니테일처럼 머리카락이 등까지 내려오면 `--hair-span` (뒤 · 옆), 정면은 `--front-hair`.
+  체크무늬 셔츠처럼 옷에 머리색과 비슷한 짙은 선이 많으면 `--dark-hair` 아래 짙은 선은 머리카락으로 치지 않는다.
+- 멜빵바지처럼 가슴을 다른 옷이 덮으면 `--sleeves` 로 소매에서도 윗도리 색을 뽑고,
+  `make_wear_sheets.py` 의 `BIB` 에 몸 이름과 가슴판 아래 줄을 적으면 조끼 · 망토가 가슴판도 덮는다.
+  `HAT_DY` 는 모자를 몇 줄 올릴지 (올림머리 때문에 모자가 눈을 가릴 때).
 
 - 가로(`--width`, 기본 30px)와 세로(`--height`, 46px)를 따로 줄여 몸이 가늘어지지 않게 한다. 옆모습이 왼쪽을 보면 알아서 뒤집는다.
 - 부위(머리카락 · 살 · 윗도리 · 바지 · 신발)는 정면 그림 속 정해진 자리의 색으로 나눈다 (`PROBES`). 옷 모양은 자유, 부위끼리 색만 달라야 한다.

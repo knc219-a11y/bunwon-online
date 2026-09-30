@@ -2132,6 +2132,7 @@ func _ready() -> void:
 	for i in int(Config.STAFF_BURN_DELAY * 30) + 5:
 		# 동행이 사냥꾼 쪽으로 걸어가도 도깨비불이 불빛 안에 있게 (불씨는 불빛 안에서만 탄다)
 		b_g.position = bjh.companion.position + Vector2(20, 0)
+		bjh._companion_cooldown = 99.0  # 동행이 다시 치지 않게 (크리처 공격 간격은 타고난 능력치에 따라 1.5초보다 짧을 수 있다)
 		bjh.tick(1.0 / 30.0)
 	_check(b_g.hp == 1, "불씨: 잠시 뒤 한 번 더 피해 (체력 %d)" % b_g.hp)
 	# 도깨비불 불똥: 불빛 안에서만 부풀어 원 안을 다치게 함
