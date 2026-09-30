@@ -7,9 +7,9 @@ extends Node2D
 ## 아기 나무 정령 = 덩굴 묶기 (2026-09-29 도마리): 덩굴을 뻗어 몬스터를 잠깐 붙잡는다.
 ## 누구를 언제 때릴지는 HuntGround 가 정하고, 이 노드는 움직임과 그리기만 맡는다.
 
-enum Style { SHOT, BUMP, PULL, PECK, BIND, EMBER }
+enum Style { SHOT, BUMP, PULL, PECK, BIND, EMBER, ROAR, SPIRIT }
 
-const STYLE_NAMES := {Style.SHOT: "멀리서 물총", Style.BUMP: "붙어서 박치기", Style.PULL: "혀로 끌어오기", Style.PECK: "날아가 쪼기", Style.BIND: "덩굴 묶기", Style.EMBER: "불빛 + 불씨"}
+const STYLE_NAMES := {Style.SHOT: "멀리서 물총", Style.BUMP: "붙어서 박치기", Style.PULL: "혀로 끌어오기", Style.PECK: "날아가 쪼기", Style.BIND: "덩굴 묶기", Style.EMBER: "불빛 + 불씨", Style.ROAR: "포효", Style.SPIRIT: "포효 + 번개 발톱"}
 
 ## 농장에 있는 크리처 (돌아가면 그 자리·그 일로 복귀)
 var source: Creature
@@ -51,6 +51,10 @@ static func style_for(d: CreatureData) -> Style:
 		return Style.BIND
 	if d.species.companion_style == &"ember":
 		return Style.EMBER
+	if d.species.companion_style == &"roar":
+		return Style.ROAR
+	if d.species.companion_style == &"spirit":
+		return Style.SPIRIT
 	var element: StringName = d.elements[0].id if not d.elements.is_empty() else &""
 	return Style.SHOT if element == &"water" else Style.BUMP
 
@@ -65,7 +69,7 @@ func display_name() -> String:
 
 ## 공격 한 번에 걸리는 시간. 일 속도가 빠른 개체일수록 조금 짧다 (절반~두 배 사이). 속도 훈련도 반영.
 func attack_interval() -> float:
-	var base: float = {Style.SHOT: Config.COMPANION_SHOT_INTERVAL, Style.BUMP: Config.COMPANION_BUMP_INTERVAL, Style.PULL: Config.COMPANION_PULL_INTERVAL, Style.PECK: Config.COMPANION_PECK_INTERVAL, Style.BIND: Config.COMPANION_BIND_INTERVAL, Style.EMBER: Config.COMPANION_EMBER_INTERVAL}[style]
+	var base: float = {Style.SHOT: Config.COMPANION_SHOT_INTERVAL, Style.BUMP: Config.COMPANION_BUMP_INTERVAL, Style.PULL: Config.COMPANION_PULL_INTERVAL, Style.PECK: Config.COMPANION_PECK_INTERVAL, Style.BIND: Config.COMPANION_BIND_INTERVAL, Style.EMBER: Config.COMPANION_EMBER_INTERVAL, Style.ROAR: Config.COMPANION_ROAR_INTERVAL, Style.SPIRIT: Config.COMPANION_ROAR_INTERVAL}[style]
 	return base / clampf(data.base_work_speed * data.train_speed_mult(), 0.5, 2.0)
 
 
@@ -76,7 +80,7 @@ func light_radius() -> float:
 
 
 func reach() -> float:
-	return {Style.SHOT: Config.COMPANION_SHOT_RANGE, Style.BUMP: Config.COMPANION_BUMP_RANGE, Style.PULL: Config.COMPANION_PULL_RANGE, Style.PECK: Config.COMPANION_PECK_RANGE, Style.BIND: Config.COMPANION_BIND_RANGE, Style.EMBER: Config.COMPANION_EMBER_RANGE}[style]
+	return {Style.SHOT: Config.COMPANION_SHOT_RANGE, Style.BUMP: Config.COMPANION_BUMP_RANGE, Style.PULL: Config.COMPANION_PULL_RANGE, Style.PECK: Config.COMPANION_PECK_RANGE, Style.BIND: Config.COMPANION_BIND_RANGE, Style.EMBER: Config.COMPANION_EMBER_RANGE, Style.ROAR: Config.COMPANION_ROAR_RANGE, Style.SPIRIT: Config.COMPANION_ROAR_RANGE}[style]
 
 
 func speed() -> float:
@@ -108,6 +112,9 @@ func play_attack(at: Vector2) -> void:
 	elif style == Style.EMBER:
 		shot_to = at
 		shot_time = 0.35
+	elif style == Style.ROAR or style == Style.SPIRIT:
+		shot_to = at
+		shot_time = 0.3
 	else:
 		# 박치기: 상대 쪽으로 살짝 튀어 나갔다 돌아온다 (그림만)
 		shot_to = at
@@ -170,6 +177,17 @@ func _draw() -> void:
 		var k := 1.0 - shot_time / 0.35
 		draw_circle(Vector2(0, -8).lerp(to, k), 3.0, Color(1.0, 0.6, 0.25))
 		draw_circle(Vector2(0, -8).lerp(to, k), 1.5, Color(1.0, 0.92, 0.6))
+	elif shot_time > 0.0 and (style == Style.ROAR or style == Style.SPIRIT):
+		# 포효: 둘레로 퍼지는 고리 (백호는 푸른 번개 발톱 자국도)
+		var k := 1.0 - shot_time / 0.3
+		draw_set_transform(Vector2(0, 2), 0.0, Vector2(1.0, 0.5))
+		draw_arc(Vector2.ZERO, Config.COMPANION_ROAR_RADIUS * k, 0, TAU, 32, Color(1.0, 0.9, 0.6, 0.8 * (1.0 - k)), 2.0)
+		draw_set_transform(Vector2.ZERO)
+		if style == Style.SPIRIT:
+			var to := shot_to - position + Vector2(0, -8)
+			for i in 3:
+				var o := Vector2(-4 + i * 4, 0)
+				draw_line(to + o + Vector2(-3, -6), to + o + Vector2(3, 6), Color(0.6, 0.9, 1.0), 1.5)
 	elif shot_time > 0.0 and style == Style.PECK:
 		# 날아가 쪼기: 상대까지 날아간 자국 (점선)과 쪼는 부리 반짝임 (전용 그림은 다음 단계)
 		var to := shot_to - position + Vector2(0, -10)

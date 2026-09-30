@@ -19,6 +19,7 @@ data/hunt_maps/<이름>.txt 의 칸 지도를 읽어 assets/hunt/<이름>_ground
   도마리 (나무꾼 벌목터): G 장작 쌓인 비닐하우스 (막힘, 칸 덩어리 하나가 한 동)   l 장작더미 (막힘)   u 그루터기 (막힘)
   번천 (산 속 삼거리, 밤): a 아스팔트 도로   g 가드레일 (막힘)   L 가로등 (막힘, 불빛은 게임이 그림)
      P 버스 정류장 (막힘, 칸 덩어리 하나가 한 채)
+  밀목 (나무가 빽빽한 솔숲 · 솔치 고개 · 경안천 어귀): 새 글자 없음 (T 나무 · B 덤불 · R 바위 · ~ = 냇물)
 
 실행: python3 tools/make_hunt_maps.py [지도.txt ...] [--out 폴더]  (Pillow, numpy 필요)
 """
@@ -33,7 +34,7 @@ ROOT = os.path.join(os.path.dirname(__file__), "..")
 T = 24
 tiles = np.array(Image.open(os.path.join(ROOT, "assets/tiles/farm_tiles.png")).convert("RGB")).astype(float)
 ## 구역 풀빛 (Config.HUNT_ZONES ground_tint 와 같게). 파일 이름 앞부분으로 고른다.
-GRASS_TINTS = {"geumsa": np.array([0.9, 0.86, 0.72]), "nonghyup": np.array([0.82, 0.9, 0.8]), "gwangdong": np.array([0.92, 0.88, 0.74]), "doma": np.array([0.78, 0.86, 0.7]), "bunjeon": np.array([0.6, 0.72, 0.74])}
+GRASS_TINTS = {"geumsa": np.array([0.9, 0.86, 0.72]), "nonghyup": np.array([0.82, 0.9, 0.8]), "gwangdong": np.array([0.92, 0.88, 0.74]), "doma": np.array([0.78, 0.86, 0.7]), "bunjeon": np.array([0.6, 0.72, 0.74]), "milmok": np.array([0.62, 0.76, 0.6])}
 
 PATH_D = np.array((188, 162, 124)); PATH_DD = np.array((160, 134, 104))
 WET = np.array((176, 150, 116))

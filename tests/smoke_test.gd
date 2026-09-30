@@ -2122,15 +2122,18 @@ func _ready() -> void:
 	_check(b_g.hp == 3, "화살이 어둠 속 도깨비불을 지나감")
 	bjh.lamps.assign(b_lamps)
 	_check(bjh.hittable(b_g) == bjh.in_light(b_g.position) and bjh.in_light(b_lamps[0] + Vector2(0, 10)), "가로등 아래는 밝음")
-	# 불빛 동행: 동행 둘레 유령도 맞고, 불씨로 잠시 뒤 한 번 더
+	# 불빛 동행: 동행 둘레 유령도 맞고, 불씨로 잠시 뒤 한 번 더 (아직 날던 화살은 치움)
 	bjh.lamps.clear()
+	bjh.shots.clear()
 	b_g.position = bjh.companion.position + Vector2(20, 0)
 	_check(bjh.hittable(b_g), "아기 도깨비불 불빛 안의 도깨비불은 맞음")
 	bjh.companion_attack(b_g)
 	_check(b_g.hp == 2 and bjh._burns.size() == 1, "불씨: 1 피해 + 불붙음")
 	for i in int(Config.STAFF_BURN_DELAY * 30) + 5:
+		# 동행이 사냥꾼 쪽으로 걸어가도 도깨비불이 불빛 안에 있게 (불씨는 불빛 안에서만 탄다)
+		b_g.position = bjh.companion.position + Vector2(20, 0)
 		bjh.tick(1.0 / 30.0)
-	_check(b_g.hp == 1, "불씨: 잠시 뒤 한 번 더 피해")
+	_check(b_g.hp == 1, "불씨: 잠시 뒤 한 번 더 피해 (체력 %d)" % b_g.hp)
 	# 도깨비불 불똥: 불빛 안에서만 부풀어 원 안을 다치게 함
 	var b_w: WildSlime = bjh.slimes[1]
 	b_w.lit = false
@@ -2226,6 +2229,192 @@ func _ready() -> void:
 	main.next_day()
 	_check(GameState.tonic_day != GameState.day and GameState.herb_bed == Config.HERB_BED_PER_DAY, "다음 날: 보약 효과 끝 · 도라지밭 다시 돋음")
 
+	# 40) 3막 둘째 구역 밀목 (2026-09-30 사용자: "다음은 광주시에있는 밀목이야", 후보 B 늑대 + 호랑이, 판타지풍으로)
+	#     그림자 늑대 무리 · 산군 백호 · 아기 호랑이 (드물게 아기 백호, 신령 속성) · 산군 발톱 → 축사 (닭장 · 목축인)
+	var m_zi := 5
+	var m_z: Dictionary = Config.HUNT_ZONES[m_zi]
+	_check(m_z.name == "밀목" and m_z.monster == "그림자 늑대" and m_z.boss_monster == "산군 백호" and m_z.wolf and m_z.boss_pattern == &"tiger" and not m_z.get("night", false), "6구역 밀목: 그림자 늑대 · 산군 백호 · 그늘 (밤 아님)")
+	var m_map := HuntMap.load_map("milmok")
+	_check(not m_map.find("K").is_empty() and not m_map.find("W").is_empty() and m_map.find("T").size() > 600, "밀목 칸 지도: 빽빽한 나무 %d · 대장 자리 · 웨이포인트" % m_map.find("T").size())
+	var m_t: Creature = main._hatch(CreatureCatalog.TIGER, Vector2i(18, 12))
+	_check(m_t.data.species.display_name == "아기 호랑이" and m_t.data.elements[0].id == &"earth" and HuntCompanion.style_name(m_t.data) == "포효" and m_t.data.species.guards_coop, "아기 호랑이 (땅, 동행 포효, 축사 지킴이)")
+	var m_w: Creature = main._hatch(CreatureCatalog.WHITE_TIGER, Vector2i(18, 12))
+	_check(m_w.data.elements[0].id == &"spirit" and m_w.data.elements[0].display_name == "신령" and HuntCompanion.style_name(m_w.data) == "포효 + 번개 발톱" and m_w.data.work_radius() >= 2, "아기 백호 (새 속성 신령, 스킬 둘, 범위 2 이상)")
+	_check(m_w.data.aptitude(CreatureJobs.FORAGE) >= 1.5 and m_w.data.aptitude(CreatureJobs.FEED) >= 3.0 and m_t.data.aptitude(CreatureJobs.FEED) == 2.0, "신령은 모든 일 1.5배 (백호 모이 주기 3배, 호랑이 2배)")
+	GameState.hunts_today = 0
+	if not m_zi in GameState.waypoints:
+		GameState.waypoints.append(m_zi)
+	main.enter_hunt(m_t, m_zi)
+	var mh: HuntGround = main.hunt
+	mh.set_ai(false)
+	mh.set_process(false)
+	mh.companion_ai = false
+	_check(mh.zone == m_zi and not mh.is_night() and mh._night.size() == 1, "밀목에 들어옴: 그늘 (어둡기만, 불빛 규칙 없음)")
+	var m_feet: Vector2 = main.hunter.feet()
+	for o: WildSlime in mh.slimes:
+		o.position = m_feet + Vector2(-400, 0)
+	var m_a: WildSlime = mh.slimes[0]
+	var m_b: WildSlime = mh.slimes[1]
+	_check(m_a.wolf and m_a._lunge_cd >= Config.WOLF_FIRST_GAP, "늑대 첫 달려들기는 어긋나게 늦춤")
+	# 둘러서서 돈다 (나무가 없는 빈터에서)
+	m_a.position = m_feet + Vector2(100, 0)
+	m_a._lunge_cd = 5.0
+	m_a.ai_enabled = true
+	for i in 90:
+		m_a.tick(1.0 / 30.0, m_feet)
+	var m_ring := m_a.position.distance_to(m_feet)
+	_check(m_ring < 90.0 and m_ring > 30.0 and m_a._windup < 0.0, "그림자 늑대가 둘레에 둘러서서 돎 (거리 %.0f · %s → 발 %s · 영역 %s · 돎 %s · 풀림 %.1f)" % [m_ring, m_a.position, m_feet, m_a.area, m_a._circling, m_a._stun])
+	m_a._lunge_cd = 0.0
+	m_a.tick(0.01, m_feet)
+	_check(m_a._windup >= 0.0, "차례가 오면 달려들기 예고")
+	m_a.ai_enabled = false
+	m_a._windup = -1.0
+	# 하나가 쓰러지면 둘레 늑대가 멈칫
+	m_b.position = m_a.position + Vector2(40, 0)
+	m_a.hp = 1
+	_check(m_a.hit(m_feet) and true, "늑대 쓰러짐")
+	mh._defeat(m_a)
+	_check(m_b.stunned(), "둘레 늑대가 멈칫 (칠 틈)")
+	# 아기 호랑이 포효: 맞은 늑대와 둘레 늑대가 멈춤
+	var m_c: WildSlime = mh.slimes[1]
+	m_b._stun = 0.0
+	m_b.hp = 5
+	mh.companion.position = m_feet + Vector2(0, -60)
+	m_b.position = mh.companion.position + Vector2(20, 0)
+	m_c.position = mh.companion.position + Vector2(-30, 0)
+	m_c._stun = 0.0
+	mh.companion_attack(m_b)
+	_check(m_b.hp == 4 and m_b.stunned() and m_c.stunned(), "포효: 1 피해 + 둘레 멈춤")
+	main.leave_hunt()
+	GameState.hunts_today = 0
+	main.enter_hunt(m_w, m_zi)
+	mh = main.hunt
+	mh.set_ai(false)
+	mh.set_process(false)
+	mh.companion_ai = false
+	m_b = mh.slimes[0]
+	m_b.hp = 5
+	m_b.position = mh.companion.position + Vector2(20, 0)
+	mh.companion_attack(m_b)
+	_check(m_b.hp == 3, "아기 백호 번개 발톱: 한 방에 2 피해")
+	# 산군 백호: 도약 (착지 원, 새끼 없음) → 쓰러지는 나무 → 포효 (굳음)
+	for o: WildSlime in mh.slimes.duplicate():
+		mh.slimes.erase(o)
+		o.queue_free()
+	m_feet = main.hunter.feet()
+	var m_boss: WildSlime = mh.spawn_boss()
+	_check(m_boss.pattern == &"tiger" and m_boss.hp == m_z.boss_hp and m_boss.title == "산군 백호", "산군 백호 (체력 %d)" % m_z.boss_hp)
+	m_boss.position = m_feet + Vector2(120, 0)
+	m_boss.ai_enabled = true
+	m_boss._pattern_cd = 0.0
+	mh._invulnerable = 0.0
+	var m_h0 := mh.hearts
+	mh.tick(0.02)
+	_check(m_boss._air_t >= 0.0 and m_boss.telegraph().kind == &"circle", "백호 도약 (착지 원 예고)")
+	for i in int(Config.SLAM_AIR_TIME * 30) + 4:
+		mh.tick(1.0 / 30.0)
+	_check(mh.hearts == m_h0 - m_z.damage and mh.slimes.size() == 1, "착지에 다침 (하트 -%d), 새끼는 안 나옴" % m_z.damage)
+	m_boss._recover = 0.0
+	m_boss._pattern_cd = 0.0
+	m_boss.position = main.hunter.feet() + Vector2(60, 0)
+	mh.tick(0.02)
+	_check(m_boss._log_aim >= 0.0, "쓰러지는 나무 (띠 예고)")
+	m_boss._log_aim = -1.0
+	m_boss._recover = 0.0
+	m_boss._pattern_cd = 0.0
+	m_boss.position = main.hunter.feet() + Vector2(40, 0)
+	mh.tick(0.02)
+	_check(m_boss._roar >= 0.0 and m_boss.telegraph().get("roar", false), "포효 (둘레 원 예고)")
+	for i in int(Config.TIGER_ROAR_WINDUP * 30) + 3:
+		mh.tick(1.0 / 30.0)
+	mh._cooldown = 0.0
+	_check(mh.frozen > 0.0 and main.hunter.frozen and mh.swing(Vector2.RIGHT) == 0, "포효 원 안이면 잠깐 굳음 (못 휘두름)")
+	for i in int(Config.TIGER_ROAR_FREEZE * 30) + 3:
+		mh.tick(1.0 / 30.0)
+	_check(mh.frozen == 0.0 and not main.hunter.frozen, "굳음이 풀림")
+	m_boss.ai_enabled = false
+	# 대장을 잡으면 산군 발톱 + 다음 날 축사 터, 대장 알은 드물게 아기 백호
+	GameState.material3 = 0
+	GameState.barn_state = 0
+	HuntGround.egg_roll = 0.0
+	mh._defeat(m_boss)
+	_check(GameState.material3 == 1 and GameState.barn_boss_down and not mh.path_open, "산군 백호를 쓰러뜨리면 산군 발톱 1 (더 깊은 곳은 아직 막힘)")
+	_check(mh.drops.size() == 1 and mh.drops[0].species == CreatureCatalog.WHITE_TIGER, "확률에 걸리면 대장 알이 아기 백호")
+	HuntGround.egg_roll = 0.15
+	var m_boss2: WildSlime = mh.spawn_boss()
+	mh._defeat(m_boss2)
+	_check(mh.drops.size() == 2 and mh.drops[1].species == CreatureCatalog.TIGER and GameState.material3 == 2, "보통은 아기 호랑이 알")
+	HuntGround.egg_roll = -1.0
+	main.leave_hunt()
+	# 축사 (닭장): 터 → 한 번에 복구 → 목축인 · 닭 한 쌍
+	var m_lines: Array[String] = main.next_day()
+	_check(GameState.barn_state == 1 and main.barn != null and " ".join(m_lines).contains("축사 터"), "다음 날 아침 축사 터가 드러남")
+	GameState.money = 100
+	main._barn_interact()
+	_check(main.menu_kind == &"barn" and main._menu_options == [&"restore", &"close"], "축사 터에서 F → 복구 창")
+	main.close_menu()
+	_check(not main.restore_barn() and GameState.barn_state == 1, "모자라면 못 고침")
+	GameState.money = Config.BARN_COST_MONEY + 3
+	GameState.crops = Config.BARN_COST_CROPS + 4
+	GameState.material3 = Config.BARN_COST_MATERIAL
+	_check(main.restore_barn() and GameState.barn_state == 2 and main.rancher.visible and GameState.hens == Config.START_HENS and GameState.money == 3 and GameState.crops == 4 and GameState.material3 == 0,
+		"축사 복구 (돈 %d · 무 %d · 산군 발톱 %d) → 목축인 · 암탉 %d" % [Config.BARN_COST_MONEY, Config.BARN_COST_CROPS, Config.BARN_COST_MATERIAL, Config.START_HENS])
+	_check(CreatureJobs.jobs().has(CreatureJobs.FEED), "모이 주기 일이 생김")
+	main._set_active(main.farmer)
+	_check(not main.coop_options().has(&"lunch") and main.coop_options().has(&"feed"), "농부는 모이 주기만 (도시락은 목축인)")
+	_check(main.coop_action(&"feed") and GameState.fed == GameState.hens and GameState.crops == 3, "모이 주기 (무 %d)" % Config.FEED_CROP_COST)
+	var m_rng := RandomNumberGenerator.new()
+	m_rng.seed = 7
+	var m_r: Dictionary = main.coop_night(m_rng, true)
+	_check(m_r.laid == 1 and GameState.nest == 1 and GameState.fed == 0, "모이 먹은 암탉은 아침에 달걀 하나")
+	# 둥지에 남긴 달걀 → 병아리 → 암탉 (확률을 1로)
+	GameState.nest = 4
+	GameState.fed = GameState.hens
+	var m_hatch := Config.CHICK_HATCH_CHANCE
+	for i in Config.CHICK_GROW_DAYS + 1:
+		m_r = main.coop_night(m_rng, true)
+		if i == 0:
+			_check(m_r.hatched >= 1 and GameState.chicks.size() == m_r.hatched, "둥지에 남긴 달걀이 병아리가 됨 (%d마리)" % m_r.hatched)
+		GameState.fed = GameState.hens
+	var m_hens := GameState.hens
+	_check(m_hens > Config.START_HENS and GameState.hens + GameState.chicks.size() <= Config.HEN_CAP, "병아리가 %d일 뒤 암탉이 됨 (암탉 %d)" % [Config.CHICK_GROW_DAYS, m_hens])
+	# 족제비: 지킴이가 없으면 가끔 둥지 달걀을 물어 감 (확률 1로 확인), 지킴이가 있으면 안 옴
+	GameState.nest = 4
+	var m_seen := false
+	for i in 40:
+		GameState.nest = 4
+		var m_wz: Dictionary = main.coop_night(m_rng, false)
+		m_seen = m_seen or (m_wz.weasel as String).contains("족제비")
+	_check(m_seen, "지킴이가 없으면 족제비가 가끔 옴")
+	var m_guard_seen := false
+	for i in 40:
+		GameState.nest = 4
+		var m_gz: Dictionary = main.coop_night(m_rng, true)
+		m_guard_seen = m_guard_seen or m_gz.weasel != ""
+	_check(not m_guard_seen, "모이 주는 아기 호랑이가 있으면 족제비가 안 옴")
+	# 크리처 모이 주기
+	GameState.fed = 0
+	m_t.home = Creature.feed_spot()
+	m_t.job = CreatureJobs.FEED
+	m_t._busy = false
+	_check(m_t._feed_once(), "아기 호랑이가 모이 주기 일을 함")
+	# 달걀: 꺼내기 → 공급함 진열 → 밤사이 팔림, 목축인 사냥 도시락 → 하트 +2
+	GameState.nest = 5
+	GameState.hen_eggs = 0
+	_check(main.coop_action(&"take_nest") and GameState.hen_eggs == 5 and GameState.nest == 0, "둥지 달걀 꺼내기")
+	main._set_active(main.rancher)
+	GameState.crops = 1
+	_check(main.coop_options().has(&"lunch") and main.coop_action(&"lunch") and GameState.lunches == 1 and GameState.hen_eggs == 3 and GameState.crops == 0, "목축인 사냥 도시락 (달걀 %d · 무 %d)" % [Config.LUNCH_EGGS, Config.LUNCH_CROPS])
+	main._set_active(main.farmer)
+	_check(main.supply_options().has(&"display_hen_eggs") and main.supply_action(&"display_hen_eggs") and GameState.displayed_hen_eggs == 3, "달걀 진열")
+	var m_m0 := GameState.money
+	main.next_day()
+	_check(GameState.money >= m_m0 + 3 * Config.HEN_EGG_PRICE and GameState.displayed_hen_eggs == 0, "진열한 달걀이 밤사이 팔림")
+	GameState.hunts_today = 0
+	main.enter_hunt(null, 0)
+	_check(main.hunt.lunch and GameState.lunches == 0 and main.hunt.hearts == main.hunt.max_hearts() and main.hunt.max_hearts() == Config.HUNTER_HEARTS + Wearables.bonus_hearts(&"hunter") + Config.LUNCH_HEARTS, "사냥 도시락: 들어갈 때 먹고 하트 +%d" % Config.LUNCH_HEARTS)
+	main.leave_hunt()
+
 	# 38) 테스트용 시작 지점 (2026-09-29 사용자: "매번 처음부터 시작하는게 조금 어려운거같아")
 	_check(not main.menu_open, "테스트 장면 안에서는 시작 지점 창이 안 뜸")
 	main.queue_free()
@@ -2252,6 +2441,8 @@ func _ready() -> void:
 				sid, GameState.day, GameState.money, ts.creatures.size(), farmers, GameState.waypoints, GameState.forge_state, ts_w.name, gear_n, want_gear])
 		if sid == &"forge_ready":
 			_check(ts.restore_forge() and ts.smith.visible, "대장간 고치기 직전: 바로 고칠 수 있음")
+		if sid == &"barn":
+			_check(GameState.barn_state == 2 and ts.rancher.visible and GameState.hens == spec.hens and GameState.lunches == 1, "축사 복구 뒤: 목축인 · 암탉 %d · 도시락" % GameState.hens)
 		if sid != &"fresh":
 			_check(GameState.hunter_unlocked and GameState.village_eggs.is_empty() and ts.farm.get_cell(Config.FIELD_PLOTS[0].position).planted, "%s: 사냥꾼 열림 · 밭 심어 둠" % sid)
 			# 가장 깊은 웨이포인트에서 바로 사냥 들어가기

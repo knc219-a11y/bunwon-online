@@ -106,6 +106,10 @@ var _bus_light: PointLight2D
 var lamp_oil := false
 var strong := false
 var quick := false
+## 목축인 사냥 도시락을 먹고 들어왔는지 (2026-09-30 축사 닭장): 이번 사냥 동안 하트 칸 +Config.LUNCH_HEARTS
+var lunch := false
+## 산군 백호 포효에 굳은 남은 시간 (그동안 사냥꾼이 못 움직이고 못 휘두름)
+var frozen := 0.0
 ## 가로등 자리 (불빛 가운데, px)
 var lamps: Array[Vector2] = []
 
@@ -220,6 +224,12 @@ func _setup_night(z: Dictionary) -> void:
 	lamps.clear()
 	_lantern = null
 	_bus_light = null
+	if z.has("shade") and not z.get("night", false):
+		# 그늘 구역 (밀목 솔숲): 조금 어둡기만 하고 불빛 규칙은 없다
+		var shade := CanvasModulate.new()
+		shade.color = z.shade
+		add_child(shade)
+		_night.append(shade)
 	if not z.get("night", false) or map == null:
 		return
 	var dark := CanvasModulate.new()
@@ -395,7 +405,15 @@ func add_companion(from: Creature) -> HuntCompanion:
 
 ## 입은 장비와 세트 보너스까지 더한 하트 칸 수
 func max_hearts() -> int:
-	return Config.HUNTER_HEARTS + Wearables.bonus_hearts(&"hunter")
+	return Config.HUNTER_HEARTS + Wearables.bonus_hearts(&"hunter") + (Config.LUNCH_HEARTS if lunch else 0)
+
+
+## 사냥 도시락을 먹는다: 하트 칸이 늘고 늘어난 만큼 찬다.
+func eat_lunch() -> void:
+	if lunch:
+		return
+	lunch = true
+	hearts = mini(hearts + Config.LUNCH_HEARTS, max_hearts())
 
 
 ## 빨간 물약을 마신다 (1 키). 하트가 가득이면 아끼고 마시지 않는다.
@@ -495,6 +513,11 @@ func tick(delta: float) -> void:
 	_cooldown = maxf(_cooldown - delta, 0.0)
 	_invulnerable = maxf(_invulnerable - delta, 0.0)
 	_swing_time = maxf(_swing_time - delta, 0.0)
+	if frozen > 0.0:
+		frozen -= delta
+		if frozen <= 0.0:
+			frozen = 0.0
+			hunter.frozen = false
 	_follow_camera()
 	_reveal_minimap()
 	var feet := hunter.feet()
@@ -547,7 +570,7 @@ func tick(delta: float) -> void:
 ## 공격한다 (클릭). 든 무기에 따라 휘두르기 · 화살 · 지팡이 구슬 (2026-09-29 무기). 무기가 없으면 사냥칼.
 ## dir 이 비어 있으면 바라보는 쪽으로. 휘두르기는 맞힌 수, 쏘기는 쏘았으면 1 (맞았는지는 날아간 뒤).
 func swing(dir := Vector2.ZERO) -> int:
-	if knocked or _cooldown > 0.0:
+	if knocked or _cooldown > 0.0 or frozen > 0.0:
 		return 0
 	if dir != Vector2.ZERO:
 		# 마우스로 누른 쪽을 바라보게 한다 (4방향)
@@ -646,7 +669,7 @@ func _tick_companion(delta: float) -> void:
 	_companion_cooldown = maxf(_companion_cooldown - delta, 0.0)
 	var target := _nearest_slime(companion.position, true)
 	if companion_ai:
-		var chase := companion.style == HuntCompanion.Style.BUMP and target != null \
+		var chase := companion.style in [HuntCompanion.Style.BUMP, HuntCompanion.Style.ROAR, HuntCompanion.Style.SPIRIT] and target != null \
 			and target.position.distance_to(hunter.feet()) <= Config.COMPANION_CHASE_DISTANCE
 		if chase:
 			companion.move_toward_point(target.position, delta)
@@ -667,8 +690,18 @@ func _tick_companion(delta: float) -> void:
 func companion_attack(target: WildSlime) -> void:
 	_companion_cooldown = companion.attack_interval()
 	companion.play_attack(target.position)
-	if target.hit(companion.position):
+	# 아기 백호 번개 발톱 (2026-09-30): 한 방이 2 피해
+	var claw := 2 if companion.style == HuntCompanion.Style.SPIRIT else 1
+	if companion.style == HuntCompanion.Style.ROAR or companion.style == HuntCompanion.Style.SPIRIT:
+		# 포효: 둘레 몬스터 (대장 빼고) 가 잠깐 멈춘다
+		for o in slimes:
+			if not o.boss and o != target and o.position.distance_to(companion.position) <= Config.COMPANION_ROAR_RADIUS:
+				o.stun(Config.COMPANION_ROAR_STUN)
+	if target.hit(companion.position, claw):
 		_defeat(target)
+	elif companion.style == HuntCompanion.Style.ROAR or companion.style == HuntCompanion.Style.SPIRIT:
+		if not target.boss:
+			target.stun(Config.COMPANION_ROAR_STUN)
 	elif companion.style == HuntCompanion.Style.PECK:
 		pass
 	elif companion.style == HuntCompanion.Style.EMBER:
@@ -727,6 +760,18 @@ func _defeat(s: WildSlime) -> void:
 		if not GameState.yak_boss_down:
 			GameState.yak_boss_down = true
 			material_text += " 마을 쪽에서 약 달이는 냄새가 희미하게 났다..."
+	# 3막 대장 재료 (2026-09-30 축사 닭장): 산군 백호를 잡을 때마다 산군 발톱 하나, 처음 잡으면 다음 날 마을에 축사 터
+	if last_boss and z.get("boss_material3", false):
+		GameState.material3 += 1
+		material_text += " %s을(를) 얻었다 (%d개)." % [Config.BOSS_MATERIAL3_NAME, GameState.material3]
+		if not GameState.barn_boss_down:
+			GameState.barn_boss_down = true
+			material_text += " 마을 쪽에서 닭 우는 소리가 희미하게 들렸다..."
+	# 그림자 늑대 (밀목): 하나가 쓰러지면 둘레 늑대가 멈칫한다 (칠 틈)
+	if s.wolf:
+		for o in slimes:
+			if o.wolf and o.position.distance_to(s.position) <= Config.WOLF_FLINCH_RANGE:
+				o.stun(Config.WOLF_FLINCH)
 	if not s.boss and (not GameState.first_egg_done or _egg_roll() < z.get("egg_chance", 0.0)):
 		# 게임 전체 첫 처치는 알을 반드시 떨어뜨린다 (첫 사냥에서 막히지 않게). 그 뒤로는 드물게.
 		GameState.first_egg_done = true
@@ -755,6 +800,9 @@ func _defeat(s: WildSlime) -> void:
 	if last_boss and boss_egg != "" and _egg_roll() < z.get("boss_egg_chance", 0.0):
 		# 대장은 가끔 알을 남긴다 (금사리 금두꺼비 → 아기 금두꺼비 알, 2026-09-29 반드시 → 확률로 낮춤)
 		var sp: CreatureSpecies = load(boss_egg)
+		if sp == CreatureCatalog.TIGER and _egg_roll() < Config.WHITE_TIGER_CHANCE:
+			# 아기 호랑이 알은 드물게 아기 백호 (2026-09-30 사용자: "낮은 확률로 백호가 나올수도있게하자")
+			sp = CreatureCatalog.WHITE_TIGER
 		drops.append({at = _reachable(s.position + Vector2(-10, 4)), species = sp})
 		GameState.first_egg_done = true
 		GameState.notify("%s이(가) 알을 남겼다! 부화하면 %s." % [s.title, sp.display_name])
@@ -804,6 +852,7 @@ func _new_boss(at: Vector2) -> WildSlime:
 	b.called.connect(_on_called)
 	b.rolled.connect(_on_rolled.bind(b))
 	b.rammed.connect(_on_rammed.bind(b))
+	b.roared.connect(_on_roared.bind(b))
 	add_child(b)
 	slimes.append(b)
 	return b
@@ -830,7 +879,8 @@ func _on_slammed(at: Vector2, boss: WildSlime = null) -> void:
 		boss = _boss()
 	if _invulnerable <= 0.0 and d.length() <= Config.SLAM_RADIUS and boss:
 		_hurt(at, boss.damage, boss.title, "%s이(가) 쿵 내려찍었다!" % boss.title)
-	if knocked:
+	if knocked or (boss and boss.pattern == &"tiger"):
+		# 산군 백호의 도약은 새끼를 부르지 않는다
 		return
 	var minions := slimes.filter(func(o: WildSlime) -> bool: return o.minion).size()
 	for i in mini(Config.SLAM_MINIONS, Config.SLAM_MINION_MAX - minions):
@@ -845,6 +895,15 @@ func _on_slammed(at: Vector2, boss: WildSlime = null) -> void:
 		add_child(m)
 		slimes.append(m)
 	GameState.touch()
+
+
+## 산군 백호가 포효했다: 원 안이면 잠깐 굳는다 (다치지는 않음, 다음 도약을 못 피할 수 있음).
+func _on_roared(at: Vector2, boss: WildSlime) -> void:
+	if knocked or not _in_circle(at, Config.TIGER_ROAR_RADIUS):
+		return
+	frozen = Config.TIGER_ROAR_FREEZE
+	hunter.frozen = true
+	GameState.notify("%s의 포효에 몸이 굳었다!" % boss.title)
 
 
 ## 참새가 내려꽂았다: 그림자 원 안이면 다친다.

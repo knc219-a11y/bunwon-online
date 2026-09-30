@@ -73,6 +73,36 @@ const STARTS: Array[Dictionary] = [
 		armor = [[&"leather_hood", &"rare"], [&"hunter_jerkin", &"rare"], [&"leather_shoes", &"magic"]],
 		crafted = [&"work_cap", &"rain_suit", &"work_boots"],
 	},
+	{
+		## 2026-09-30 밀목 스레드: 3막 둘째 구역을 바로 해 보는 자리 (번천 막차를 잡아 밀목 웨이포인트가 켜진 뒤)
+		id = &"milmok", name = "밀목 앞", note = "55일 · 밀목 웨이포인트 · 아기 도깨비불 · 물약",
+		day = 55, money = 6500, seeds = 20, plots = 4, planted = true, scrap = 6, roots = 8, junk = 10, potions = 6, lamp_oil = 1, strength = 2,
+		creatures = [
+			[&"slime", &"farm", &"water", 2, 2], [&"slime", &"farm", &"", 2, 2], [&"slime", &"farm", &"", 2, 2], [&"tree_spirit", &"farm", &"", 1, 1],
+			[&"slime", &"forage", &"earth", 1, 1], [&"slime", &"forage", &"water", 0, 0], [&"gold_toad", &"forage", &"", 1, 0],
+			[&"gold_toad", &"forage", &"", 0, 0], [&"sparrow", &"forage", &"", 0, 0], [&"will_o", &"herb", &"", 1, 0],
+			[&"will_o", &"forage", &"", 0, 0], [&"slime", &"scrap", &"earth", 1, 1], [&"slime", &"herb", &"earth", 0, 0],
+		],
+		waypoints = [0, 1, 2, 3, 4, 5], forge = 2, yak = 2, tools = true, knife = true,
+		weapons = [&"hunting_bow", &"water_staff", &"long_sword", &"crossbow", &"long_bow"], shop = [&"straw_hat", &"ball_cap"],
+		armor = [[&"leather_hood", &"rare"], [&"hunter_jerkin", &"rare"], [&"leather_shoes", &"rare"]],
+		crafted = [&"work_cap", &"rain_suit", &"work_boots"],
+	},
+	{
+		## 2026-09-30 밀목 스레드: 축사를 고친 직후 (닭장 · 목축인 · 아기 호랑이 모이 주기)
+		id = &"barn", name = "70일째 축사 복구 뒤", note = "목축인 · 암탉 3 · 아기 호랑이 · 도시락 1",
+		day = 70, money = 3000, seeds = 20, crops = 10, plots = 4, planted = true, scrap = 6, roots = 8, junk = 10, potions = 6, lamp_oil = 1,
+		creatures = [
+			[&"slime", &"farm", &"water", 2, 2], [&"slime", &"farm", &"", 2, 2], [&"slime", &"farm", &"", 2, 2], [&"tree_spirit", &"farm", &"", 2, 1],
+			[&"slime", &"forage", &"earth", 1, 1], [&"slime", &"forage", &"water", 0, 0], [&"gold_toad", &"forage", &"", 1, 0],
+			[&"gold_toad", &"forage", &"", 0, 0], [&"sparrow", &"forage", &"", 0, 0], [&"will_o", &"herb", &"", 1, 0],
+			[&"tiger", &"feed", &"", 0, 0], [&"slime", &"scrap", &"earth", 1, 1], [&"slime", &"herb", &"earth", 0, 0],
+		],
+		waypoints = [0, 1, 2, 3, 4, 5], forge = 2, yak = 2, barn = 2, hens = 3, lunches = 1, tools = true, knife = true,
+		weapons = [&"hunting_bow", &"water_staff", &"long_sword", &"crossbow", &"long_bow"], shop = [&"straw_hat", &"ball_cap"],
+		armor = [[&"leather_hood", &"rare"], [&"hunter_jerkin", &"rare"], [&"leather_shoes", &"rare"]],
+		crafted = [&"work_cap", &"rain_suit", &"work_boots"],
+	},
 ]
 
 const SPECIES := {
@@ -81,6 +111,7 @@ const SPECIES := {
 	&"sparrow": "res://data/creatures/species/sparrow.tres",
 	&"tree_spirit": "res://data/creatures/species/tree_spirit.tres",
 	&"will_o": "res://data/creatures/species/will_o.tres",
+	&"tiger": "res://data/creatures/species/tiger.tres",
 }
 const ELEMENTS := {
 	&"water": "res://data/creatures/elements/water.tres",
@@ -154,6 +185,8 @@ static func apply(main: Node2D, id: StringName) -> bool:
 				at = Creature.scrap_spot()
 			CreatureJobs.HERB:
 				at = Creature.herb_spot()
+			CreatureJobs.FEED:
+				at = Creature.feed_spot()
 			_:
 				at = FORAGE_CELLS[forage_i % FORAGE_CELLS.size()]
 				forage_i += 1
@@ -182,6 +215,18 @@ static func apply(main: Node2D, id: StringName) -> bool:
 		GameState.roots += Config.YAK_COST_ROOTS
 		GameState.material2 += Config.YAK_COST_MATERIAL
 		main.restore_yak()
+	var barn_state: int = s.get("barn", 0)
+	if barn_state >= 1:
+		GameState.barn_boss_down = true
+		main.show_barn_site()
+	if barn_state >= 2:
+		GameState.money += Config.BARN_COST_MONEY
+		GameState.crops += Config.BARN_COST_CROPS
+		GameState.material3 += Config.BARN_COST_MATERIAL
+		main.restore_barn()
+		GameState.hens = s.get("hens", Config.START_HENS)
+	GameState.lunches = s.get("lunches", 0)
+	GameState.strength = s.get("strength", 0)
 	GameState.roots = s.get("roots", 0)
 	GameState.junk = s.get("junk", 0)
 	GameState.potions = s.get("potions", 0)

@@ -106,7 +106,33 @@ func work_once() -> bool:
 		return _scrap_once()
 	if job == CreatureJobs.HERB:
 		return _herb_once()
+	if job == CreatureJobs.FEED:
+		return _feed_once()
 	return false
+
+
+## 모이 주기 한 번 (2026-09-30 축사 닭장): 닭장 앞까지 건너가 오늘 아직 못 먹은 암탉 하나에게 모이를 준다 (GameState.fed).
+## 다 먹였으면 제자리로 돌아가 쉰다. 모이는 아침마다 새로 센다.
+func _feed_once() -> bool:
+	if GameState.barn_state < 2:
+		return false
+	if GameState.fed >= GameState.hens:
+		if position.distance_to(Farm.center_of(home)) > 1.0:
+			_hop_to(Farm.center_of(home), func() -> void: pass)
+			return true
+		return false
+	var at := Farm.center_of(feed_spot()) + Vector2((scraps % 3 - 1) * 5, 0)
+	_hop_to(at, func() -> void:
+		if GameState.fed < GameState.hens:
+			GameState.fed += 1
+			scraps += 1
+			GameState.touch())
+	return true
+
+
+## 닭장 왼쪽 아래 칸 (크리처가 서서 모이를 주는 자리)
+static func feed_spot() -> Vector2i:
+	return Config.BARN_RECT.position + Vector2i(0, Config.BARN_RECT.size.y)
 
 
 ## 도라지밭 가꾸기 한 번 (2026-09-29 약방 복구): 도라지밭까지 건너가 도라지 하나를 캐 약방에 둔다 (GameState.roots).
@@ -314,7 +340,7 @@ func _draw() -> void:
 		label += " ★%d" % data.train_total()
 	draw_string(ThemeDB.fallback_font, Vector2(-24, -26), label, HORIZONTAL_ALIGNMENT_CENTER, 48, 9)
 	# 채집은 범위 없이 마을 풀밭 전체를 돌므로 범위 네모를 그리지 않는다
-	if carried_by == null and job != CreatureJobs.FORAGE and job != CreatureJobs.SCRAP and job != CreatureJobs.HERB:
+	if carried_by == null and job != CreatureJobs.FORAGE and job != CreatureJobs.SCRAP and job != CreatureJobs.HERB and job != CreatureJobs.FEED:
 		# 작업 범위 표시
 		var radius := data.work_radius()
 		var r := Rect2(Vector2((home - Vector2i(radius, radius)) * Config.TILE), Vector2.ONE * (radius * 2 + 1) * Config.TILE)

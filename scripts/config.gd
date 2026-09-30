@@ -417,7 +417,60 @@ const HUNT_ZONES: Array[Dictionary] = [
 		money = [40, 80], boss_money = [110, 180],
 		monster_tint = Color.WHITE, boss_tint = Color.WHITE, ground_tint = Color(0.6, 0.72, 0.74), tree_tint = Color(0.5, 0.66, 0.56),
 	},
+	{
+		## 3막 둘째 구역 = 3막 대장 (2026-09-30 사용자: "다음은 광주시에있는 밀목이야", 후보 B 늑대 + 호랑이,
+		## "몬스터를 좀 더 판타지 풍으로 해도 괜찮아 배경이 몬스터 침공 이후 정착한 분원리 이기때문에").
+		## 광주시 유래: 송정동 밀목 = "마을 근방에 나무가 빽빽하게 우거졌다" (密木), 솔치(송현) 고개, 경안천 · 탄벌천 어귀.
+		## 빽빽한 솔숲 사이 좁은 숲길 (옆으로 비킬 데가 적음), 그늘이라 조금 어두움 (밤 · 유령 규칙은 없음).
+		## 그림자 늑대 (wolf): 사냥꾼을 보면 무리가 둘레에 둘러서서 돌고, 하나씩 차례로 달려든다. 하나가 쓰러지면 둘레 늑대가 멈칫.
+		## 대장 산군 백호 (tiger): 긴 도약 (착지 원 예고) → 쓰러지는 나무 (띠 예고, 굴러옴) → 포효 (둘레 원 안이면 잠깐 굳음) 를 돌아가며.
+		## 번천이 너무 쉬웠던 봇 결과 (한 번에 0.3~0.7번 맞음, 도마리 2.3~2.9) 를 보고 도마리보다 어렵게 (임시).
+		name = "밀목", junk_name = "그림자 털", monster = "그림자 늑대", boss_monster = "산군 백호", waypoint = true,
+		map = "milmok",
+		sheet = "res://assets/creatures/wild_shadow_wolf.png", boss_sheet = "res://assets/creatures/wild_white_tiger.png", burrow = false,
+		wolf = true, shade = Color(0.68, 0.76, 0.72),
+		## 알: 3막 일반 알 = 아기 도깨비불 (번천과 같음), 3막 대장 알 = 아기 호랑이 (드물게 아기 백호, WHITE_TIGER_CHANCE)
+		egg = "res://data/creatures/species/will_o.tres", boss_egg = "res://data/creatures/species/tiger.tres",
+		egg_chance = 0.03, boss_egg_chance = 0.2,
+		count = 12, hp = 8, speed = 1.3, boss_hp = 50,
+		damage = 2, knockback = 4.0, windup = 0.35, pack = false, boss_pattern = &"tiger",
+		## 3막 대장 재료 (2026-09-30 축사 닭장): 백호를 쓰러뜨릴 때마다 산군 발톱 하나, 처음 잡으면 다음 날 마을에 축사 터
+		boss_material3 = true,
+		advice = "권장: 하트 12 · 사냥 도시락",
+		loot = {&"money": 34, &"potion": 26, &"junk": 20, &"gear": 20},
+		rarity = {&"normal": 25, &"magic": 45, &"rare": 30}, boss_rarity = {&"normal": 5, &"magic": 50, &"rare": 45},
+		money = [45, 90], boss_money = [140, 220],
+		monster_tint = Color.WHITE, boss_tint = Color.WHITE, ground_tint = Color(0.62, 0.76, 0.6), tree_tint = Color(0.42, 0.6, 0.46),
+	},
 ]
+## 그림자 늑대 (밀목 wolf, 2026-09-30): 사냥꾼이 WOLF_NOTICE 안이면 사냥꾼 둘레 WOLF_RING 거리에 둘러서서 천천히 돈다.
+## 돌다가 달려들기 쿨이 끝나면 (첫 쿨은 늑대마다 어긋나게) 보통 달려들기 (구역 windup 예고 → 돌진). 달려든 뒤 WOLF_LUNGE_COOLDOWN.
+## 하나가 쓰러지면 WOLF_FLINCH_RANGE 안의 늑대가 WOLF_FLINCH 초 멈칫 (칠 틈).
+const WOLF_NOTICE := 150.0
+const WOLF_RING := 58.0
+const WOLF_CIRCLE_SPEED := 0.6
+const WOLF_MOVE_SPEED := 70.0
+const WOLF_LUNGE_COOLDOWN := 3.0
+const WOLF_FIRST_GAP := 0.9
+const WOLF_FLINCH_RANGE := 140.0
+const WOLF_FLINCH := 0.9
+## 산군 백호 (밀목 대장 tiger): 도약 (SLAM 과 같은 착지 원, 새끼 없음) → 쓰러지는 나무 (LOG 와 같은 띠) → 포효 를 돌아가며.
+## 포효: TIGER_ROAR_WINDUP 동안 둘레 TIGER_ROAR_RADIUS 원 예고 → 원 안의 사냥꾼은 TIGER_ROAR_FREEZE 초 굳음 (움직이기 · 공격 못 함).
+const TIGER_RANGE := 200.0
+const TIGER_LEAP_COOLDOWN := 2.8
+const TIGER_ROAR_WINDUP := 0.9
+const TIGER_ROAR_RADIUS := 70.0
+const TIGER_ROAR_FREEZE := 0.7
+const TIGER_ROAR_RECOVER := 1.2
+const TIGER_ROAR_COOLDOWN := 2.6
+## 3막 대장 알이 아기 백호일 확률 (대장 알이 나왔을 때, 임시)
+const WHITE_TIGER_CHANCE := 0.1
+## 아기 호랑이 동행 포효 (roar): 공격할 때 둘레 COMPANION_ROAR_RADIUS 몬스터가 COMPANION_ROAR_STUN 초 멈춤.
+## 아기 백호 (spirit): 포효 + 번개 발톱 (그 한 방이 2 피해)
+const COMPANION_ROAR_RADIUS := 48.0
+const COMPANION_ROAR_STUN := 0.8
+const COMPANION_ROAR_INTERVAL := 1.6
+const COMPANION_ROAR_RANGE := 30.0
 ## 밤 구역 (2026-09-29 번천, 사용자: "주변에 산이랑 도로만있어서 다른데보다 기온이 낮고 어두워 / 밤에는 버스만다니고 사람이 안다녀").
 ## 구역 데이터 night 면 화면 전체를 이 색으로 어둡게 하고, 가로등(칸 지도 L) · 사냥꾼 호롱 불빛만 밝다. 값은 전부 임시.
 const NIGHT_ZONE_COLOR := Color(0.2, 0.22, 0.36)
@@ -525,3 +578,36 @@ const BREWS := {
 }
 const SPEED_POTION_MULT := 1.25
 const TONIC_SPEED_MULT := 2.0
+
+## 축사 복구 · 목축인 (2026-09-30 사용자 선택 A 닭장). 본편 셋째 시설. 값·자리·그림 전부 임시.
+## 3막 대장(밀목)을 처음 쓰러뜨린 다음 날 아침, 부화기 위 풀밭에 무너진 축사 터가 드러난다.
+## 터에서 F → 돈 · 무 · 3막 대장 재료를 다 모았으면 한 번에 고친다 (대장간 · 약방처럼, Claude 기본값).
+## 고치면 목축인(다섯째 캐릭터, Tab)이 오고 닭장에 수탉 · 암탉 한 쌍이 들어온다.
+## 규칙 (사용자): 가축은 짝이 있으면 새끼를 낳는다. 크리처 알은 지금처럼 사냥터에서만 나온다 (가축은 크리처가 아니라 마을 동물).
+## 3막 대장 재료를 주는 구역 (Config.HUNT_ZONES 번호) = 축사 터를 여는 구역
+const BARN_ZONE := 5
+const BOSS_MATERIAL3_NAME := "산군 발톱"
+const BARN_RECT := Rect2i(17, 1, 4, 2)
+## 목축인이 처음 서는 칸 (축사 왼쪽 아래)
+const RANCHER_CELL := Vector2i(16, 3)
+## 복구에 드는 것 (로드맵: 축사 ≈ 7시간 ≈ 70일째). 3막 대장 재료(대장을 잡을 때마다 1개)가 속도를 정한다.
+const BARN_COST_MONEY := 6000
+const BARN_COST_CROPS := 60
+const BARN_COST_MATERIAL := 20
+## 닭장: 암탉은 아침마다 둥지에 달걀 하나 (전날 모이를 먹었으면 반드시, 안 먹었으면 HEN_HUNGRY_LAY 확률).
+## 둥지에 하룻밤 남긴 달걀은 CHICK_HATCH_CHANCE 로 병아리가 된다 (수탉이 있으니까). 병아리는 CHICK_GROW_DAYS 뒤 암탉.
+## 닭장에는 암탉 + 병아리가 HEN_CAP 마리까지. 꺼낸 달걀은 공급함에 진열해 팔거나 목축인이 도시락을 싼다.
+const START_HENS := 1
+const HEN_CAP := 8
+const HEN_HUNGRY_LAY := 0.5
+const CHICK_HATCH_CHANCE := 0.5
+const CHICK_GROW_DAYS := 3
+const HEN_EGG_PRICE := 25
+## 족제비: 모이 주기를 맡은 아기 호랑이(축사 지킴이)가 없으면 밤마다 이 확률로 와서 둥지 달걀 절반 (없으면 병아리 하나)을 물어 간다
+const WEASEL_CHANCE := 0.3
+## 모이 주기: 닭장에서 F로 한 번에 다 먹이면 무 FEED_CROP_COST 개. 크리처에게 모이 주기(R)를 맡기면 무 없이 한 마리씩 먹인다.
+const FEED_CROP_COST := 1
+## 목축인 제작 (닭장에서 목축인 F): 사냥 도시락 = 다음 사냥 한 번 하트 +LUNCH_HEARTS (그 사냥 동안 하트 칸도 늘어남)
+const LUNCH_EGGS := 2
+const LUNCH_CROPS := 1
+const LUNCH_HEARTS := 2

@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="CreatureSpecies" load_steps=7 format=3]
+
+[ext_resource type="Script" path="res://scripts/creatures/creature_species.gd" id="1"]
+[ext_resource type="Resource" path="res://data/creatures/traits/ordinary.tres" id="2"]
+[ext_resource type="Resource" path="res://data/creatures/traits/diligent.tres" id="3"]
+[ext_resource type="Resource" path="res://data/creatures/traits/keen_eye.tres" id="4"]
+[ext_resource type="Resource" path="res://data/creatures/elements/spirit.tres" id="5"]
+[ext_resource type="Texture2D" path="res://assets/creatures/baby_white_tiger.png" id="6"]
+
+[resource]
+script = ExtResource("1")
+id = &"white_tiger"
+display_name = "아기 백호"
+possible_elements = Array[Resource]([ExtResource("5")])
+job_aptitude = {
+&"feed": 2.0
+}
+work_speed_range = Vector2(1.1, 1.5)
+radius_range = Vector2i(2, 3)
+traits = Array[Resource]([ExtResource("3"), ExtResource("4")])
+companion_style = &"spirit"
+guards_coop = true
+sprite_sheets = {
+&"spirit": ExtResource("6")
+}
+egg_color = Color(0.96, 0.97, 1, 1)
+egg_spot_color = Color(0.45, 0.72, 0.95, 1)
+color = Color(0.9, 0.95, 1, 1)
