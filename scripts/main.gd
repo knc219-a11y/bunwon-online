@@ -101,6 +101,11 @@ var _village_nodes: Array[Node2D] = []
 ## 사냥에 데려간 농장 크리처 (돌아오면 제자리로). 없으면 혼자.
 var _companion_source: Creature
 
+## 지금 쓰는 저장 슬롯 (2026-09-30 사용자 선택 C). -1 = 저장하지 않음 (테스트 장면, 개발 중 처음 화면 없이 켠 때)
+var save_slot := -1
+## 슬롯 지우기: 한 번 고르면 여기에 적어 두고, 같은 슬롯을 한 번 더 고르면 지운다
+var _delete_armed := -1
+
 var _rng := RandomNumberGenerator.new()
 var _status: Label
 var _message: Label
@@ -143,9 +148,10 @@ func _ready() -> void:
 	GameState.message.connect(func(t: String) -> void: _message.text = t)
 	_refresh_props()
 	GameState.notify("농부로 밭을 가꿔 보자. 마을 공급함에 알이 하나 있다. 풀밭의 들나물은 F로 캔다.")
-	# 테스트용 시작 지점 (2026-09-29): 개발용 빌드에서 게임으로 켰을 때만 (테스트 장면 안에서는 안 뜸)
-	if OS.is_debug_build() and get_parent() == get_tree().root:
-		open_menu(&"start")
+	# 처음 화면 (2026-09-30 저장 슬롯): 게임으로 켰을 때만 (테스트 장면 안에서는 안 뜸).
+	# 빈 슬롯에서 새 게임을 고르면 개발용 빌드에서는 테스트용 시작 지점 창이 이어서 뜬다.
+	if get_parent() == get_tree().root:
+		open_menu(&"title")
 
 
 func _add_prop(label: String, texture: Texture2D, rect: Rect2i, block := Rect2(), fade := false) -> Prop:
@@ -233,18 +239,6 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("inventory") and not menu_open:
 		open_inventory()
 		return
-	if hunt:
-		if event.is_action_pressed("attack"):
-			hunt.swing(get_global_mouse_position() - (hunter.feet() + Vector2(0, -12)))
-		elif event.is_action_pressed("use_tool"):
-			hunt.swing()
-		elif event.is_action_pressed("use_potion"):
-			hunt.drink_potion()
-		elif event.is_action_pressed("interact"):
-			interact()
-		elif event.is_action_pressed("switch_character"):
-			GameState.notify("사냥 중에는 캐릭터를 바꿀 수 없다. 아래 입구에서 F로 돌아가자.")
-		return
 	if menu_open:
 		if menu_kind == &"start" and event is InputEventKey and event.pressed and event.physical_keycode >= KEY_1 and event.physical_keycode <= KEY_9:
 			var n: int = event.physical_keycode - KEY_1
@@ -259,7 +253,26 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif event.is_action_pressed("interact") or event.is_action_pressed("use_tool"):
 			menu_confirm()
 		elif event.is_action_pressed("menu_close") or event.is_action_pressed("switch_character"):
-			close_menu()
+			if menu_kind == &"delete":
+				open_menu(&"title")
+			elif menu_kind != &"title":
+				close_menu()
+		return
+	# Esc: 멈춤 메뉴 (계속하기 · 저장하고 나가기). 사냥터 안에서도 된다.
+	if event.is_action_pressed("menu_close"):
+		open_menu(&"pause")
+		return
+	if hunt:
+		if event.is_action_pressed("attack"):
+			hunt.swing(get_global_mouse_position() - (hunter.feet() + Vector2(0, -12)))
+		elif event.is_action_pressed("use_tool"):
+			hunt.swing()
+		elif event.is_action_pressed("use_potion"):
+			hunt.drink_potion()
+		elif event.is_action_pressed("interact"):
+			interact()
+		elif event.is_action_pressed("switch_character"):
+			GameState.notify("사냥 중에는 캐릭터를 바꿀 수 없다. 아래 입구에서 F로 돌아가자.")
 		return
 	if event.is_action_pressed("switch_character"):
 		switch_character()
@@ -557,6 +570,7 @@ func leave_hunt() -> void:
 	hunter.show_facing_cell = true
 	hunter.position = Farm.center_of(HUNT_GATE_RECT.position + Vector2i(1, HUNT_GATE_RECT.size.y))
 	hunter.facing = Vector2i.DOWN
+	autosave()
 	if knocked:
 		GameState.notify("사냥꾼이 쓰러져 마을 입구로 돌아왔다. 알 %d개는 그대로 가지고 있다." % eggs.size())
 	elif eggs.is_empty():
@@ -646,7 +660,11 @@ func open_menu(kind := &"supply") -> void:
 	menu_kind = kind
 	menu_open = true
 	menu_index = 0
+	_delete_armed = -1
 	active.frozen = true
+	# 멈춤 메뉴를 연 동안 사냥터도 멈춘다
+	if hunt:
+		hunt.process_mode = Node.PROCESS_MODE_DISABLED
 	_rebuild_menu()
 
 
@@ -656,6 +674,8 @@ func close_menu() -> void:
 	menu_open = false
 	_menu.visible = false
 	active.frozen = false
+	if hunt:
+		hunt.process_mode = Node.PROCESS_MODE_INHERIT
 	GameState.touch()
 
 
@@ -666,9 +686,13 @@ func menu_move(step: int) -> void:
 
 func menu_confirm() -> void:
 	var id := _menu_options[menu_index]
+	if menu_kind == &"title" or menu_kind == &"delete" or menu_kind == &"pause":
+		save_menu_confirm(id)
+		return
 	if menu_kind == &"start":
 		close_menu()
 		TestStarts.apply(self, id)
+		autosave()
 		return
 	if menu_kind == &"companion":
 		var pick := companion_from_option(id)
@@ -976,17 +1000,24 @@ func restore_forge() -> bool:
 	GameState.crops -= Config.FORGE_COST_CROPS
 	GameState.material -= Config.FORGE_COST_MATERIAL
 	GameState.forge_state = 2
+	GameState.scrap_pile = Config.SCRAP_PER_DAY
+	show_forge_restored()
+	GameState.notify("대장간을 고쳤다! 대장장이가 왔다 (Tab). 고물 더미의 고철로 모루에서 장비를 만든다. 크리처에게 고철 줍기(R)도 맡길 수 있다. 금사리 윗길 쇠다리도 이어 줘서 이제 광동리로 건너갈 수 있다.")
+	return true
+
+
+## 고친 대장간을 마을에 놓는다 (복구와 불러오기가 함께 쓴다): 대장간 그림 · 고물 더미 · 대장장이
+func show_forge_restored() -> void:
+	show_forge_site()
 	forge.label = "대장간"
 	forge.texture = preload("res://assets/props/forge.png")
 	forge.queue_redraw()
-	scrap_heap = _add_prop("고물 더미", preload("res://assets/props/scrap_pile.png"), Config.SCRAP_RECT)
-	forage.block(Config.SCRAP_RECT)
-	GameState.scrap_pile = Config.SCRAP_PER_DAY
+	if scrap_heap == null:
+		scrap_heap = _add_prop("고물 더미", preload("res://assets/props/scrap_pile.png"), Config.SCRAP_RECT)
+		forage.block(Config.SCRAP_RECT)
 	smith.visible = true
 	smith.position = Farm.center_of(Config.SMITH_CELL)
 	_refresh_props()
-	GameState.notify("대장간을 고쳤다! 대장장이가 왔다 (Tab). 고물 더미의 고철로 모루에서 장비를 만든다. 크리처에게 고철 줍기(R)도 맡길 수 있다. 금사리 윗길 쇠다리도 이어 줘서 이제 광동리로 건너갈 수 있다.")
-	return true
 
 
 ## 고물 더미에서 손으로 고철 하나 (농부 · 대장장이)
@@ -1127,16 +1158,23 @@ func restore_yak() -> bool:
 	GameState.roots -= Config.YAK_COST_ROOTS
 	GameState.material2 -= Config.YAK_COST_MATERIAL
 	GameState.yak_state = 2
+	GameState.herb_bed = Config.HERB_BED_PER_DAY
+	show_yak_restored()
+	GameState.notify("약방을 고쳤다! 연금술사가 왔다 (Tab). 약방에서 물약 · 크리처 보약을 만든다. 도라지밭 가꾸기(R)도 맡길 수 있다. 연금술사가 호롱을 만들어 줘서 이제 도마리 윗길 너머 번천으로 갈 수 있다.")
+	return true
+
+
+## 고친 약방을 마을에 놓는다 (복구와 불러오기가 함께 쓴다): 약방 그림 · 도라지밭 · 연금술사
+func show_yak_restored() -> void:
+	show_yak_site()
 	yak.label = "약방"
 	yak.texture = preload("res://assets/props/yak.png")
 	yak.queue_redraw()
-	herb_bed = _add_prop("도라지밭", preload("res://assets/props/herb_bed.png"), Config.HERB_BED_RECT)
-	GameState.herb_bed = Config.HERB_BED_PER_DAY
+	if herb_bed == null:
+		herb_bed = _add_prop("도라지밭", preload("res://assets/props/herb_bed.png"), Config.HERB_BED_RECT)
 	alchemist.visible = true
 	alchemist.position = Farm.center_of(Config.ALCHEMIST_CELL)
 	_refresh_props()
-	GameState.notify("약방을 고쳤다! 연금술사가 왔다 (Tab). 약방에서 물약 · 크리처 보약을 만든다. 도라지밭 가꾸기(R)도 맡길 수 있다. 연금술사가 호롱을 만들어 줘서 이제 도마리 윗길 너머 번천으로 갈 수 있다.")
-	return true
 
 
 ## 도라지밭에서 손으로 도라지 하나 (농부 · 연금술사)
@@ -1331,14 +1369,20 @@ func restore_barn() -> bool:
 	GameState.material3 -= Config.BARN_COST_MATERIAL
 	GameState.barn_state = 2
 	GameState.hens = Config.START_HENS
+	show_barn_restored()
+	GameState.notify("축사를 고쳤다! 목축인이 수탉 · 암탉 한 쌍을 데려왔다 (Tab). 모이를 주면 아침마다 달걀, 둥지에 남긴 달걀은 병아리가 된다. 크리처에게 모이 주기(R)도 맡길 수 있다.")
+	return true
+
+
+## 고친 축사를 마을에 놓는다 (복구와 불러오기가 함께 쓴다): 축사 그림 · 목축인
+func show_barn_restored() -> void:
+	show_barn_site()
 	barn.label = "축사"
 	barn.texture = preload("res://assets/props/barn.png")
 	barn.queue_redraw()
 	rancher.visible = true
 	rancher.position = Farm.center_of(Config.RANCHER_CELL)
 	_refresh_props()
-	GameState.notify("축사를 고쳤다! 목축인이 수탉 · 암탉 한 쌍을 데려왔다 (Tab). 모이를 주면 아침마다 달걀, 둥지에 남긴 달걀은 병아리가 된다. 크리처에게 모이 주기(R)도 맡길 수 있다.")
-	return true
 
 
 func barn_options() -> Array[StringName]:
@@ -1538,7 +1582,10 @@ func _rebuild_menu() -> void:
 	var brewing := menu_kind == &"yak" or menu_kind == &"brew"
 	var starting := menu_kind == &"start"
 	var ranching := menu_kind == &"barn" or menu_kind == &"coop"
-	if starting:
+	var saving := menu_kind == &"title" or menu_kind == &"delete" or menu_kind == &"pause"
+	if saving:
+		_menu_options = save_menu_options()
+	elif starting:
 		_menu_options = TestStarts.ids()
 	elif brewing:
 		_menu_options = yak_options() if menu_kind == &"yak" else brew_options()
@@ -1556,6 +1603,12 @@ func _rebuild_menu() -> void:
 		head = "크리처 훈련   가진 돈 %d원" % GameState.money
 	if starting:
 		head = "테스트용 시작 지점 (개발용 빌드에서만)"
+	if menu_kind == &"title":
+		head = "분원리   어느 슬롯으로 할까?"
+	elif menu_kind == &"delete":
+		head = "슬롯 지우기 (되돌릴 수 없다)"
+	elif menu_kind == &"pause":
+		head = "멈춤   %d일째 %s" % [GameState.day, GameState.clock_text(GameState.minutes)]
 	if menu_kind == &"forge":
 		head = "무너진 대장간 터"
 	elif menu_kind == &"craft":
@@ -1577,7 +1630,9 @@ func _rebuild_menu() -> void:
 	for i in range(first, last):
 		var o := _menu_options[i]
 		var text := ""
-		if starting:
+		if saving:
+			text = save_menu_text(o)
+		elif starting:
 			text = TestStarts.option_text(o)
 		elif training:
 			text = train_option_text(o)
@@ -1616,7 +1671,14 @@ func _rebuild_menu() -> void:
 		lines.append("대장을 쓰러뜨리면 위쪽 길로 더 깊이 갈 수 있다")
 	if starting:
 		lines.append("W/S 고르기 · F 정하기 · 숫자키 바로 · Esc 처음부터")
-		lines.append("그 시점쯤의 상태를 새로 채운다 (저장이 아님)")
+		lines.append("그 시점쯤의 상태를 새로 채운다 (고른 뒤부터 이 슬롯에 저장)")
+	if menu_kind == &"title":
+		lines.append("W/S 고르기 · F 정하기")
+		lines.append("잘 때 · 사냥터에서 돌아올 때 저절로 저장, Esc로 언제든 저장하고 나가기")
+	elif menu_kind == &"delete":
+		lines.append("같은 슬롯을 한 번 더 F: 지운다 · Esc 돌아가기")
+	elif menu_kind == &"pause":
+		lines.append("사냥터 안에서 나가면 마을로 돌아온 채로 저장한다" if hunt else "Esc 계속하기")
 	_menu_text.text = "\n".join(lines)
 	_menu.size = _menu_text.get_minimum_size() + Vector2(16, 10)
 	# 공급함(또는 사냥터 입구) 옆에 띄우되 화면 밖으로 나가지 않게
@@ -1627,10 +1689,103 @@ func _rebuild_menu() -> void:
 		at = yak.position + Vector2(-260, -150)
 	if ranching:
 		at = barn.position + Vector2(-300, 20)
-	if starting:
+	if starting or saving:
 		at = (Vector2(640, 360) - _menu.size) / 2
 	_menu.position = at.clamp(Vector2(4, 32), Vector2(636, 324) - _menu.size)
 	_menu.visible = menu_open
+
+
+# --- 저장 슬롯 · 멈춤 메뉴 (2026-09-30 사용자 선택 C 디아2식) ---------------
+
+func save_menu_options() -> Array[StringName]:
+	var out: Array[StringName] = []
+	match menu_kind:
+		&"title":
+			for i in range(1, SaveGame.SLOTS + 1):
+				out.append(StringName("slot_%d" % i))
+			if range(1, SaveGame.SLOTS + 1).any(func(i: int) -> bool: return SaveGame.exists(i)):
+				out.append(&"delete")
+		&"delete":
+			for i in range(1, SaveGame.SLOTS + 1):
+				if SaveGame.exists(i):
+					out.append(StringName("slot_%d" % i))
+			out.append(&"back")
+		&"pause":
+			out.append(&"resume")
+			if save_slot >= 0:
+				out.append(&"save_quit")
+	return out
+
+
+func save_menu_text(id: StringName) -> String:
+	match id:
+		&"delete":
+			return "슬롯 지우기"
+		&"back":
+			return "돌아가기"
+		&"resume":
+			return "계속하기"
+		&"save_quit":
+			return "저장하고 나가기 (슬롯 %d)" % save_slot
+	var slot := String(id).trim_prefix("slot_").to_int()
+	var sum := SaveGame.summary(slot)
+	if menu_kind == &"delete":
+		var what := "슬롯 %d   %d일째 · %d원" % [slot, sum.get("day", 0), sum.get("money", 0)]
+		return what + ("   ← 한 번 더 F: 지운다" if _delete_armed == slot else "")
+	if sum.is_empty():
+		return "슬롯 %d   비어 있음 · 새 게임" % slot
+	return "슬롯 %d   %d일째 %s · %d원 · 이어하기" % [slot, sum.day, GameState.clock_text(sum.minutes), sum.money]
+
+
+func save_menu_confirm(id: StringName) -> void:
+	match id:
+		&"delete":
+			open_menu(&"delete")
+			return
+		&"back":
+			open_menu(&"title")
+			return
+		&"resume":
+			close_menu()
+			return
+		&"save_quit":
+			save_and_quit()
+			return
+	var slot := String(id).trim_prefix("slot_").to_int()
+	if menu_kind == &"delete":
+		if _delete_armed == slot:
+			SaveGame.erase(slot)
+			open_menu(&"title")
+			GameState.notify("슬롯 %d을(를) 지웠다." % slot)
+		else:
+			_delete_armed = slot
+			_rebuild_menu()
+		return
+	close_menu()
+	save_slot = slot
+	if SaveGame.load_into(self, slot):
+		GameState.notify("슬롯 %d: %d일째에서 이어 한다." % [slot, GameState.day])
+	elif OS.is_debug_build():
+		# 테스트용 시작 지점 (2026-09-29): 개발용 빌드에서만. 고른 상태부터 이 슬롯에 저장한다.
+		open_menu(&"start")
+	else:
+		autosave()
+
+
+## 저장 슬롯이 있으면 지금 상태를 쓴다 (잘 때 · 사냥터에서 돌아올 때 · 저장하고 나가기)
+func autosave() -> bool:
+	if save_slot < 0:
+		return false
+	return SaveGame.save(self, save_slot)
+
+
+## 저장하고 처음 화면으로. 사냥터 안이면 먼저 마을로 돌아온다 (주운 것은 그대로).
+func save_and_quit() -> void:
+	close_menu()
+	if hunt:
+		leave_hunt()
+	autosave()
+	get_tree().reload_current_scene()
 
 
 func change_creature_job() -> void:
@@ -1653,6 +1808,7 @@ func go_to_sleep() -> void:
 	tween.tween_property(_night, "color:a", Config.NIGHT_ALPHA, Config.SLEEP_FADE_TIME)
 	await tween.finished
 	var lines := next_day()
+	autosave()
 	show_morning_card(lines)
 
 
@@ -1816,6 +1972,14 @@ func _hatch(species: CreatureSpecies, at_cell: Vector2i, element: CreatureElemen
 		data.guarantee_minimum(Config.FIRST_CREATURE_MIN_WORK_SPEED, Config.FIRST_CREATURE_MIN_RADIUS)
 	if element:
 		data.set_element(element)
+	return add_creature(data, at_cell, s.job, s)
+
+
+## 이미 정해진 개체를 농장에 내놓는다 (부화와 불러오기가 함께 쓴다)
+func add_creature(data: CreatureData, at_cell: Vector2i, job: StringName, s: Creature = null) -> Creature:
+	if s == null:
+		s = Creature.new()
+	s.job = job
 	add_child(s)
 	s.forage = forage
 	s.setup(farm, data, at_cell)

@@ -63,6 +63,15 @@ func _add_plot_cells(plot: Rect2i) -> void:
 			_cells[Vector2i(x, y)] = Cell.new()
 
 
+## GameState.open_plots 만큼 구역 칸이 있게 한다 (불러오기). 이미 있는 칸은 그대로.
+func sync_plots() -> void:
+	for i in GameState.open_plots:
+		var plot := Config.FIELD_PLOTS[i]
+		if not _cells.has(plot.position):
+			_add_plot_cells(plot)
+	queue_redraw()
+
+
 ## 다음 잠긴 밭 구역 번호. 모두 열렸으면 -1.
 static func next_plot() -> int:
 	return GameState.open_plots if GameState.open_plots < Config.FIELD_PLOTS.size() else -1
