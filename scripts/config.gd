@@ -432,7 +432,7 @@ const HUNT_ZONES: Array[Dictionary] = [
 		## 알: 3막 일반 알 = 아기 도깨비불 (번천과 같음), 3막 대장 알 = 아기 호랑이 (드물게 아기 백호, WHITE_TIGER_CHANCE)
 		egg = "res://data/creatures/species/will_o.tres", boss_egg = "res://data/creatures/species/tiger.tres",
 		egg_chance = 0.03, boss_egg_chance = 0.2,
-		count = 12, hp = 8, speed = 1.3, boss_hp = 60,
+		count = 12, hp = 8, speed = 1.3, boss_hp = 50,
 		damage = 2, knockback = 4.0, windup = 0.35, pack = false, boss_pattern = &"tiger",
 		## 3막 대장 재료 (2026-09-30 축사 닭장): 백호를 쓰러뜨릴 때마다 산군 발톱 하나, 처음 잡으면 다음 날 마을에 축사 터
 		boss_material3 = true,
@@ -450,19 +450,19 @@ const WOLF_NOTICE := 150.0
 const WOLF_RING := 58.0
 const WOLF_CIRCLE_SPEED := 0.6
 const WOLF_MOVE_SPEED := 70.0
-const WOLF_LUNGE_COOLDOWN := 2.6
+const WOLF_LUNGE_COOLDOWN := 3.0
 const WOLF_FIRST_GAP := 0.9
 const WOLF_FLINCH_RANGE := 140.0
 const WOLF_FLINCH := 0.9
 ## 산군 백호 (밀목 대장 tiger): 도약 (SLAM 과 같은 착지 원, 새끼 없음) → 쓰러지는 나무 (LOG 와 같은 띠) → 포효 를 돌아가며.
 ## 포효: TIGER_ROAR_WINDUP 동안 둘레 TIGER_ROAR_RADIUS 원 예고 → 원 안의 사냥꾼은 TIGER_ROAR_FREEZE 초 굳음 (움직이기 · 공격 못 함).
 const TIGER_RANGE := 200.0
-const TIGER_LEAP_COOLDOWN := 2.2
+const TIGER_LEAP_COOLDOWN := 2.8
 const TIGER_ROAR_WINDUP := 0.9
 const TIGER_ROAR_RADIUS := 70.0
-const TIGER_ROAR_FREEZE := 1.0
+const TIGER_ROAR_FREEZE := 0.7
 const TIGER_ROAR_RECOVER := 1.2
-const TIGER_ROAR_COOLDOWN := 2.0
+const TIGER_ROAR_COOLDOWN := 2.6
 ## 3막 대장 알이 아기 백호일 확률 (대장 알이 나왔을 때, 임시)
 const WHITE_TIGER_CHANCE := 0.1
 ## 아기 호랑이 동행 포효 (roar): 공격할 때 둘레 COMPANION_ROAR_RADIUS 몬스터가 COMPANION_ROAR_STUN 초 멈춤.

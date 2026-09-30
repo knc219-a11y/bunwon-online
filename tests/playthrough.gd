@@ -535,7 +535,8 @@ func coop_day(did: Array[String]) -> void:
 	var made: Array[String] = []
 	if GameState.fed < GameState.hens and (feed_creature == null or feed_creature.job != CreatureJobs.FEED) and main.coop_action(&"feed"):
 		made.append("모이")
-	if GameState.nest > 0 and (GameState.hens + GameState.chicks.size() >= Config.HEN_CAP or GameState.lunches == 0):
+	# 암탉이 넷이 될 때까지는 둥지 달걀을 병아리로 두고, 그 뒤로 꺼낸다 (사람이라면 먼저 닭을 늘릴 것)
+	if GameState.nest > 0 and GameState.hens + GameState.chicks.size() >= Config.HEN_CAP / 2:
 		made.append("달걀 %d" % GameState.nest)
 		main.coop_action(&"take_nest")
 	if GameState.lunches == 0 and GameState.hen_eggs >= Config.LUNCH_EGGS:
@@ -543,10 +544,15 @@ func coop_day(did: Array[String]) -> void:
 		if main.coop_action(&"lunch"):
 			made.append("도시락")
 		main._set_active(main.farmer)
-	if GameState.hen_eggs > 0:
-		hen_eggs_sold += GameState.hen_eggs
-		made.append("달걀 %d 진열" % GameState.hen_eggs)
+	# 다음 도시락 몫은 남기고 나머지만 판다
+	var keep_eggs := Config.LUNCH_EGGS
+	if GameState.hen_eggs > keep_eggs:
+		var sell := GameState.hen_eggs - keep_eggs
+		GameState.hen_eggs = sell
+		hen_eggs_sold += sell
+		made.append("달걀 %d 진열" % sell)
 		main.supply_action(&"display_hen_eggs")
+		GameState.hen_eggs = keep_eggs
 	if not made.is_empty():
 		did.append("닭장 %s" % ", ".join(made))
 

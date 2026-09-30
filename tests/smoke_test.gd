@@ -2122,8 +2122,9 @@ func _ready() -> void:
 	_check(b_g.hp == 3, "화살이 어둠 속 도깨비불을 지나감")
 	bjh.lamps.assign(b_lamps)
 	_check(bjh.hittable(b_g) == bjh.in_light(b_g.position) and bjh.in_light(b_lamps[0] + Vector2(0, 10)), "가로등 아래는 밝음")
-	# 불빛 동행: 동행 둘레 유령도 맞고, 불씨로 잠시 뒤 한 번 더
+	# 불빛 동행: 동행 둘레 유령도 맞고, 불씨로 잠시 뒤 한 번 더 (아직 날던 화살은 치움)
 	bjh.lamps.clear()
+	bjh.shots.clear()
 	b_g.position = bjh.companion.position + Vector2(20, 0)
 	_check(bjh.hittable(b_g), "아기 도깨비불 불빛 안의 도깨비불은 맞음")
 	bjh.companion_attack(b_g)
