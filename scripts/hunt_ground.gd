@@ -605,7 +605,7 @@ func swing(dir := Vector2.ZERO) -> int:
 	return hits
 
 
-## 화살 · 구슬을 날리고 맞힌다. 화살은 첫 몬스터에 박히고 (나는 참새도 맞힘, 모래에 숨은 모래게는 지나감.
+## 화살 · 구슬을 날리고 맞힌다. 화살은 첫 몬스터에 박히고 (나는 까마귀도 맞힘, 모래에 숨은 모래게는 지나감.
 ## 그루터기인 척하는 고목 그루터기는 보이니 맞아서 깨어남),
 ## 구슬은 처음 닿은 몬스터 또는 사거리 끝에서 터져 둘레 모두를 맞힌다.
 func _tick_shots(delta: float) -> void:
@@ -781,7 +781,7 @@ func _defeat(s: WildSlime) -> void:
 	if not s.boss and (not GameState.first_egg_done or _egg_roll() < z.get("egg_chance", 0.0)):
 		# 게임 전체 첫 처치는 알을 반드시 떨어뜨린다 (첫 사냥에서 막히지 않게). 그 뒤로는 드물게.
 		GameState.first_egg_done = true
-		# 구역마다 일반 알 종 (광동리 = 아기 참새). 없으면 슬라임 알.
+		# 구역마다 일반 알 종 (광동리 = 아기 까마귀). 없으면 슬라임 알.
 		var table := CreatureCatalog.HUNT_TABLE
 		var sp: CreatureSpecies = load(z.egg) if z.has("egg") and GameState.first_egg_done else table[randi() % table.size()]
 		drops.append({at = _reachable(s.position), species = sp})
@@ -912,7 +912,7 @@ func _on_roared(at: Vector2, boss: WildSlime) -> void:
 	GameState.notify("%s의 포효에 몸이 굳었다!" % boss.title)
 
 
-## 참새가 내려꽂았다: 그림자 원 안이면 다친다.
+## 까마귀가 내려꽂았다: 그림자 원 안이면 다친다.
 func _on_swooped(at: Vector2, s: WildSlime) -> void:
 	if _in_circle(at, Config.SWOOP_RADIUS) and _invulnerable <= 0.0 and not knocked:
 		_hurt(at, s.damage, s.title, "%s이(가) 내려꽂았다!" % s.title)
@@ -946,7 +946,7 @@ func _on_bale_landed(at: Vector2) -> void:
 		_hurt(at, boss.damage, boss.title, "%s이(가) 던진 짚단에 맞았다!" % boss.title)
 
 
-## 허수아비 장수가 참새를 불렀다 (최대 SLAM_MINION_MAX 마리, 알·드롭 없음)
+## 허수아비 장수가 까마귀를 불렀다 (최대 SLAM_MINION_MAX 마리, 알·드롭 없음)
 func _on_called(at: Vector2) -> void:
 	if knocked:
 		return
@@ -965,7 +965,7 @@ func _on_called(at: Vector2) -> void:
 		if m.flyer:
 			m._fly = 1.0
 		slimes.append(m)
-	GameState.notify("허수아비 장수가 깃발을 흔들자 참새가 몰려왔다!" if Config.HUNT_ZONES[zone].get("boss_pattern") == &"straw" else "막차 문이 열리고 도깨비불 승객이 내렸다!")
+	GameState.notify("허수아비 장수가 깃발을 흔들자 요괴 까마귀 떼가 몰려왔다!" if Config.HUNT_ZONES[zone].get("boss_pattern") == &"straw" else "막차 문이 열리고 도깨비불 승객이 내렸다!")
 	GameState.touch()
 
 

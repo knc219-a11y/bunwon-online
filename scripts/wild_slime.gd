@@ -78,7 +78,7 @@ var _aim := -1.0
 var _lash := 0.0
 var _tongue_to := Vector2.ZERO
 
-## 참새 (광동리 flyer, 2026-09-29 선택 B): 날아다니다 내려꽂는다. 나는 동안 position 은 그림자(땅) 자리이고 그림만 띄운다.
+## 까마귀 (광동리 flyer, 2026-09-29 선택 B): 날아다니다 내려꽂는다. 나는 동안 position 은 그림자(땅) 자리이고 그림만 띄운다.
 var flyer := false
 ## 맴도는 남은 시간 (-1 = 땅에 있음) · 내려꽂기 예고 남은 시간 · 내려꽂는 진행(0~1)
 var _fly := -1.0
@@ -107,7 +107,7 @@ var _tiger_step := 0
 var _roar := -1.0
 ## 대장 그림이 32칸 시트가 아닐 때 한 장 크기 (유령 막차 96x48). ZERO 면 32칸 시트.
 var boss_frame := Vector2i.ZERO
-## 허수아비 장수 짚단 던지기: 떨어질 짚단들 {at, t = 남은 시간}, 던진 횟수 (두 번에 한 번 참새 부르기)
+## 허수아비 장수 짚단 던지기: 떨어질 짚단들 {at, t = 남은 시간}, 던진 횟수 (두 번에 한 번 까마귀 부르기)
 var _bales: Array[Dictionary] = []
 var _throws := 0
 ## 천하대장군 통나무 굴리기 (도마리): 예고 남은 시간(-1 = 아님) → 굴러가는 진행(0~1, -1 = 아님), 굴러갈 길
@@ -116,11 +116,11 @@ var _log_t := -1.0
 var _log_from := Vector2.ZERO
 var _log_to := Vector2.ZERO
 
-## 참새가 내려꽂았다 (내려앉은 곳). HuntGround 가 받아 원 안의 사냥꾼을 다치게 한다.
+## 까마귀가 내려꽂았다 (내려앉은 곳). HuntGround 가 받아 원 안의 사냥꾼을 다치게 한다.
 signal swooped(at: Vector2)
 ## 짚단이 떨어졌다. HuntGround 가 받아 원 안의 사냥꾼을 다치게 한다.
 signal bale_landed(at: Vector2)
-## 허수아비 장수가 참새를 불렀다 (HuntGround 가 참새를 놓는다)
+## 허수아비 장수가 까마귀를 불렀다 (HuntGround 가 까마귀를 놓는다)
 signal called(at: Vector2)
 ## 대장이 내려찍었다 (떨어진 곳). HuntGround 가 받아 원 안의 사냥꾼을 다치게 하고 새끼를 놓는다.
 signal slammed(at: Vector2)
@@ -236,7 +236,7 @@ func hit(from: Vector2, amount := 1) -> bool:
 	buried = false
 	if flyer:
 		if in_air():
-			# 날던 참새는 쪼여서 땅에 떨어진다 (아기 참새 동행만 닿음)
+			# 날던 까마귀는 쪼여서 땅에 떨어진다 (아기 까마귀 동행만 닿음)
 			_fly = -1.0
 			_swoop = -1.0
 			_dive_t = -1.0
@@ -263,7 +263,7 @@ func airborne() -> bool:
 	return _air_t >= 0.0 or in_air()
 
 
-## 참새가 공중에 있다 (맴돌기 · 예고 · 내려꽂는 중)
+## 까마귀가 공중에 있다 (맴돌기 · 예고 · 내려꽂는 중)
 func in_air() -> bool:
 	return _fly >= 0.0 or _swoop >= 0.0 or _dive_t >= 0.0
 
@@ -424,7 +424,7 @@ func tick(delta: float, target: Vector2) -> void:
 		_sprite.modulate = Color(1, 1, 1) * 2.0 if _flash > 0.0 and int(_flash * 20) % 2 == 0 else _tint
 		queue_redraw()
 		return
-	# 내려찍기: 공중에서 그림을 위로 띄운다 (그림자는 제자리). 참새는 나는 동안 FLY_HEIGHT 만큼.
+	# 내려찍기: 공중에서 그림을 위로 띄운다 (그림자는 제자리). 까마귀는 나는 동안 FLY_HEIGHT 만큼.
 	var lift := sin(_air_t * PI) * 60.0 / scale.y if _air_t >= 0.0 else 0.0
 	if flyer and in_air():
 		lift = Config.FLY_HEIGHT * (1.0 - maxf(_dive_t, 0.0)) / scale.y
@@ -644,7 +644,7 @@ func _tick_attack(delta: float, target: Vector2) -> bool:
 	return false
 
 
-## 참새 한 틱: 땅에서 쪼기 → 날아올라 맴돌기 → 그림자 원 예고 → 내려꽂기 → 다시 쪼기.
+## 까마귀 한 틱: 땅에서 쪼기 → 날아올라 맴돌기 → 그림자 원 예고 → 내려꽂기 → 다시 쪼기.
 func _tick_fly(delta: float, target: Vector2) -> void:
 	var d := position.distance_to(target)
 	if _dive_t >= 0.0:
@@ -761,9 +761,14 @@ func _draw() -> void:
 		for e in [at - side, at + side]:
 			draw_circle(e, 4.0 / scale.x, Color(0.86, 0.74, 0.55))
 			draw_circle(e, 1.5 / scale.x, Color(0.6, 0.44, 0.3))
-	# 대장 이름표 (디아블로2 챔피언처럼 금색)
+	# 대장 이름표 (디아블로2 챔피언처럼 금색). 대장은 1.8배로 키워져 있어서 글씨는 키움을 되돌려 갈무리9 제 크기(10)로 쓴다.
+	# (예전엔 크기 6 을 1.8배로 늘려 픽셀 글꼴이 깨져 보였다, 2026-09-30 사용자: "허수아비 장군 글씨 깨진거")
 	if boss:
 		var font := ThemeDB.fallback_font
-		var w := font.get_string_size(title, HORIZONTAL_ALIGNMENT_LEFT, -1, 6).x
-		draw_rect(Rect2(-w / 2 - 1.5, -35.5 + top, w + 3, 7), Color(0, 0, 0, 0.55))
-		draw_string(font, Vector2(-w / 2, -30 + top), title, HORIZONTAL_ALIGNMENT_LEFT, -1, 6, Color(0.95, 0.85, 0.45))
+		var k := 1.0 / scale.x
+		var y := (-30.0 + top) * scale.x + 4.0
+		var w := font.get_string_size(title, HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2(k, k))
+		draw_rect(Rect2(roundf(-w / 2) - 2, roundf(y) - 10, w + 4, 13), Color(0, 0, 0, 0.55))
+		draw_string(font, Vector2(roundf(-w / 2), roundf(y)), title, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.95, 0.85, 0.45))
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)

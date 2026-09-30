@@ -34,7 +34,7 @@ const START_MONEY := 0
 const CROP_PRICE := 50
 const SEED_PACK_SIZE := 5
 const SEED_PACK_PRICE := 100
-## 아기 참새 낟알: 씨앗이 이만큼 있으면 더 물어 온 낟알은 씨앗 대신 공급함에서 개당 GRAIN_PRICE원에 팔린다 (임시)
+## 아기 까마귀 낟알: 씨앗이 이만큼 있으면 더 물어 온 낟알은 씨앗 대신 공급함에서 개당 GRAIN_PRICE원에 팔린다 (임시)
 const GRAIN_SEED_CAP := 30
 const GRAIN_PRICE := 5
 
@@ -101,7 +101,7 @@ const SWING_RADIUS := 18.0
 const SWING_COOLDOWN := 0.35
 ## 무기 (2026-09-29 사용자: "종류는 근거리무기, 원거리 활 무기, 특수효과 지팡이무기 정도이면 좋을거같아").
 ## 무기 칸이 비어 있으면 사냥칼 (위 SWING_* 그대로). 무기마다 값은 Wearables.ITEMS 의 weapon 사전. 값은 전부 임시.
-## 화살: 첫 몬스터에 맞으면 사라진다. 나는 참새(공중)도 맞힌다. 모래에 숨은 모래게 위로는 지나간다 (그루터기인 척하는 고목 그루터기는 맞힘).
+## 화살: 첫 몬스터에 맞으면 사라진다. 나는 까마귀(공중)도 맞힌다. 모래에 숨은 모래게 위로는 지나간다 (그루터기인 척하는 고목 그루터기는 맞힘).
 const ARROW_SPEED := 300.0
 const ARROW_HIT_RADIUS := 9.0
 ## 지팡이 구슬: 느리게 날아가 처음 닿은 몬스터(또는 사거리 끝)에서 터진다. 둘레 blast 안 몬스터 모두 1 피해 + 속성 효과.
@@ -159,7 +159,7 @@ const TONGUE_RECOVER := 0.7
 const GOLD_DUST_RADIUS := 16.0
 const GOLD_DUST_TIME := 6.0
 const GOLD_DUST_SLOW := 0.5
-## 광동리 참새 (flyer, 2026-09-29 선택 B): 땅에서 쪼다가 사냥꾼이 FLY_NOTICE 안에 오면 날아오름 →
+## 광동리 까마귀 (flyer, 2026-09-29 선택 B): 땅에서 쪼다가 사냥꾼이 FLY_NOTICE 안에 오면 날아오름 →
 ## 사냥꾼 둘레를 FLY_CIRCLE 거리로 FLY_TIME 동안 맴돎 → 발밑에 그림자 원 (예고 = 구역 windup) → 내려꽂기 (원 안이면 하트 -피해)
 ## → 땅에서 SWOOP_RECOVER 초 낟알을 쪼음 (이때만 칼에 맞음) → 다시 날아오름. 나는 동안은 물·짚가리·벽을 넘는다.
 const FLY_NOTICE := 120.0
@@ -173,7 +173,7 @@ const SWOOP_RECOVER := 1.6
 ## 맞으면 이만큼만 더 쪼다가 날아오른다 (맞고 바로 도망)
 const SWOOP_HIT_RECOVER := 0.6
 ## 허수아비 장수 짚단 던지기: 사냥꾼 둘레에 짚단 원 STRAW_BALES 개를 차례로 (하나 예고 STRAW_WINDUP, 간격 STRAW_GAP), 원 안이면 하트 -피해.
-## 두 번에 한 번은 참새를 STRAW_CALL 마리 부른다 (최대 SLAM_MINION_MAX)
+## 두 번에 한 번은 까마귀를 STRAW_CALL 마리 부른다 (최대 SLAM_MINION_MAX)
 const STRAW_RANGE := 170.0
 const STRAW_BALES := 3
 const STRAW_WINDUP := 0.75
@@ -246,7 +246,7 @@ const COMPANION_PULL_GAP := 18.0
 const COMPANION_PULL_STUN := 1.0
 ## 끌려오는 데 걸리는 시간 (초). 혀도 이만큼 보인다.
 const COMPANION_PULL_TIME := 0.25
-## 날아가 쪼기 (아기 참새, 2026-09-29 광동리 B): 이 거리 안이면 물·벽 너머 · 날고 있는 몬스터도 쪼음 (피해 1). 날던 참새는 땅에 떨어진다.
+## 날아가 쪼기 (아기 까마귀, 2026-09-29 광동리 B): 이 거리 안이면 물·벽 너머 · 날고 있는 몬스터도 쪼음 (피해 1). 날던 까마귀는 땅에 떨어진다.
 const COMPANION_PECK_RANGE := 120.0
 const COMPANION_PECK_INTERVAL := 1.4
 ## 덩굴 묶기 (아기 나무 정령, 2026-09-29 도마리): 닿는 거리 · 공격 간격 · 묶어 두는 시간 (묶인 몬스터는 못 움직이고 부딪혀도 안 다침)
@@ -345,16 +345,17 @@ const HUNT_ZONES: Array[Dictionary] = [
 	{
 		## 2막 첫 구역 (2026-09-29 사용자: "3구역은 광동리다", 후보 B. 동지벌 군량 벌판 선택).
 		## 광동리 = 광복동(광백이) + 동지벌촌 (광주시 유래: 병자호란 때 군량미를 가장 많이 낸 넓은 벌판 마을).
-		## 추수한 벌판 · 짚가리 · 옛 군량 곳간 · 배수로. 곡식 도둑 참새 떼가 날아다니고, 곳간을 지키던 허수아비 장수가 대장.
-		name = "광동리", junk_name = "참새 깃털", monster = "참새", boss_monster = "허수아비 장수", waypoint = true,
+		## 추수한 벌판 · 짚가리 · 옛 군량 곳간 · 배수로. 곡식 도둑 요괴 까마귀 떼가 날아다니고, 곳간을 지키던 허수아비 장수가 대장.
+		## 2026-09-30 사용자: "몬스터가 참새이면 너무 약하고 짜치지 않나" → 요괴 까마귀로 (id · 파일 이름은 sparrow 그대로, 세이브 호환)
+		name = "광동리", junk_name = "까마귀 깃털", monster = "요괴 까마귀", boss_monster = "허수아비 장수", waypoint = true,
 		map = "gwangdong",
 		labels = [[Vector2(26, 4.3), "군량 곳간"]],
 		sheet = "res://assets/creatures/wild_sparrow.png", boss_sheet = "res://assets/creatures/wild_scarecrow.png", burrow = false,
-		## 참새는 날아다닌다 (flyer): 나는 동안 칼·몸이 닿지 않고, 내려꽂기(그림자 원 예고) 뒤 땅에서 낟알을 쪼는 동안만 칼에 맞는다
+		## 까마귀는 날아다닌다 (flyer): 나는 동안 칼·몸이 닿지 않고, 내려꽂기(그림자 원 예고) 뒤 땅에서 낟알을 쪼는 동안만 칼에 맞는다
 		flyer = true,
-		## 알 (구역마다 일반 알 종): 참새 → 아기 참새. 대장도 가끔 같은 알.
+		## 알 (구역마다 일반 알 종): 까마귀 → 아기 까마귀. 대장도 가끔 같은 알.
 		egg = "res://data/creatures/species/sparrow.tres", boss_egg = "res://data/creatures/species/sparrow.tres",
-		## 참새는 금사리 모래게보다 두 배 넘게 많아서 한 마리 확률은 1% (사냥 한 번에 알 약 15%, 금사리와 비슷하게)
+		## 까마귀는 금사리 모래게보다 두 배 넘게 많아서 한 마리 확률은 1% (사냥 한 번에 알 약 15%, 금사리와 비슷하게)
 		egg_chance = 0.01, boss_egg_chance = 0.15,
 		## 2막부터 한 계단 더 (대장간 제작품으로 금사리가 쉬워진 것을 보고, 2026-09-29): 내려꽂기 하트 -2, 대장 체력 26. windup = 내려꽂기 예고(초)
 		count = 15, hp = 4, speed = 1.0, boss_hp = 26,
@@ -377,7 +378,7 @@ const HUNT_ZONES: Array[Dictionary] = [
 		map = "doma",
 		sheet = "res://assets/creatures/wild_old_stump.png", boss_sheet = "res://assets/creatures/wild_cheonha.png", burrow = true,
 		partner = {name = "지하여장군", sheet = "res://assets/creatures/wild_jiha.png", pattern = &"slam"},
-		## 알: 2막 일반 알 = 아기 참새 (광동리와 같음), 2막 대장 알 = 아기 나무 정령 (사용자: "알은 나무정령알")
+		## 알: 2막 일반 알 = 아기 까마귀 (광동리와 같음), 2막 대장 알 = 아기 나무 정령 (사용자: "알은 나무정령알")
 		egg = "res://data/creatures/species/sparrow.tres", boss_egg = "res://data/creatures/species/tree_spirit.tres",
 		egg_chance = 0.03, boss_egg_chance = 0.2,
 		## 2막 대장이라 광동리보다 한 계단 더 (임시, 봇 50일로 맞춤). boss_hp 는 장승 하나 체력 (둘이라 합은 두 배)

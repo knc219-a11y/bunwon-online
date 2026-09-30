@@ -137,7 +137,7 @@ func _ready() -> void:
 	for d in [30, 35, 40]:
 		if money_by_day.has(d):
 			money_at.append("%d일 %d원" % [d, money_by_day[d]])
-	_log("\n광동리: 첫 도착 %s · 첫 대장 처치 %s · 광동리 사냥 %d번 · 거기서 맞은 횟수 %d (한 번에 %.1f) · 쓰러짐 %d번 · 끝 돈 %s · 아기 참새 %d마리" % [
+	_log("\n광동리: 첫 도착 %s · 첫 대장 처치 %s · 광동리 사냥 %d번 · 거기서 맞은 횟수 %d (한 번에 %.1f) · 쓰러짐 %d번 · 끝 돈 %s · 아기 까마귀 %d마리" % [
 		"%d일" % gwang_day if gwang_day > 0 else "없음", cleared_day.get(Config.HUNT_ZONES[2].name, "없음"), gwang_hunts, gwang_hurt,
 		float(gwang_hurt) / maxi(gwang_hunts, 1), gwang_knocked, money_at, main.creatures.filter(func(c: Creature) -> bool: return c.data.species == CreatureCatalog.SPARROW).size()])
 	var money_late := []
@@ -284,7 +284,7 @@ func place_new_creatures() -> void:
 	for s: Creature in main.creatures:
 		if s.home != main.HATCH_CELL:
 			continue
-		# 아기 참새는 채집 재능이라 채집 전담 (플레이어가 할 법한 배치)
+		# 아기 까마귀는 채집 재능이라 채집 전담 (플레이어가 할 법한 배치)
 		if farmers < GameState.open_plots and s.data.species != CreatureCatalog.SPARROW:
 			_assign(s, CreatureJobs.FARM, farmers)
 			farmers += 1
@@ -724,7 +724,7 @@ func hunt_day() -> void:
 	# 대장간을 아직 못 고쳤으면 사금 덩이(금사리 금두꺼비)를 모으러 금사리 웨이포인트부터 걸어간다 (광동리로 건너뛰지 않음)
 	if GameState.forge_state < 2 and zone > Config.FORGE_ZONE and Config.FORGE_ZONE in GameState.waypoints:
 		zone = Config.FORGE_ZONE
-	# 광동리 참새는 날아다녀서 혀 · 박치기가 안 닿는다: 광동리로 가면 아기 참새를 데려간다
+	# 광동리 까마귀는 날아다녀서 혀 · 박치기가 안 닿는다: 광동리로 가면 아기 까마귀를 데려간다
 	if GameState.waypoints.max() >= 2 or zone >= 1:
 		for s: Creature in main.creatures:
 			if s.data.species == CreatureCatalog.SPARROW and (pick == null or pick.data.species != CreatureCatalog.SPARROW):
@@ -829,7 +829,7 @@ func hunt_day() -> void:
 		var lit_s: WildSlime = h._nearest_slime(feet, true)
 		if lit_s != null and h.is_night():
 			nearest_s = lit_s
-		# 나는 참새는 칼이 안 닿으니 땅에 앉은 것부터 노린다 (다 날고 있으면 가장 가까운 것을 따라감)
+		# 나는 까마귀는 칼이 안 닿으니 땅에 앉은 것부터 노린다 (다 날고 있으면 가장 가까운 것을 따라감)
 		var grounded := h.slimes.filter(func(o: WildSlime) -> bool: return not o.airborne())
 		if not grounded.is_empty() and nearest_s != null and nearest_s.airborne():
 			grounded.sort_custom(func(a: WildSlime, b: WildSlime) -> bool: return a.position.distance_to(feet) < b.position.distance_to(feet))

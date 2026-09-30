@@ -1911,7 +1911,7 @@ func next_day() -> Array[String]:
 	var seeds := gather_seeds()
 	grain_money = GameState.money - grain_money
 	if seeds > 0:
-		lines.append("아기 참새가 벌판에서 낟알을 물어 왔다. 씨앗 +%d" % seeds)
+		lines.append("아기 까마귀가 벌판에서 낟알을 물어 왔다. 씨앗 +%d" % seeds)
 	if grain_money > 0:
 		lines.append("씨앗이 넉넉해서 남는 낟알은 공급함에서 팔렸다. +%d원" % grain_money)
 	if GameState.hunter_unlocked and GameState.hunts_today > 0:
@@ -1957,7 +1957,7 @@ func boost_growth() -> int:
 	return total
 
 
-## 낟알 줍기 (아기 참새, 2026-09-29 광동리 B): 일을 맡은 개체마다 종의 daily_seeds 범위만큼 씨앗을 물어 온다. 쉬는 중이면 없음.
+## 낟알 줍기 (아기 까마귀, 2026-09-29 광동리 B): 일을 맡은 개체마다 종의 daily_seeds 범위만큼 씨앗을 물어 온다. 쉬는 중이면 없음.
 ## 씨앗 넘침 (2026-09-29 4구역 스레드, Claude 기본값): 씨앗이 GRAIN_SEED_CAP 개를 넘으면 넘는 낟알은 씨앗 대신
 ## 공급함에서 밤에 팔린다 (개당 GRAIN_PRICE원). 돌려주는 값은 씨앗으로 들어온 수.
 func gather_seeds() -> int:
