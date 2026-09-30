@@ -88,8 +88,9 @@ func _draw() -> void:
 		var size := texture.get_size()
 		draw_texture(texture, Vector2(-size.x / 2, -size.y))
 		top = -size.y
-	draw_string(ThemeDB.fallback_font, Vector2(-40, 11), label, HORIZONTAL_ALIGNMENT_CENTER, 80, 9)
+	UiSkin.draw_tag(self, Vector2(-50, 12), label, 100)
 	if badge != "" and badge_side:
-		draw_string(ThemeDB.fallback_font, Vector2(half_w + 2, top / 2.0 + 4), badge, HORIZONTAL_ALIGNMENT_LEFT, -1, 9)
+		var bw := ThemeDB.fallback_font.get_string_size(badge, HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x
+		UiSkin.draw_tag(self, Vector2(half_w + 2, top / 2.0 + 4), badge, bw + 2, Color(1, 0.9, 0.55))
 	elif badge != "":
-		draw_string(ThemeDB.fallback_font, Vector2(-40, top - 3), badge, HORIZONTAL_ALIGNMENT_CENTER, 80, 9)
+		UiSkin.draw_tag(self, Vector2(-60, top - 3), badge, 120, Color(1, 0.9, 0.55))

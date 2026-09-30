@@ -1279,23 +1279,16 @@ func _draw_waypoint(n: Node2D) -> void:
 
 
 func _draw_hud() -> void:
-	for i in max_hearts():
-		var c := Color(0.9, 0.3, 0.35) if i < hearts else Color(0.45, 0.38, 0.38)
-		var p := Vector2(8 + i * 13, 34)
-		_hud.draw_circle(p + Vector2(3, 3), 3, c)
-		_hud.draw_circle(p + Vector2(7, 3), 3, c)
-		_hud.draw_colored_polygon(PackedVector2Array([p + Vector2(0, 4), p + Vector2(10, 4), p + Vector2(5, 10)]), c)
-	# 빨간 물약 수
+	# 하트 · 빨간 물약 · 지금 구역 (그래픽 시범 2026-09-30: 아이콘 + 한지 알약)
 	var font := ThemeDB.fallback_font
-	var x := 12.0 + max_hearts() * 13
-	_hud.draw_circle(Vector2(x, 41), 4, Color(0.85, 0.2, 0.22))
-	_hud.draw_rect(Rect2(x - 1, 34, 2, 3), Color(0.85, 0.8, 0.7))
-	_hud.draw_string(font, Vector2(x + 6, 45), "x%d (1)" % GameState.potions, HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(1, 0.97, 0.85))
-	# 지금 구역 (오른쪽 위)
+	var hw := max_hearts() * 13.0 + 6
+	_hud.draw_style_box(UiSkin.chip_box(), Rect2(4, 30, hw, 17))
+	for i in max_hearts():
+		UiSkin.draw_icon(_hud, UiSkin.Icon.HEART if i < hearts else UiSkin.Icon.HEART_EMPTY, Vector2(7 + i * 13, 32))
+	UiSkin.draw_chip(_hud, Vector2(7 + hw, 30), UiSkin.Icon.POTION, "x%d (1)" % GameState.potions, 17)
 	var zt := "%d구역 %s" % [zone + 1, Config.HUNT_ZONES[zone].name]
-	var zw := font.get_string_size(zt, HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x
-	_hud.draw_rect(Rect2(632 - zw - 6, 30, zw + 6, 14), Color(0, 0, 0, 0.55))
-	_hud.draw_string(font, Vector2(632 - zw - 3, 41), zt, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.95, 0.85, 0.45))
+	var zw := font.get_string_size(zt, HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x + 22
+	UiSkin.draw_chip(_hud, Vector2(636 - zw, 30), UiSkin.Icon.FLAG, zt, 17)
 	_draw_offscreen_hint(font)
 	_draw_minimap()
 	if path_open:
@@ -1371,8 +1364,9 @@ func _draw_minimap() -> void:
 	if _mini_tex == null or hunter == null:
 		return
 	var r := minimap_rect()
-	_hud.draw_rect(r.grow(2), Color(0, 0, 0, 0.55))
-	_hud.draw_texture_rect(_mini_tex, r, false, Color(1, 1, 1, 0.9))
+	_hud.draw_rect(r.grow(1), Color(0.2, 0.15, 0.18, 0.8))
+	_hud.draw_texture_rect(_mini_tex, r, false, Color(1, 1, 1, 0.95))
+	_hud.draw_style_box(UiSkin.frame_box(), r.grow(4))
 	# 아래 입구는 늘 보이고, 위쪽 길은 가 본 뒤에 보인다
 	var gold := Color(1, 0.95, 0.6)
 	var e := r.position + map.spot("E") / T * MINI_SCALE

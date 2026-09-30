@@ -163,6 +163,10 @@ func _draw() -> void:
 	if active and show_facing_cell:
 		# 바라보는 칸 표시
 		var target := Farm.center_of(facing_cell()) - position
-		draw_rect(Rect2(target - Vector2(11, 11), Vector2(22, 22)), Color(1, 1, 1, 0.6), false, 1.5)
+		var r := Rect2(target - Vector2(11, 11), Vector2(22, 22))
+		for corner: Vector2 in [r.position, Vector2(r.end.x, r.position.y), r.end, Vector2(r.position.x, r.end.y)]:
+			var sx := 1.0 if corner.x == r.position.x else -1.0
+			var sy := 1.0 if corner.y == r.position.y else -1.0
+			draw_polyline(PackedVector2Array([corner + Vector2(0, sy * 5), corner, corner + Vector2(sx * 5, 0)]), Color(1, 1, 1, 0.85), 2.0)
 	if active:
-		draw_string(ThemeDB.fallback_font, Vector2(-30, -42), display_name, HORIZONTAL_ALIGNMENT_CENTER, 60, 10)
+		UiSkin.draw_tag(self, Vector2(-30, -42), display_name, 60)

@@ -338,12 +338,18 @@ func _draw() -> void:
 	var label := CreatureJobs.display_name(job)
 	if data.train_total() > 0:
 		label += " ★%d" % data.train_total()
-	draw_string(ThemeDB.fallback_font, Vector2(-24, -26), label, HORIZONTAL_ALIGNMENT_CENTER, 48, 9)
+	UiSkin.draw_tag(self, Vector2(-30, -26), label, 60, Color(0.85, 1.0, 0.95))
 	# 채집은 범위 없이 마을 풀밭 전체를 돌므로 범위 네모를 그리지 않는다
 	if carried_by == null and job != CreatureJobs.FORAGE and job != CreatureJobs.SCRAP and job != CreatureJobs.HERB and job != CreatureJobs.FEED:
 		# 작업 범위 표시
 		var radius := data.work_radius()
 		var r := Rect2(Vector2((home - Vector2i(radius, radius)) * Config.TILE), Vector2.ONE * (radius * 2 + 1) * Config.TILE)
 		draw_set_transform(-position)
-		draw_rect(r, Color(0.75, 0.96, 0.93, 0.85), false, 1.0)
+		# 네 귀퉁이 꺾쇠 (그래픽 시범 2026-09-30)
+		var col := Color(0.75, 0.96, 0.93, 0.9)
+		var k := 6.0
+		for corner: Vector2 in [r.position, Vector2(r.end.x, r.position.y), r.end, Vector2(r.position.x, r.end.y)]:
+			var sx := 1.0 if corner.x == r.position.x else -1.0
+			var sy := 1.0 if corner.y == r.position.y else -1.0
+			draw_polyline(PackedVector2Array([corner + Vector2(0, sy * k), corner, corner + Vector2(sx * k, 0)]), col, 2.0)
 		draw_set_transform(Vector2.ZERO)
