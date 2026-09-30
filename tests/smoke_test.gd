@@ -2455,8 +2455,133 @@ func _ready() -> void:
 		ts.queue_free()
 		await get_tree().process_frame
 
+	# 41) 저장/불러오기 (2026-09-30 사용자 선택 C 디아2식): 저장 → 장면을 버리고 → 새 장면에 불러오면 모든 상태가 같다
+	await _save_load_checks()
+
 	print("SMOKE TEST: %s (%d failures)" % ["PASS" if _failures == 0 else "FAIL", _failures])
 	get_tree().quit(1 if _failures > 0 else 0)
+
+
+## 41) 저장/불러오기. 여러 가지가 섞인 70일째 (축사 복구 뒤) 를 만들어 저장하고 되살린다.
+func _save_load_checks() -> void:
+	SaveGame.dir = "user://smoke_saves"
+	DirAccess.make_dir_recursive_absolute(SaveGame.dir)
+	for i in range(1, SaveGame.SLOTS + 1):
+		SaveGame.erase(i)
+	var a: Node2D = load("res://scenes/main.tscn").instantiate()
+	add_child(a)
+	await get_tree().process_frame
+	_check(a.save_slot == -1 and not a.autosave() and not SaveGame.exists(1), "테스트 장면은 슬롯이 없어 저절로 저장하지 않음")
+	TestStarts.apply(a, &"barn")
+	# 섞인 상태: 시각 · 알 세 군데 · 부화 중 · 가방 · 창고 장비 · 밭 물 · 풀밭 · 병아리 · 들고 있는 크리처 · 사냥꾼으로 전환
+	GameState.minutes = 14 * 60 + 30
+	GameState.hunter_eggs.append(load(TestStarts.SPECIES[&"tiger"]))
+	GameState.village_eggs.append(load(TestStarts.SPECIES[&"slime"]))
+	GameState.farmer_eggs.append(load(TestStarts.SPECIES[&"gold_toad"]))
+	a.incubating_days = 2
+	a.incubating_species = load(TestStarts.SPECIES[&"will_o"])
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 41
+	for n in 3:
+		Wearables.gain_rolled(Wearables.roll_gear(rng, &"rare"))
+	var stash_id := StringName("gear_%d" % (GameState.gear_serial + 1))
+	Wearables.gain_rolled(Wearables.roll_gear(rng, &"magic"))
+	if GameState.gear.has(stash_id) and stash_id in GameState.bag.hunter:
+		GameState.bag.hunter.erase(stash_id)
+		GameState.stash.append(stash_id)
+	GameState.chicks.assign([2, 1])
+	GameState.nest = 3
+	GameState.fed = 1
+	GameState.displayed_crops = 5
+	GameState.tonic_day = 69
+	GameState.tool_levels[Farm.Work.HARVEST] = 1
+	a.farm.do_work(Farm.Work.WATER, Vector2i(2, 2))
+	a.forage.water(Vector2i(15, 12))
+	var carried: Creature = a.creatures[5]
+	a.farmer.position = Farm.center_of(Vector2i(9, 9))
+	carried.pick_up(a.farmer)
+	a.creatures[0].data.radius_level = 3
+	a._set_active(a.hunter)
+	a.hunter.position = Farm.center_of(Vector2i(19, 6))
+	a.hunter.facing = Vector2i.LEFT
+	a.tool_index = 2
+	a.save_slot = 2
+	var before: Dictionary = SaveGame.snapshot(a)
+	_check(a.autosave() and SaveGame.exists(2) and not SaveGame.exists(1), "슬롯 2에 저장 (다른 슬롯은 그대로 비어 있음)")
+	var sum := SaveGame.summary(2)
+	_check(sum.day == 70 and sum.money == GameState.money, "슬롯 요약: %d일째 · %d원" % [sum.day, sum.money])
+	var gear_before := GameState.gear.duplicate(true)
+	var creatures_before: Array = a.creatures.map(func(c: Creature) -> String: return c.describe())
+	a.queue_free()
+	await get_tree().process_frame
+
+	# 게임을 끈 것처럼: 전역 상태를 처음으로 돌리고 새 장면을 띄운 뒤 불러온다
+	GameState.reset()
+	var b: Node2D = load("res://scenes/main.tscn").instantiate()
+	add_child(b)
+	await get_tree().process_frame
+	_check(GameState.day == 1 and b.creatures.is_empty(), "새 장면은 1일째 빈 마을")
+	_check(SaveGame.load_into(b, 2), "슬롯 2 불러오기")
+	var after: Dictionary = SaveGame.snapshot(b)
+	var diff: Array[String] = []
+	for k: String in before:
+		if k == "gs":
+			for g: String in before.gs:
+				if before.gs[g] != after.gs.get(g):
+					diff.append("gs." + g)
+		elif before[k] != after.get(k):
+			diff.append(k)
+	_check(diff.is_empty(), "저장 전과 불러온 뒤 전체 상태가 같음 %s" % (diff if not diff.is_empty() else ""))
+	_check(GameState.gear == gear_before and b.creatures.map(func(c: Creature) -> String: return c.describe()) == creatures_before, "장비 옵션 · 크리처 능력치 · 일 · 훈련이 그대로 (%d개 · %d마리)" % [GameState.gear.size(), b.creatures.size()])
+	_check(GameState.bag.hunter is Array and GameState.bag.hunter.get_typed_builtin() == TYPE_STRING_NAME and GameState.hunter_eggs.get_typed_class_name() == &"Resource" or GameState.hunter_eggs[0] is CreatureSpecies, "가방 · 알 목록 타입이 그대로")
+	_check(GameState.hunter_eggs.size() == 1 and GameState.hunter_eggs[0].id == &"tiger" and GameState.farmer_eggs.back().id == &"gold_toad" and b.incubating_days == 2 and b.incubating_species.id == &"will_o", "알 (사냥꾼 · 공급함 · 농부) · 부화기 그대로")
+	_check(b.forge.label == "대장간" and b.scrap_heap != null and b.smith.visible and b.yak.label == "약방" and b.herb_bed != null and b.alchemist.visible and b.barn.label == "축사" and b.rancher.visible, "대장간 · 약방 · 축사 고친 모습 · 일꾼 셋 (값을 다시 치르지 않음)")
+	_check(GameState.hens == 3 and GameState.chicks == [2, 1] and GameState.nest == 3, "닭장 (암탉 · 병아리 · 둥지) 그대로")
+	_check(b.farm.get_cell(Vector2i(2, 2)).watered and b.farm.get_cell(Vector2i(7, 6)) != null and b.forage.watered.has(Vector2i(15, 12)), "밭 네 구역 · 물 준 칸 · 물 준 풀밭")
+	_check(b.active == b.hunter and b.hunter.facing == Vector2i.LEFT and b.creatures[5].carried_by == null and b.creatures[5].home == Vector2i(9, 9), "사냥꾼으로 이어 함 · 들고 있던 크리처는 농부 발밑에 놓임")
+	_check(is_equal_approx(GameState.minutes, 14 * 60 + 30) and b.save_slot == -1, "시각 오후 2:30 그대로")
+	# 불러온 뒤에도 게임이 이어진다: 하루 넘기기 · 사냥
+	var eggs_n := GameState.hunter_eggs.size()
+	b.next_day()
+	_check(GameState.day == 71 and b.incubating_days == 1, "불러온 뒤 하루 넘기기")
+	b.hunter.position = b.hunt_gate.position
+	_check(b.enter_hunt(null, 5) and b.hunt != null, "불러온 뒤 밀목 웨이포인트로 사냥")
+
+	# 사냥터 안에서 저장하고 나가기: 마을로 돌아온 채로 저장
+	b.save_slot = 3
+	b.open_menu(&"pause")
+	_check(b.hunt.process_mode == Node.PROCESS_MODE_DISABLED and b._menu_options == [&"resume", &"save_quit"], "사냥 중 Esc: 사냥터가 멈추고 계속하기 · 저장하고 나가기")
+	b.close_menu()
+	b.leave_hunt()
+	_check(SaveGame.exists(3) and SaveGame.read(3).gs.hunts_today == 1 and SaveGame.read(3).gs.hunter_eggs.size() == eggs_n, "사냥터에서 돌아오면 저절로 저장")
+
+	# 처음 화면: 슬롯 셋 + 지우기, 지우기는 두 번 눌러야
+	b.open_menu(&"title")
+	_check(b._menu_options == [&"slot_1", &"slot_2", &"slot_3", &"delete"] and b.save_menu_text(&"slot_1").contains("새 게임") and b.save_menu_text(&"slot_2").contains("70일째"), "처음 화면: 빈 슬롯은 새 게임, 쓴 슬롯은 날짜 · 이어하기")
+	b.save_menu_confirm(&"delete")
+	b.save_menu_confirm(&"slot_3")
+	_check(SaveGame.exists(3), "지우기: 한 번 고르면 아직 안 지움")
+	b.save_menu_confirm(&"slot_3")
+	_check(not SaveGame.exists(3) and b.menu_kind == &"title", "지우기: 한 번 더 고르면 지우고 처음 화면")
+	b.close_menu()
+	b.queue_free()
+	await get_tree().process_frame
+
+	# 옛 저장 파일 (나중에 늘어난 변수가 없음): 없는 변수는 처음 값으로
+	var old := SaveGame.read(2)
+	old.gs.erase("lunches")
+	old.gs.erase("barn_state")
+	GameState.reset()
+	var c: Node2D = load("res://scenes/main.tscn").instantiate()
+	add_child(c)
+	await get_tree().process_frame
+	SaveGame.apply(c, old)
+	_check(GameState.day == 70 and GameState.lunches == 0 and GameState.barn_state == 0 and c.barn == null, "옛 저장 파일: 없는 변수는 처음 값으로 읽음")
+	c.queue_free()
+	await get_tree().process_frame
+	for i in range(1, SaveGame.SLOTS + 1):
+		SaveGame.erase(i)
+	SaveGame.dir = "user://"
 
 
 ## c 로 대장간 앞에 서서 F
