@@ -7,6 +7,7 @@
   발바닥은 칸의 맨 아래 줄(y=31), 몸 중심은 x=16.
 
 실행: python3 tools/make_gold_toad_sheet.py  (Pillow 필요)
+2026-09-30: 모래게 · 금두꺼비 · 아기 금두꺼비 시트는 사용자 AI 그림 (tools/import_ai_monster.py) 으로 바뀌었다. 이 스크립트를 돌리면 코드 그림으로 덮어쓰니 주의.
 """
 import os
 

@@ -9,6 +9,7 @@
   ../props/geumsa_jar.png (48 x 64): 큰 회색 항아리 모양 표지 (사용자: 구조물은 회색, 글씨는 검정). 글씨는 게임에서 그 위에 쓴다 (몸통 가운데 y=30~46).
 
 실행: python3 tools/make_wild_sheets.py  (Pillow 필요)
+2026-09-30: 모래게 · 금두꺼비 · 아기 금두꺼비 시트는 사용자 AI 그림 (tools/import_ai_monster.py) 으로 바뀌었다. 이 스크립트를 돌리면 코드 그림으로 덮어쓰니 주의.
 """
 import os
 

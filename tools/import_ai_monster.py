@@ -14,6 +14,11 @@
 
 실행: python3 tools/import_ai_monster.py 그림.png --kind crab|boss|baby [--width 24] [--colors 20] [--preview 미리보기.png]
       (--sand 숨은그림.png: 모래에 파묻힌 게 그림이 따로 있으면 숨기 칸에 그걸 쓴다)
+
+지금 시트를 만든 명령 (그림 원본: /mnt/project-files/design/gumsa-ai/ai_*.png, 사용자 AI 그림 2026-09-30)
+  --kind crab --width 28 --colors 24 --eyes 0.402,0.283,0.594,0.283 --eye-ring
+  --kind boss --colors 24 --eyes 0.545,0.17,0.849,0.16 --eye-lid
+  --kind baby --colors 24 --eyes 0.518,0.181,0.882,0.159 --cheeks 0.465,0.353,0.934,0.345 --mouth 0.75,0.40
 """
 import argparse
 import os
@@ -25,9 +30,11 @@ from import_ai_slime import draw_face, find_face, inpaint, largest_blob, peel_ha
 from make_character_sheet import grade_p1, outline
 from make_gold_toad_sheet import GOLD, GOLD_L, TONGUE, TONGUE_D, TONGUE_L
 from make_slime_sheet import CELL, Layer
-from make_wild_sheets import GOLD as SAND_GOLD, SAND, SAND_D, SAND_L, ellipse
+from make_wild_sheets import GOLD as SAND_GOLD, SAND, SAND_D, SAND_L, crab_buried, ellipse
 
 ROOT = os.path.join(os.path.dirname(__file__), "..")
+EYE, GLINT, RING = (58, 38, 50), (255, 248, 240), (250, 240, 226)
+CHEEK = (244, 164, 150)
 WORK_W = 192
 
 # 프레임: 가로 늘임, 세로 늘임, 뜬 높이, 그 밖의 표시
@@ -108,7 +115,31 @@ def draw_tongue(l, mx, my, stage):
             l.px(x - 1, y, GOLD_L)
 
 
-def build(src, kind, width=None, colors=20, redraw_eyes=False, sand_src=None, mouth=(0.5, 0.62)):
+LID = (150, 96, 40)
+
+
+def spot_face(l, left, top, W, H, eyes, size, ring, cheeks, lid=False):
+    """정해 준 자리 (몸 비율)에 둥근 눈 + 반짝을 새로 찍는다. 22~30px 로 줄이면 AI 눈이 뭉개져서."""
+    for fx, fy in cheeks:
+        cx, cy = int(round(left + fx * W)), int(round(top + fy * H))
+        l.rect(cx - 1, cy, cx, cy, CHEEK)
+    for fx, fy in eyes:
+        ex = int(round(left + fx * W - size / 2))
+        ey = int(round(top + fy * H - (size + 1) / 2))
+        if ring:
+            l.rect(ex - 1, ey - 1, ex + size, ey + size + 1, RING)
+        l.rect(ex, ey, ex + size - 1, ey + size, EYE)
+        l.px(ex, ey, GLINT)
+        if size >= 3:
+            l.px(ex + 1, ey, GLINT)
+        if lid:
+            # 반쯤 감은 무거운 눈꺼풀 (금두꺼비 대장): 윗줄을 눈꺼풀로 덮고 반짝은 한 줄 아래로
+            l.rect(ex - 1, ey - 1, ex + size, ey, LID)
+            l.px(ex, ey + 1, GLINT)
+
+
+def build(src, kind, width=None, colors=20, redraw_eyes=False, sand_src=None, mouth=(0.5, 0.62),
+          spot_eyes=None, eye_size=2, eye_ring=False, cheeks=(), eye_lid=False):
     spec = KINDS[kind]
     width = width or spec["width"]
     fig = load_figure(src)
@@ -161,6 +192,14 @@ def build(src, kind, width=None, colors=20, redraw_eyes=False, sand_src=None, mo
                 sheet.alpha_composite(img, (i * CELL + CELL // 2 - sw // 2, CELL - sh))
                 continue
             peek = f["sand"]
+            if spot_eyes:
+                # 모래 더미 + 빼꼼 나온 눈자루는 코드 그림 그대로 (눈은 위에서 새로 찍은 것과 같은 모양)
+                crab_buried(l, peek)
+                mound = l.img
+                outline(mound, CELL)
+                grade_p1(mound)
+                sheet.alpha_composite(mound, (i * CELL, 0))
+                continue
             # 눈자루를 모래 더미 뒤에 먼저 놓고, 그 위에 모래를 덮는다
             if stalks:
                 sheet.alpha_composite(stalks, (i * CELL + CELL // 2 - stalks.width // 2, 28 - 2 * peek - stalks.height))
@@ -173,6 +212,8 @@ def build(src, kind, width=None, colors=20, redraw_eyes=False, sand_src=None, mo
         left, top, W, H = p
         if eyes:
             draw_face(l, left, top, W, H, eyes, mouth)
+        if spot_eyes:
+            spot_face(l, left, top, W, H, spot_eyes, eye_size, eye_ring, cheeks, eye_lid)
         if "work" in f:
             draw_tongue(l, int(round(left + mouth[0] * W)), int(round(top + mouth[1] * H)), f["work"])
         sheet.alpha_composite(l.img, (i * CELL, 0))
@@ -187,12 +228,19 @@ def main():
     ap.add_argument("--colors", type=int, default=20)
     ap.add_argument("--redraw-eyes", action="store_true", help="AI 눈 · 입을 지우고 둥근 눈 + 반짝으로 다시 그린다")
     ap.add_argument("--mouth", default="0.5,0.62", help="혀가 나올 입 자리 (몸 비율 x,y)")
+    ap.add_argument("--eyes", help="눈 자리를 몸 비율로 직접: x1,y1,x2,y2 (둥근 눈 + 반짝을 새로 찍는다)")
+    ap.add_argument("--eye-size", type=int, default=2)
+    ap.add_argument("--eye-ring", action="store_true", help="눈 둘레에 밝은 흰자 (게 눈자루)")
+    ap.add_argument("--eye-lid", action="store_true", help="반쯤 감은 눈꺼풀 (금두꺼비 대장)")
+    ap.add_argument("--cheeks", help="볼 자리 몸 비율 x1,y1,x2,y2")
     ap.add_argument("--sand", help="모래에 파묻힌 게 그림 (crab 숨기 칸)")
     ap.add_argument("--out", help="기본: assets/creatures/<규격 이름>.png")
     ap.add_argument("--preview", help="4배 확대 미리보기 PNG")
     a = ap.parse_args()
     mouth = tuple(float(v) for v in a.mouth.split(","))
-    sheet = build(a.src, a.kind, a.width, a.colors, a.redraw_eyes, a.sand, mouth)
+    pairs = lambda t: [tuple(v) for v in zip(*[iter(float(x) for x in t.split(","))] * 2)] if t else []
+    sheet = build(a.src, a.kind, a.width, a.colors, a.redraw_eyes, a.sand, mouth,
+                  pairs(a.eyes), a.eye_size, a.eye_ring, pairs(a.cheeks), a.eye_lid)
     out = a.out or os.path.join(ROOT, "assets", "creatures", KINDS[a.kind]["out"] + ".png")
     sheet.save(out)
     print(out)
