@@ -15,6 +15,7 @@
   5. 걷기 4 · 숨쉬기 2 프레임을 다리 · 윗몸을 옮겨 만든다.
 
 실행: python3 tools/import_ai_character.py 그림.png --name player [--width 30] [--height 46] [--patch tools/char_parts/player_patch.json]
+      그림 순서가 정면 · 옆 · 뒤면 --order down,side,up
       --preview 파일.png 를 주면 4배 확대 미리보기도 저장한다.
 """
 import argparse
@@ -126,9 +127,13 @@ def classify(c, yf, refs):
             d = sum((a - b) ** 2 for a, b in zip(c, r))
             if d < bd:
                 best, bd = part, d
-    if lum(c) < 60 and best not in ("hair", "shoes"):
+    if lum(c) < 60 and (best not in ("hair", "shoes") or (best == "hair" and yf > DARK_HAIR_MAX)):
         return None
     return best
+
+
+# 이 높이 아래의 어두운 선은 머리카락으로 치지 않는다 (체크무늬 셔츠 선이 머리카락이 되지 않게). --dark-hair
+DARK_HAIR_MAX = 1.0
 
 
 def soften(c, lift, sat):
@@ -186,8 +191,32 @@ def part_map(img, refs):
             if v is None:
                 ns = Counter(lab.get((x + dx, y + dy)) for dx in (-1, 0, 1) for dy in (-1, 0, 1))
                 ns.pop(None, None)
+                if y / (h - 1) > DARK_HAIR_MAX:
+                    ns.pop("hair", None)
                 if ns:
                     lab[x, y] = ns.most_common(1)[0][0]
+    # 윗도리 색과 비슷한 볼 · 입 같은 작은 조각 (3픽셀 이하 덩어리) 은 이웃 부위로. --dark-hair 아래 머리카락 부스러기도
+    for part in ("top", "hair"):
+        seen = set()
+        for start in [k for k, v in lab.items() if v == part]:
+            if start in seen:
+                continue
+            comp, stack = [], [start]
+            seen.add(start)
+            while stack:
+                x, y = stack.pop()
+                comp.append((x, y))
+                for n in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+                    if n not in seen and lab.get(n) == part:
+                        seen.add(n)
+                        stack.append(n)
+            if len(comp) <= 3 and (part == "top" or min(y for _, y in comp) / (h - 1) > DARK_HAIR_MAX):
+                for x, y in comp:
+                    ns = Counter(lab.get((x + dx, y + dy)) for dx in (-1, 0, 1) for dy in (-1, 0, 1))
+                    ns.pop(None, None)
+                    ns.pop(part, None)
+                    if ns:
+                        lab[x, y] = ns.most_common(1)[0][0]
     # 바지 윗줄 아래로 내려온 윗도리 색 (다리 사이 선 등) 은 바지로
     rows = [Counter(v for (x, yy), v in lab.items() if yy == y) for y in range(h)]
     pants_top = next((y for y in range(h) if rows[y]["pants"] > max(2, rows[y]["top"])), h)
@@ -299,9 +328,20 @@ def main():
     ap.add_argument("--patch")
     ap.add_argument("--preview")
     ap.add_argument("--out")
+    ap.add_argument("--hair-span", type=float, default=0.5, help="뒷모습 · 옆모습에서 머리카락이 내려올 수 있는 높이 (0 머리끝 ~ 1 발끝). 포니테일이면 0.75")
+    ap.add_argument("--front-hair", type=float, default=0.5, help="정면에서 머리카락이 내려올 수 있는 높이 (포니테일은 앞에서 안 보여 0.4 쯤)")
+    ap.add_argument("--dark-hair", type=float, default=1.0, help="이 높이 아래 어두운 선은 머리카락이 아니다 (체크무늬 셔츠면 0.42 쯤)")
+    ap.add_argument("--sleeves", action="store_true", help="윗도리 색을 소매(팔 윗쪽)에서도 뽑는다. 멜빵바지처럼 가슴을 다른 옷이 덮을 때")
+    ap.add_argument("--order", default="down,up,side", help="그림 속 왼쪽부터 순서 (정면 down · 뒷모습 up · 옆 side). 예: down,side,up")
     a = ap.parse_args()
 
+    global DARK_HAIR_MAX
+    DARK_HAIR_MAX = a.dark_hair
+    if a.sleeves:
+        PROBES["top"] = PROBES["top"] + [(0.08, 0.22, 0.44, 0.54), (0.78, 0.92, 0.44, 0.54)]
     figs = split_figures(white_to_alpha(Image.open(a.src)))
+    order = a.order.split(",")
+    figs = [figs[order.index(k)] for k in ("down", "up", "side")]
     strip = Image.new("RGBA", (sum(f.width for f in figs), max(f.height for f in figs)))
     x = 0
     for f in figs:
@@ -316,6 +356,7 @@ def main():
         fill_holes(views[key])
     refs = part_refs(views["down"])
     # 옆모습은 오른쪽을 봐야 한다. 얼굴(살색)이 머리카락보다 왼쪽이면 뒤집는다.
+    SPAN["hair"] = (0, a.hair_span)
     pm = part_map(views["side"], refs).load()
     sw = views["side"].width
     cx = lambda part: sum(x for x in range(sw) for y in range(a.height // 2) if pm[x, y][:3] == PART_COLORS[part]) / max(1, sum(
@@ -324,7 +365,10 @@ def main():
         views["side"] = views["side"].transpose(Image.Transpose.FLIP_LEFT_RIGHT)
         print("옆모습이 왼쪽을 봐서 뒤집음")
     print("부위 색", refs)
-    parts = {k: part_map(v, refs) for k, v in views.items()}
+    parts = {}
+    for k, v in views.items():
+        SPAN["hair"] = (0, a.front_hair if k == "down" else a.hair_span)
+        parts[k] = part_map(v, refs)
     for k, v in views.items():
         for x, y in recolor_body(v, parts[k], a.lift, a.sat):
             p = parts[k].getpixel((x, y))

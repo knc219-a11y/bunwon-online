@@ -308,11 +308,16 @@ ITEMS = {
 # 부위 지도(tools/char_parts/<몸>.png)가 있는 캐릭터의 장비는 아래 방식으로 새 몸에 맞춘다.
 #   모자: 위 모자 그림을 옛 머리(가로 11-36, 머리끝 y=1) 기준에서 새 머리카락 상자로 옮기고 늘려 그린다.
 #   옷 · 신발: 새 몸의 옷 · 신발 픽셀을 장비 색으로 다시 칠한다 (밝기 순서를 지켜 음영이 그대로 산다).
-BODY_OF = {"farmer": "player"}  # 누가 입는지 → 몸 시트 이름 (사냥꾼은 아직 옛 몸이라 위 그림 그대로)
+BODY_OF = {"farmer": "player", "hunter": "hunter"}  # 누가 입는지 → 몸 시트 이름 (부위 지도가 없는 몸은 위 그림 그대로)
 PARTS_DIR = os.path.join(os.path.dirname(__file__), "char_parts")
 PART = {"hair": (40, 40, 40), "skin": (250, 200, 160), "top": (160, 160, 160), "pants": (70, 100, 200),
         "shoes": (120, 60, 20), "detail": (255, 255, 255)}  # import_ai_character.PART_COLORS 와 같음
 OLD_HEAD_X0, OLD_HEAD_X1, OLD_HEAD_TOP = 11, 36, 1
+# 멜빵바지처럼 바지가 가슴까지 올라오는 몸: 이 줄(칸 y)까지의 바지 픽셀도 옷(조끼 · 망토)이 덮는다
+BIB = {"hunter": 33}
+# 모자를 머리카락 위에서 몇 줄 옮길지 (사냥꾼은 정수리 올림머리 때문에 모자가 눈을 가려 2줄 올린다)
+HAT_DY = {"hunter": -2}
+CUR_BODY = [None]
 
 
 class Warp:
@@ -414,18 +419,46 @@ def fit_hat(draw_hat):
         band = [x for x, y in pp["hair"] if y == hy0 + 4]
         cx = (min(band) + max(band)) / 2 if band else (hx0 + hx1) / 2
         ox = round(cx - (OLD_HEAD_X1 - OLD_HEAD_X0) / 2)
-        c = Warp(Canvas(img, col * CELL, row * CELL), ox, hy0 + 2, 1.0, 1.0)
+        c = Warp(Canvas(img, col * CELL, row * CELL), ox, hy0 + 2 + HAT_DY.get(CUR_BODY[0], 0), 1.0, 1.0)
         draw_hat(c, row, 0)
     return fn
 
 
-def fit_top(ramp, vest=False, pocket=None, stripe=None):
-    """옷: 윗도리 픽셀을 다시 칠한다. vest 면 팔(손 위 세로줄)은 남기고, 정면은 앞섶을 연다."""
+def clothes_pts(pp, row, hs):
+    """옷이 덮는 픽셀: 윗도리 + (BIB 몸이면) 가슴까지 올라온 바지. 손 자리는 뺀다."""
+    pts = set(pp["top"])
+    bib = BIB.get(CUR_BODY[0])
+    if bib:
+        hand_x = {x for a, b in hs for x in range(a, b + 1)}
+        pts |= {(x, y) for x, y in pp["pants"] if y <= bib and (row == 2 or x not in hand_x)}
+        # 머리카락 끝 같은 떨어진 부스러기 (5픽셀 이하 덩어리) 는 뺀다
+        keep, seen = set(), set()
+        for p0 in pts:
+            if p0 in seen:
+                continue
+            comp, stack = [], [p0]
+            seen.add(p0)
+            while stack:
+                x, y = stack.pop()
+                comp.append((x, y))
+                for n in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+                    if n in pts and n not in seen:
+                        seen.add(n)
+                        stack.append(n)
+            if len(comp) > 5:
+                keep |= set(comp)
+        pts = keep
+    return pts
+
+
+def fit_top(ramp, vest=False, pocket=None, stripe=None, lace=None, belt=False):
+    """옷: 윗도리 픽셀을 다시 칠한다. vest 면 팔(손 위 세로줄)은 남기고, 정면은 앞섶을 연다.
+    lace 가 있으면 앞섶을 열지 않고 가운데를 그 색 끈으로 여민다 (사냥꾼 조끼). belt 면 아랫단에 허리띠."""
     def fn(img, row, col, body, pp, edge, pose):
         top = pp["top"]
-        tx0, ty0, tx1, ty1 = bbox(top)
-        pts = set(top)
         hs = hands(pp, top, row)
+        pts = top = clothes_pts(pp, row, hs)
+        tx0, ty0, tx1, ty1 = bbox(top)
         mid = (tx0 + tx1) / 2
         # 소매가 있을 때만 팔을 남긴다. 윗도리 줄 가운데쯤에서 몸 가장자리가 살색이면 맨팔
         body_px = set().union(*pp.values())
@@ -440,7 +473,7 @@ def fit_top(ramp, vest=False, pocket=None, stripe=None):
                 # 소매: 손 위 세로줄 + 몸 쪽으로 2줄
                 a, b = (a, b + 2) if b < mid else (a - 2, b)
                 pts = {(x, y) for x, y in pts if not (a <= x <= b and y > ty0 + 1)}
-        if vest and row == 0:  # 앞섶을 열어 안의 옷이 보이게
+        if vest and row == 0 and not lace:  # 앞섶을 열어 안의 옷이 보이게
             pts = {(x, y) for x, y in pts if abs(x + 0.5 - mid) > 1.6 or y < ty0 + 2}
         paint_ramp(img, row, col, body, pts, edge, ramp)
         c = Canvas(img, col * CELL, row * CELL)
@@ -452,16 +485,91 @@ def fit_top(ramp, vest=False, pocket=None, stripe=None):
             for x0, y0 in spots:
                 c.rect(x0, y0, x0 + 3, y0 + 3, ramp[0])
                 c.rect(x0 + 1, y0 + 1, x0 + 2, y0 + 2, pocket)
+        p = img.load()
         if stripe:
             sy = ty0 + (ty1 - ty0) * 2 // 3
-            p = img.load()
             for x, y in pts:
                 if y == sy and (x, y) not in edge:
                     p[col * CELL + x, row * CELL + y] = (*stripe, 255)
+        if belt:
+            for x, y in pts:
+                if y == ty1 - 1 and (x, y) not in edge:
+                    p[col * CELL + x, row * CELL + y] = (*ramp[0], 255)
+        if lace and row == 0:  # 가운데 끈: 두 줄마다 한 칸 (x 두 칸)
+            for x, y in pts:
+                if abs(x + 0.5 - mid) <= 1 and (y - ty0) % 3 == 2 and ty0 + 1 < y < ty1 - 1 and (x, y) not in edge:
+                    p[col * CELL + x, row * CELL + y] = (*lace, 255)
     return fn
 
 
-def fit_feet(ramp, shaft=0, accent=None):
+def fit_cape(ramp, clasp):
+    """망토: 새 몸 옷 픽셀을 따라 그린다 (머리카락 · 손 위에는 안 그린다).
+    뒷모습은 옷 전체 + 아래로 늘어진 자락, 정면은 어깨 한 줄 + 양옆 2줄 + 가운데 브로치,
+    옆모습은 등 쪽 3줄 + 아래로 늘어진 자락."""
+    d, m, l = ramp
+    line = (int(m[0] * 0.35 + 15.6), int(m[1] * 0.35 + 14.4), int(m[2] * 0.35 + 28.8))
+
+    def paint(img, row, col, cape, edge):
+        # 셔츠 무늬 음영을 따르지 않고 판판하게 칠한다 (체크무늬는 48px 에서 거의 선이라 ramp 로는 선 색만 나온다)
+        p = img.load()
+        for x, y in cape:
+            p[col * CELL + x, row * CELL + y] = (*(line if (x, y) in edge else m), 255)
+
+    def fn(img, row, col, body, pp, edge, pose):
+        pts = clothes_pts(pp, row, hands(pp, pp["top"], row))
+        tx0, ty0, tx1, ty1 = bbox(pts)
+        rows = {}
+        for x, y in pts:
+            rows.setdefault(y, []).append(x)
+        c = Canvas(img, col * CELL, row * CELL)
+        mid = (tx0 + tx1) // 2
+        if row == 1:
+            paint(img, row, col, pts, edge)
+            lo, hi = min(rows[ty1]), max(rows[ty1])
+            c.rect(lo, ty1 + 1, hi, ty1 + 3, m)  # 옷 아래로 3줄 늘어짐
+            c.rect(hi - 1, ty1 + 1, hi, ty1 + 3, d)
+            for x in range(lo, hi, 4):
+                c.rect(x, ty1 + 4, x + 1, ty1 + 4, d)  # 잎 모양 끝단
+            return
+        # 정면 · 옆모습: 망토는 몸 뒤에 있으니 몸 밖(투명한 자리)으로 삐져나온 부분만 그린다 + 어깨 · 브로치
+        body_px = set().union(*pp.values())
+        cape = set()
+        for y in range(ty0 + 1, ty1 + 4):
+            span = sorted(x for x, yy in body_px if yy == y)
+            if not span:
+                continue
+            if row == 2:
+                # 옆: 등 쪽 몸통 가장자리 (옷 픽셀 중 가장 왼쪽) 바깥 3칸, 아래로 갈수록 1칸 더 벌어짐
+                xs = rows.get(y) or rows[ty1]
+                x0 = min(xs)
+                flare = 1 if y > ty1 else 0
+                cape |= {(x, y) for x in range(x0 - 3 - flare, x0) if (x, y) not in body_px}
+            else:
+                lo, hi = span[0], span[-1]
+                cape |= {(lo - 1, y), (hi + 1, y)}
+                if y > ty0 + 3:
+                    cape |= {(lo - 2, y), (hi + 2, y)}
+        if row == 0:
+            shoulder = {(x, y) for x, y in pts if y <= ty0 + 1}
+            cape |= shoulder
+        p = img.load()
+        for x, y in cape:
+            if 0 <= x < CELL and 0 <= y < CELL:
+                p[col * CELL + x, row * CELL + y] = (*(d if row == 2 and y % 3 == 0 else m), 255)
+        # 망토 겉 테두리는 make_fit 뒤에 따로 두르지 않으니 여기서 보랏빛 선
+        for x, y in cape:
+            for nx, ny in ((x - 1, y), (x + 1, y), (x, y + 1)):
+                if (nx, ny) not in cape and (nx, ny) not in body_px and 0 <= nx < CELL and 0 <= ny < CELL:
+                    p[col * CELL + nx, row * CELL + ny] = (*line, 255)
+        if row == 2:
+            x0 = min(rows[ty0])
+            c.rect(x0, ty0, x0 + 1, ty0 + 1, clasp)
+        else:
+            c.rect(mid - 1, ty0 + 1, mid + 1, ty0 + 2, clasp)
+    return fn
+
+
+def fit_feet(ramp, shaft=0, accent=None, lace=None, trim=None):
     """신발: 신발 픽셀을 다시 칠한다. shaft 면 그 줄 수만큼 바짓단도 장화 목으로 덮는다."""
     def fn(img, row, col, body, pp, edge, pose):
         shoes = set(pp["shoes"])
@@ -477,12 +585,33 @@ def fit_feet(ramp, shaft=0, accent=None):
                 cover.add((x, y))
         pts |= cover
         paint_ramp(img, row, col, body, pts, edge, ramp)
+        p = img.load()
         if accent and cover:
-            p = img.load()
             for x, y in cover:
                 if y == min(yy for xx, yy in cover if xx == x) and (x, y) not in edge:
                     p[col * CELL + x, row * CELL + y] = (*accent, 255)
+        if lace and shoes:  # 신발 윗줄 가운데 끈 한 점씩 (발마다)
+            for a, b in runs(sorted({x for x, _ in shoes})):
+                x = (a + b) // 2
+                y = min(yy for xx, yy in shoes if xx == x) + 1
+                if (x, y) in shoes and (x, y) not in edge:
+                    p[col * CELL + x, row * CELL + y] = (*lace, 255)
+        if trim and pts:  # 장화 목 둘레 (깃털 테): 각 세로줄 맨 위 한 칸 위로
+            c = Canvas(img, col * CELL, row * CELL)
+            for x in {x for x, _ in pts}:
+                c.px(x, min(y for xx, y in pts if xx == x) - 1, trim)
     return fn
+
+
+def runs(xs):
+    """이어진 x 묶음 [(시작, 끝)]"""
+    out = []
+    for x in xs:
+        if out and x - out[-1][1] <= 1:
+            out[-1][1] = x
+        else:
+            out.append([x, x])
+    return out
 
 
 FIT = {
@@ -492,6 +621,18 @@ FIT = {
     "rain_suit": fit_top(((50, 66, 100), (70, 92, 132), (100, 126, 166)), stripe=(236, 214, 80)),
     "rain_boots": fit_feet((RUBBER_D, RUBBER, RUBBER_L), shaft=4),
     "work_boots": fit_feet(((40, 40, 48), (62, 62, 72), (96, 96, 108)), shaft=3, accent=(232, 196, 70)),
+    # 사냥꾼 (2026-09-30 사냥꾼 교체 준비. 몸 시트 hunter 에 부위 지도가 생기면 새 몸에 맞춰 그린다)
+    "ball_cap": fit_hat(cap),
+    "acorn_helm": fit_hat(acorn_helm),
+    "leather_hood": fit_hat(leather_hood),
+    "hard_hat": fit_hat(hard_hat),
+    "hunter_jerkin": fit_top((LEATHER_D, LEATHER, LEATHER_L), vest=True, lace=STITCH, belt=True),
+    "hiking_vest": fit_top(((172, 80, 56), (224, 112, 70), (244, 152, 112)), vest=True, stripe=(250, 240, 220)),
+    "forest_cape": fit_cape((CAPE_D, CAPE, CAPE_L), CLASP),
+    "hiking_shoes": fit_feet((HIKE_D, HIKE, (164, 120, 84)), shaft=1, lace=LACE),
+    "safety_shoes": fit_feet(((44, 44, 52), (72, 72, 82), (104, 104, 116)), shaft=1, lace=(204, 208, 216)),
+    "feather_boots": fit_feet((FEATHER_B_D, FEATHER_B, (140, 156, 200)), shaft=4, trim=FEATHER),
+    "leather_shoes": fit_feet((LEATHER_D, LEATHER, LEATHER_L), shaft=1, lace=STITCH),
 }
 
 
@@ -501,6 +642,7 @@ def make_fit(name, fn, body_name):
     img = Image.new("RGBA", (CELL * COLS, CELL * ROWS), (0, 0, 0, 0))
     hat = Image.new("RGBA", img.size, (0, 0, 0, 0))
     poses = IDLE + WALK
+    CUR_BODY[0] = body_name
     for row in range(ROWS):
         for col in range(COLS):
             pp, edge = cell_parts(parts, row, col)
@@ -514,7 +656,7 @@ def make_fit(name, fn, body_name):
     return path
 
 
-HAT_FITS = {FIT["straw_hat"], FIT["work_cap"]}
+HAT_FITS = {FIT[k] for k in ("straw_hat", "work_cap", "ball_cap", "acorn_helm", "leather_hood", "hard_hat")}
 
 
 def who_of(name):
