@@ -1104,10 +1104,9 @@ func _draw() -> void:
 		draw_circle(Vector2.ZERO, 7.0, Color(0.27, 0.16, 0.33, 0.25))
 		draw_set_transform(Vector2.ZERO)
 		var sp: CreatureSpecies = d.species
-		draw_circle(p + Vector2(0, 1), 6, sp.egg_color)
-		draw_circle(p + Vector2(0, -3), 5, sp.egg_color)
-		draw_circle(p + Vector2(-2, 0), 1.5, sp.egg_spot_color)
-		draw_circle(p + Vector2(2, 2), 1.2, sp.egg_spot_color)
+		draw_texture_rect_region(DROPS, Rect2(p + Vector2(-8, -10), Vector2(16, 16)), Rect2(0, 0, 16, 16), sp.egg_color)
+		draw_circle(p + Vector2(-2, -2), 1.2, sp.egg_spot_color)
+		draw_circle(p + Vector2(1, 1), 1.0, sp.egg_spot_color)
 	var font := ThemeDB.fallback_font
 	for d in loot:
 		var p: Vector2 = d.at
@@ -1117,13 +1116,13 @@ func _draw() -> void:
 		draw_set_transform(Vector2.ZERO)
 		match d.kind:
 			&"money":
-				draw_circle(p + Vector2(-2, 1), 3, col)
-				draw_circle(p + Vector2(2, 0), 3, col.darkened(0.15))
+				draw_texture_rect_region(DROPS, Rect2(p + Vector2(-8, -10), Vector2(16, 16)), Rect2(48, 0, 16, 16))
 			&"potion":
-				draw_rect(Rect2(p + Vector2(-1, -7), Vector2(2, 3)), Color(0.85, 0.8, 0.7))
-				draw_circle(p + Vector2(0, -1), 4, Color(0.85, 0.2, 0.22))
+				draw_texture_rect_region(DROPS, Rect2(p + Vector2(-8, -11), Vector2(16, 16)), Rect2(16, 0, 16, 16))
 			&"junk":
-				draw_circle(p, 4, Color(0.62, 0.52, 0.42, 0.9))
+				# 분원농협 잡템은 슬라임 젤리, 다른 구역은 보따리
+				var jx := 32 if zone == 0 else 64
+				draw_texture_rect_region(DROPS, Rect2(p + Vector2(-8, -10), Vector2(16, 16)), Rect2(jx, 0, 16, 16))
 			_ when Wearables.ITEMS[d.roll.base if d.has("roll") else d.id].slot == &"weapon":
 				draw_line(p + Vector2(-6, 2), p + Vector2(6, -8), Color(0.75, 0.75, 0.8), 2.0)
 				draw_line(p + Vector2(-6, -4), p + Vector2(-1, 2), Color(0.55, 0.38, 0.2), 2.0)
@@ -1192,6 +1191,8 @@ func _draw_sign(n: Sprite2D, text: String) -> void:
 func _draw_ground(n: Node2D) -> void:
 	if map:
 		n.draw_texture(map.ground, Vector2.ZERO)
+		if zone == 0:
+			_draw_yard_deco(n)
 		_draw_labels(n)
 		if zone == Config.FORGE_ZONE:
 			_draw_bridge(n)
@@ -1208,6 +1209,28 @@ func _draw_ground(n: Node2D) -> void:
 		for y in range(top, CLEARING.end.y + 3 if x >= 11 and x <= 13 else CLEARING.end.y):
 			n.draw_texture_rect_region(tiles, Rect2(x * T, y * T, T, T), Rect2(4 * T, 0, T, T))
 	_draw_waypoint(n)
+
+
+const YARD_DECO := preload("res://assets/tiles/yard_deco.png")
+const GROUND_DECO := preload("res://assets/tiles/ground_deco.png")
+const DROPS := preload("res://assets/hunt/drops.png")
+
+
+## 분원농협 바닥 장식 (2026-09-30 그래픽 시범): 시멘트 마당(%)엔 금 · 잡초 · 기름 얼룩 · 웅덩이 · 볏짚 · 낙엽, 풀밭(.)엔 풀꽃 · 풀포기
+func _draw_yard_deco(n: Node2D) -> void:
+	for y in map.size.y:
+		for x in map.size.x:
+			var ch := map.rows[y][x]
+			if ch != "%" and ch != ".":
+				continue
+			var h := absi((x * 92837111) ^ (y * 689287499) ^ 0x2f1a) % 1000
+			var off := Vector2((h / 16) % 9, (h / 144) % 7)
+			if ch == "%" and h < 170:
+				var k: int = [0, 1, 0, 2, 4, 5, 1, 3, 0, 4][h % 10]
+				n.draw_texture_rect_region(YARD_DECO, Rect2(Vector2(x, y) * T + off, Vector2(16, 16)), Rect2(k * 16, 0, 16, 16))
+			elif ch == "." and h < 300:
+				var k: int = [4, 5, 4, 0, 8, 3, 6, 4][h % 8]
+				n.draw_texture_rect_region(GROUND_DECO, Rect2(Vector2(x, y) * T + off, Vector2(16, 16)), Rect2(k * 16, 0, 16, 16))
 
 
 ## 금사리 윗길 쇠다리 (임시 그림): 대장간을 고치기 전엔 가운데가 끊겨 있다

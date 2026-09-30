@@ -8,6 +8,9 @@ const TILES := preload("res://assets/tiles/farm_tiles.png")
 const CROPS := preload("res://assets/tiles/crops.png")
 ## 밭 울타리 (열 = 이웃 연결 비트, docs/sprites.md "마을 배경 오브젝트")
 const FENCE := preload("res://assets/tiles/fence.png")
+## 풀밭 장식 (2026-09-30 그래픽 시범): 16x16 10칸, tools/make_polish_sprites.py
+const DECO := preload("res://assets/tiles/ground_deco.png")
+const PLOT_SIGN := preload("res://assets/props/plot_sign.png")
 ## 타일셋 행: 0 풀·흙길 속 채움, 1 갈아 둔 밭, 2 물 준 밭, 3 흙길 가장자리 (열 = 이웃 연결 비트)
 const ROW_TILLED := 1
 const ROW_WATERED := 2
@@ -34,6 +37,8 @@ var _path: Dictionary[Vector2i, bool] = {}
 var _fence: Dictionary[Vector2i, bool] = {}
 ## 캐릭터·크리처가 지나갈 수 없는 영역 (월드 좌표 px). 울타리 칸과 집·나무·마을 오브젝트의 막는 범위.
 var _blockers: Array[Rect2] = []
+## 오브젝트가 선 칸. 풀밭 장식을 그리지 않는다.
+var deco_skip: Array[Rect2i] = []
 
 
 func _ready() -> void:
@@ -283,11 +288,9 @@ func _draw() -> void:
 			var h := absi((x * 73856093) ^ (y * 19349663)) % 100
 			var v := GRASS_WEIGHTS.find_custom(func(w: int) -> bool: return h < w)
 			_tile(Vector2i(x, y), TILES, v, 0)
+	_draw_ground_deco(cols)
 	for cell: Vector2i in _path:
 		_tile(cell, TILES, _mask(cell, _is_path), ROW_PATH)
-	# 밭을 갈 수 있는 영역 표시 (옅게)
-	var field := Rect2(Vector2(Config.FIELD_RECT.position * t), Vector2(Config.FIELD_RECT.size * t))
-	draw_rect(field.grow(1), Color(0.25, 0.35, 0.2, 0.25), false, 1.0)
 	for i in range(GameState.open_plots, Config.FIELD_PLOTS.size()):
 		_draw_locked_plot(i)
 	for cell: Vector2i in _cells:
@@ -304,24 +307,38 @@ func _draw() -> void:
 		_tile(cell, FENCE, _mask(cell, _is_fence), 0)
 
 
-## 잠긴 밭 구역: 잡초와 돌이 덮인 풀밭 + 값 (임시 그림)
+## 풀밭 장식: 칸마다 정해진 무늬로 꽃 · 풀포기 · 돌을 흩뿌린다 (늘 같은 자리)
+func _draw_ground_deco(cols: int) -> void:
+	for x in maxi(cols, Config.MAP_SIZE.x):
+		for y in Config.MAP_SIZE.y:
+			var cell := Vector2i(x, y)
+			var h := absi((x * 92837111) ^ (y * 689287499) ^ 0x5bd1e995) % 1000
+			if h >= 200 or _path.has(cell) or _fence.has(cell) or Config.FIELD_RECT.has_point(cell):
+				continue
+			if deco_skip.any(func(r: Rect2i) -> bool: return r.grow(1).has_point(cell)):
+				continue
+			# 꽃은 드물게, 풀포기는 흔하게
+			var kind: int = [4, 4, 3, 0, 4, 1, 2, 6, 3, 0, 4, 7, 1, 2, 4, 6][h % 16]
+			var off := Vector2((h / 16) % 9, (h / 144) % 7)
+			draw_texture_rect_region(DECO, Rect2(Vector2(cell * Config.TILE) + off, Vector2(16, 16)), Rect2(kind * 16, 0, 16, 16))
+
+
+## 잠긴 밭 구역: 잡초 덤불 · 돌이 덮인 풀밭 + 값 팻말
 func _draw_locked_plot(i: int) -> void:
 	var t := Config.TILE
 	var r := Config.FIELD_PLOTS[i]
 	var px := Rect2(Vector2(r.position * t), Vector2(r.size * t))
-	draw_rect(px, Color(0.30, 0.36, 0.22, 0.45))
+	draw_rect(px, Color(0.30, 0.36, 0.22, 0.18))
 	var rng := RandomNumberGenerator.new()
 	rng.seed = r.position.x * 100 + r.position.y
-	for n in 22:
-		var p := px.position + Vector2(rng.randf_range(6, px.size.x - 6), rng.randf_range(8, px.size.y - 4))
-		if n % 3 == 0:
-			draw_circle(p, 3, Color(0.62, 0.6, 0.55))
-			draw_circle(p + Vector2(-1, -1), 1.5, Color(0.75, 0.73, 0.68))
-		else:
-			draw_line(p, p + Vector2(-2, -5), Color(0.25, 0.45, 0.18), 1.5)
-			draw_line(p, p + Vector2(2, -5), Color(0.25, 0.45, 0.18), 1.5)
-	draw_rect(px.grow(-1), Color(0.95, 0.9, 0.7, 0.8), false, 1.0)
-	var font := ThemeDB.fallback_font
 	var c := px.get_center()
-	draw_string(font, c + Vector2(-50, -2), "잠긴 밭", HORIZONTAL_ALIGNMENT_CENTER, 100, 10, Color(1, 0.98, 0.9))
-	draw_string(font, c + Vector2(-50, 12), "%d원" % Config.FIELD_PLOT_PRICES[i], HORIZONTAL_ALIGNMENT_CENTER, 100, 10, Color(1, 0.9, 0.5))
+	for n in 16:
+		var p := px.position + Vector2(rng.randf_range(0, px.size.x - 16), rng.randf_range(0, px.size.y - 16))
+		if absf(p.x + 8 - c.x) < 34 and absf(p.y + 8 - c.y) < 26:
+			continue
+		var kind: int = [8, 6, 9, 4, 7, 8, 6][n % 7]
+		draw_texture_rect_region(DECO, Rect2(p.round(), Vector2(16, 16)), Rect2(kind * 16, 0, 16, 16))
+	draw_texture(PLOT_SIGN, c - Vector2(12, 20))
+	var font := ThemeDB.fallback_font
+	draw_string(font, c + Vector2(-50, -9), "%d원" % Config.FIELD_PLOT_PRICES[i], HORIZONTAL_ALIGNMENT_CENTER, 100, 8, Color(0.4, 0.25, 0.15))
+	draw_string(font, c + Vector2(-50, 16), "잠긴 밭", HORIZONTAL_ALIGNMENT_CENTER, 100, 9, Color(1, 0.98, 0.9))

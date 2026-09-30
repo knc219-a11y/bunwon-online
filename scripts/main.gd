@@ -164,6 +164,8 @@ func _add_prop(label: String, texture: Texture2D, rect: Rect2i, block := Rect2()
 	add_child(p)
 	props.append(p)
 	farm.add_blocker(p.blocker_world())
+	farm.deco_skip.append(rect)
+	farm.queue_redraw()
 	return p
 
 
