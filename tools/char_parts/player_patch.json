@@ -1,0 +1,28 @@
+{
+  "note": "48px 에서 뭉개지는 얼굴 손질 (둥근 안경 · 눈 · 볼 · 입). 좌표는 그림 한 장(정면 30x46, 옆 30x46) 기준. rows 의 '.' 는 그대로 둔다.",
+  "colors": {
+    "s": [249, 216, 188], "r": [60, 48, 62], "l": [238, 226, 218], "e": [52, 40, 54],
+    "c": [240, 170, 160], "m": [186, 110, 102], "h": [85, 71, 84]
+  },
+  "down": [
+    {"at": [7, 12], "rows": [
+      "shssssshssssshss",
+      "ssrrrssssssrrrss",
+      "srlelrrrrrrlelrs",
+      "srlelrssssrlelrs",
+      "ssrrrssssssrrrss",
+      "scsssssssssssscs"
+    ]},
+    {"at": [8, 18], "rows": ["ssssssmmssssss"]}
+  ],
+  "side": [
+    {"at": [17, 13], "rows": [
+      "ssssrrrss..",
+      "rrrrlelrss.",
+      "sssrlelrss.",
+      "ssssrrrssss",
+      "ssssscssss.",
+      "sssssssssm."
+    ]}
+  ]
+}

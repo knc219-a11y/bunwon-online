@@ -3,11 +3,26 @@
 규격은 2026-09-27 결정 (design/decisions.md "캐릭터 걷기 애니메이션 규격"): **4방향 · 걷기 4프레임 · 대기 2프레임**.
 
 ## 파일
-- `assets/characters/player.png` 플레이어(농부). 회색 후드티, 청바지, 둥근 짙은 안경 (콘셉트 15장)
+- `assets/characters/player.png` 플레이어(농부). 회색 후드티, 청바지, 둥근 안경. AI 그림 시험본에서 가져온 도트 (아래 "AI 그림에서 가져오기")
 - `assets/characters/hunter.png` 사냥꾼. 외형 미정이라 후드 색만 초록으로 바꾼 임시본
 
-지금 그림은 `tools/make_character_sheet.py`가 코드로 그린 **임시 그림**이다.
+사냥꾼 · 대장장이 · 연금술사 · 목축인은 `tools/make_character_sheet.py`가 코드로 그린 **임시 그림**이다.
 최종 아트는 아래 규격을 지킨 PNG로 같은 경로의 파일만 덮어쓰면 된다. 코드는 바꿀 필요 없다.
+
+## AI 그림에서 가져오기 (2026-09-30~, 농부부터)
+AI가 그린 정면 · 뒷모습 · 옆모습 한 장을 `tools/import_ai_character.py`가 48px 시트로 바꾼다.
+
+```
+python3 tools/import_ai_character.py tools/char_parts/player_src.png --name player --patch tools/char_parts/player_patch.json
+python3 tools/make_wear_sheets.py   # 이 캐릭터의 장비 덧그림을 새 몸에 맞춰 다시 만든다
+```
+
+- 가로(`--width`, 기본 30px)와 세로(`--height`, 46px)를 따로 줄여 몸이 가늘어지지 않게 한다.
+- 까만 머리 · 선은 짙은 보랏빛 회색으로 올리고, 바깥 테두리는 이웃 색을 어둡게 한 선으로 바꾼 뒤 P1 보정.
+- 48px 에서 뭉개지는 얼굴(안경 · 눈 · 볼 · 입)은 `<이름>_patch.json` 에 글자 그림으로 손질한다 ('.' 는 그대로).
+- 걷기는 다리를 올리거나(앞 · 뒤) 앞뒤로 벌려(옆) 만들고, 걸음 사이 몸이 1px 들썩인다. 대기 2번은 윗몸이 1px 내려간다.
+- 함께 만드는 `tools/char_parts/<이름>.png` 는 부위 지도(머리카락 · 살 · 윗도리 · 바지 · 신발)다. 게임은 쓰지 않고 장비 생성기만 쓴다.
+- 이렇게 가져온 캐릭터는 `make_character_sheet.py` 가 덮어쓰지 않는다.
 
 ## 배치 (288 x 144, 칸 48 x 48)
 
@@ -34,6 +49,8 @@
 - 대장간 제작품(현대풍, 2026-09-29)은 안전모만 새로 그리고 나머지는 있는 그림을 색만 바꿔 쓴다 (`recolored`).
 - 임시 그림 생성기: `tools/make_wear_sheets.py` (Pillow, 캐릭터 생성기의 자세 값을 그대로 씀)
 - 옆모습 조끼처럼 가까운 팔이 장비 위로 와야 하면 덧그림에 팔까지 함께 그린다.
+- AI 그림 몸(`tools/char_parts/<몸>.png` 가 있는 캐릭터, 지금은 농부)의 장비는 새 몸에 맞춘다:
+  모자는 머리카락 위치로 옮겨 그리고, 옷 · 신발은 새 몸의 윗도리 · 신발 픽셀을 장비 색으로 다시 칠한다 (`FIT`).
 - 장비 목록과 효과는 `scripts/wearables.gd`.
 
 # 크리처 스프라이트 시트
