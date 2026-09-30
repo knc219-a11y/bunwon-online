@@ -20,6 +20,9 @@ const SCRAP := &"scrap"
 ## 도라지밭 가꾸기 (2026-09-29 약방 복구): 약방을 고치면 생기는 도라지밭에서 도라지를 캐 약방에 둔다 (Creature._herb_once).
 ## 불속성(아기 도깨비불)이 두 배 빠르다 (fire.tres job_aptitude). 약방을 고친 뒤에만 R 목록에 나온다.
 const HERB := &"herb"
+## 모이 주기 (2026-09-30 축사 닭장): 축사를 고치면 생기는 닭장에서 암탉에게 모이를 하나씩 준다 (Creature._feed_once).
+## 무 없이 먹인다. 아기 호랑이가 두 배 빠르고, 모이를 주는 아기 호랑이가 있으면 밤에 족제비가 안 온다.
+const FEED := &"feed"
 
 const NAMES := {
 	REST: "쉬는 중",
@@ -30,6 +33,7 @@ const NAMES := {
 	FORAGE: "채집",
 	SCRAP: "고철 줍기",
 	HERB: "도라지밭",
+	FEED: "모이 주기",
 }
 
 ## 농장에서 R 키로 돌아가며 고르는 일
@@ -53,6 +57,8 @@ static func jobs() -> Array[StringName]:
 		out.append(SCRAP)
 	if GameState.yak_state >= 2:
 		out.append(HERB)
+	if GameState.barn_state >= 2:
+		out.append(FEED)
 	return out
 
 

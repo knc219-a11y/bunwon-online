@@ -76,6 +76,21 @@ var speed := 0
 var tonics := 0
 ## 크리처 보약을 먹인 날 (그날 모든 크리처가 두 배 빠름). -1 = 없음
 var tonic_day := -1
+## 축사 (2026-09-30 닭장): 0 = 없음, 1 = 무너진 터, 2 = 고침 (목축인 열림)
+var barn_state := 0
+## 3막 대장(밀목)을 쓰러뜨린 적이 있는지. 다음 날 아침 축사 터가 드러난다.
+var barn_boss_down := false
+## 3막 대장 재료
+var material3 := 0
+## 닭장: 암탉 수 · 병아리 (암탉이 되기까지 남은 날) · 둥지에 있는 달걀 · 어제 모이를 먹은 암탉 수
+var hens := 0
+var chicks: Array[int] = []
+var nest := 0
+var fed := 0
+## 꺼내 든 달걀 · 공급함에 진열한 달걀 · 목축인이 싼 사냥 도시락
+var hen_eggs := 0
+var displayed_hen_eggs := 0
+var lunches := 0
 
 
 func _ready() -> void:
@@ -158,6 +173,16 @@ func reset() -> void:
 	speed = 0
 	tonics = 0
 	tonic_day = -1
+	barn_state = 0
+	barn_boss_down = false
+	material3 = 0
+	hens = 0
+	chicks = []
+	nest = 0
+	fed = 0
+	hen_eggs = 0
+	displayed_hen_eggs = 0
+	lunches = 0
 	changed.emit()
 
 

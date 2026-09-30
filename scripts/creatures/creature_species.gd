@@ -32,6 +32,8 @@ extends Resource
 @export var daily_seeds := Vector2i.ZERO
 ## 키우기 (아기 나무 정령, 2026-09-29 도마리): 농사를 맡은 개체의 범위 안 밭에서 밤사이 자란 작물이 이 확률로 하루 더 자란다.
 @export var grow_chance := 0.0
+## 축사 지킴이 (아기 호랑이, 2026-09-30 밀목): 모이 주기를 맡은 개체가 있으면 밤에 족제비가 닭장에 안 온다
+@export var guards_coop := false
 
 @export_group("그래픽")
 ## 속성 id → 스프라이트 시트 (규격은 docs/sprites.md). 시트가 없으면 color 로 도형을 그린다.
