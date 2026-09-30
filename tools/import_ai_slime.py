@@ -76,6 +76,26 @@ def components(mask, w, h):
     return out
 
 
+def peel_halo(fig):
+    """까만 테두리 바깥에 붙은 밝은 띠(흰 · 살구색 번짐)를 벗겨 낸다. 벗긴 뒤 테두리가 까맣지 않으면 그대로 둔다."""
+    out = fig.copy()
+    px = out.load()
+    w, h = out.size
+    solid = lambda x, y: 0 <= x < w and 0 <= y < h and px[x, y][3]
+    edge = lambda: {(x, y) for y in range(h) for x in range(w) if px[x, y][3] and not all(
+        solid(x + dx, y + dy) for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)))}
+    for _ in range(w // 20):
+        light = [p for p in edge() if lum(px[p]) > 150]
+        if not light:
+            break
+        for p in light:
+            px[p] = (0, 0, 0, 0)
+    e = edge()
+    if sum(lum(px[p]) < 110 for p in e) < len(e) * 0.6:
+        return fig
+    return largest_blob(out)
+
+
 def find_face(fig):
     """눈 둘 · 입 · 볼 자리 (그림 크기 비율)와 지울 픽셀 집합."""
     w, h = fig.size
@@ -178,13 +198,14 @@ def draw_face(l, left, top, W, H, eyes, mouth):
 
 
 def build(src, element, width=22, colors=20):
-    fig = largest_blob(white_to_alpha(Image.open(src)))
+    fig = peel_halo(largest_blob(white_to_alpha(Image.open(src))))
     fig = fig.resize((WORK_W, round(WORK_W * fig.height / fig.width)), Image.LANCZOS)
     a = fig.getchannel("A").point(lambda v: 255 if v > 128 else 0)
     fig.putalpha(a)
     eyes, mouth, erase = find_face(fig)
     inpaint(fig, erase)
-    pal_img = fig.convert("RGB").quantize(colors, method=Image.Quantize.MEDIANCUT)
+    # FASTOCTREE: 새싹 같은 작은 초록 조각의 색이 팔레트에서 빠지지 않는다 (MEDIANCUT 은 몸 색에 묻힘)
+    pal_img = fig.convert("RGB").quantize(colors, method=Image.Quantize.FASTOCTREE)
     pal = pal_img.getpalette()
     base_h = round(width * fig.height / fig.width)
     bodies, faces = Image.new("RGBA", (CELL * 10, CELL), (0, 0, 0, 0)), []
