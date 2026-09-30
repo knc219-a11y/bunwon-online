@@ -1,0 +1,83 @@
+{
+ "note": "48px 에서 뭉개지는 얼굴 손질 (네모 안경은 연한 갈색 테, 알은 살색, 둥근 눈 2x2 + 반짝 한 점, 볼, 웃는 입). 좌표는 그림 한 장(정면 30x46, 옆 27x46, 오른쪽을 보게 뒤집은 뒤) 기준. rows 의 '.' 는 그대로 둔다.",
+ "colors": {
+  "s": [
+   250,
+   212,
+   180
+  ],
+  "r": [
+   120,
+   84,
+   84
+  ],
+  "l": [
+   252,
+   234,
+   218
+  ],
+  "e": [
+   58,
+   38,
+   50
+  ],
+  "c": [
+   244,
+   164,
+   150
+  ],
+  "m": [
+   176,
+   96,
+   92
+  ],
+  "w": [
+   255,
+   248,
+   240
+  ]
+ },
+ "down": [
+  {
+   "at": [
+    7,
+    12
+   ],
+   "rows": [
+    "ssssssssssssssss",
+    "ssrrrrssssrrrrss",
+    "srswesrrrrswesrs",
+    "srseesrssrseesrs",
+    "ssrrrrssssrrrrss",
+    "sccssssssssssccs",
+    "ssssssmssmssssss"
+   ]
+  },
+  {
+   "at": [
+    9,
+    19
+   ],
+   "rows": [
+    "sssssmmsssss"
+   ]
+  }
+ ],
+ "side": [
+  {
+   "at": [
+    12,
+    12
+   ],
+   "rows": [
+    ".sssssssssss.",
+    ".sssssssrrrs.",
+    "rrrrrrrrswer.",
+    ".ssssssrseers",
+    ".sssssssrrrs.",
+    ".ssssssscsss.",
+    ".ssssssssssm."
+   ]
+  }
+ ]
+}

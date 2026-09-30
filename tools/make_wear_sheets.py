@@ -304,7 +304,229 @@ ITEMS = {
     "safety_shoes": recolored(feet_fn(hiking_shoe), {HIKE: (72, 72, 82), HIKE_D: (44, 44, 52), LACE: (204, 208, 216)}),
 }
 
+# ---------- AI 그림 몸에 맞추기 (tools/import_ai_character.py 가 만든 부위 지도를 따른다) ----------
+# 부위 지도(tools/char_parts/<몸>.png)가 있는 캐릭터의 장비는 아래 방식으로 새 몸에 맞춘다.
+#   모자: 위 모자 그림을 옛 머리(가로 11-36, 머리끝 y=1) 기준에서 새 머리카락 상자로 옮기고 늘려 그린다.
+#   옷 · 신발: 새 몸의 옷 · 신발 픽셀을 장비 색으로 다시 칠한다 (밝기 순서를 지켜 음영이 그대로 산다).
+BODY_OF = {"farmer": "player"}  # 누가 입는지 → 몸 시트 이름 (사냥꾼은 아직 옛 몸이라 위 그림 그대로)
+PARTS_DIR = os.path.join(os.path.dirname(__file__), "char_parts")
+PART = {"hair": (40, 40, 40), "skin": (250, 200, 160), "top": (160, 160, 160), "pants": (70, 100, 200),
+        "shoes": (120, 60, 20), "detail": (255, 255, 255)}  # import_ai_character.PART_COLORS 와 같음
+OLD_HEAD_X0, OLD_HEAD_X1, OLD_HEAD_TOP = 11, 36, 1
+
+
+class Warp:
+    """옛 몸 좌표로 그리는 모자 함수를 새 머리 위치 · 크기로 옮겨 그리는 Canvas 감싸개"""
+
+    def __init__(self, c, ox, oy, sx, sy):
+        self.c, self.ox, self.oy, self.sx, self.sy = c, ox, oy, sx, sy
+
+    def _x(self, x):
+        return self.ox + (x - OLD_HEAD_X0) * self.sx
+
+    def _y(self, y):
+        return self.oy + (y - OLD_HEAD_TOP) * self.sy
+
+    def rect(self, x0, y0, x1, y1, col):
+        self.c.rect(round(self._x(x0)), round(self._y(y0)), max(round(self._x(x0)), round(self._x(x1 + 1)) - 1),
+                    max(round(self._y(y0)), round(self._y(y1 + 1)) - 1), col)
+
+    def px(self, x, y, col):
+        self.c.px(round(self._x(x)), round(self._y(y)), col)
+
+    def ellipse(self, x0, y0, x1, y1, col):
+        self.c.ellipse(round(self._x(x0)), round(self._y(y0)), round(self._x(x1 + 1)) - 1, round(self._y(y1 + 1)) - 1, col)
+
+
+def cell_parts(parts, row, col):
+    """칸 하나의 부위별 픽셀 집합 {부위: {(x, y)}} 와 테두리 픽셀"""
+    out, edge = {k: set() for k in PART}, set()
+    p = parts.load()
+    for y in range(CELL):
+        for x in range(CELL):
+            v = p[col * CELL + x, row * CELL + y]
+            if not v[3]:
+                continue
+            for k, pc in PART.items():
+                if v[:3] == pc:
+                    out[k].add((x, y))
+            if v[3] == 254:
+                edge.add((x, y))
+    return out, edge
+
+
+def bbox(pts):
+    xs, ys = [x for x, _ in pts], [y for _, y in pts]
+    return min(xs), min(ys), max(xs), max(ys)
+
+
+def body_lums(body, row, col, pts):
+    p = body.load()
+    return {(x, y): 0.3 * p[col * CELL + x, row * CELL + y][0] + 0.59 * p[col * CELL + x, row * CELL + y][1] + 0.11 * p[col * CELL + x, row * CELL + y][2] for x, y in pts}
+
+
+def paint_ramp(img, row, col, body, pts, edge, ramp):
+    """pts 픽셀을 ramp (어두움, 중간, 밝음) 로 칠한다. 원래 밝기 순서를 따르고, 테두리 · 선은 보랏빛 선 색."""
+    if not pts:
+        return
+    lm = body_lums(body, row, col, pts)
+    lo, hi = min(lm.values()), max(lm.values())
+    d, m, l = ramp
+    line = (int(m[0] * 0.35 + 15.6), int(m[1] * 0.35 + 14.4), int(m[2] * 0.35 + 28.8))
+    p = img.load()
+    for (x, y), v in lm.items():
+        t = (v - lo) / (hi - lo) if hi - lo > 30 else 0.7  # 한 가지 색 옷이면 중간 색으로
+        c = line if (x, y) in edge or t < 0.22 else (d if t < 0.5 else (m if t < 0.85 else l))
+        p[col * CELL + x, row * CELL + y] = (*c, 255)
+
+
+def hands(pp, top, row):
+    """윗도리 아래쪽 살색 = 손 (맨팔이면 팔). 왼손 · 오른손 (옆모습은 하나) 의 x 범위.
+    정면 · 뒷모습은 몸 가장자리에서 이어진 살색만 센다 (가슴 끈 · 맨살 허리 같은 가운데 살색은 뺀다)."""
+    _, _, _, ty1 = bbox(top)
+    skin = {p for p in pp["skin"] if ty1 - 5 <= p[1] <= ty1 + 2}
+    if row == 2:
+        xs = sorted({x for x, _ in skin})
+    else:
+        body = set().union(*pp.values())
+        xs = set()
+        for y in {y for _, y in skin}:
+            line = sorted(x for x, yy in body if yy == y)
+            for seq in (line, line[::-1]):
+                for x in seq:
+                    if (x, y) not in skin:
+                        break
+                    xs.add(x)
+        xs = sorted(xs)
+    groups = []
+    for x in xs:
+        if groups and x - groups[-1][1] <= 1:
+            groups[-1][1] = x
+        else:
+            groups.append([x, x])
+    return groups
+
+
+def fit_hat(draw_hat):
+    def fn(img, row, col, body, pp, edge, pose):
+        # 삐친 머리칼은 빼고 머리 몸통으로 잰다: 위에서 4줄 아래의 머리카락 폭
+        hx0, hy0, hx1, _ = bbox(pp["hair"])
+        band = [x for x, y in pp["hair"] if y == hy0 + 4]
+        cx = (min(band) + max(band)) / 2 if band else (hx0 + hx1) / 2
+        ox = round(cx - (OLD_HEAD_X1 - OLD_HEAD_X0) / 2)
+        c = Warp(Canvas(img, col * CELL, row * CELL), ox, hy0 + 2, 1.0, 1.0)
+        draw_hat(c, row, 0)
+    return fn
+
+
+def fit_top(ramp, vest=False, pocket=None, stripe=None):
+    """옷: 윗도리 픽셀을 다시 칠한다. vest 면 팔(손 위 세로줄)은 남기고, 정면은 앞섶을 연다."""
+    def fn(img, row, col, body, pp, edge, pose):
+        top = pp["top"]
+        tx0, ty0, tx1, ty1 = bbox(top)
+        pts = set(top)
+        hs = hands(pp, top, row)
+        mid = (tx0 + tx1) / 2
+        # 소매가 있을 때만 팔을 남긴다. 윗도리 줄 가운데쯤에서 몸 가장자리가 살색이면 맨팔
+        body_px = set().union(*pp.values())
+        bare = 0
+        for y in range(ty0 + 2, ty1 - 3):
+            line = sorted(x for x, yy in body_px if yy == y)
+            if line and (line[0], y) in pp["skin"] and (line[-1], y) in pp["skin"]:
+                bare += 1
+        sleeves = row != 2 and bare < 2
+        if vest and sleeves:
+            for a, b in hs:
+                # 소매: 손 위 세로줄 + 몸 쪽으로 2줄
+                a, b = (a, b + 2) if b < mid else (a - 2, b)
+                pts = {(x, y) for x, y in pts if not (a <= x <= b and y > ty0 + 1)}
+        if vest and row == 0:  # 앞섶을 열어 안의 옷이 보이게
+            pts = {(x, y) for x, y in pts if abs(x + 0.5 - mid) > 1.6 or y < ty0 + 2}
+        paint_ramp(img, row, col, body, pts, edge, ramp)
+        c = Canvas(img, col * CELL, row * CELL)
+        if pocket and row != 1:
+            left = max([b for a, b in hs if b < mid], default=tx0 + 4) + 3
+            right = min([a for a, b in hs if a > mid], default=tx1 - 4) - 3
+            py = ty1 - 6
+            spots = [(left, py), (right - 3, py)] if row == 0 else [(tx1 - 6, py)]
+            for x0, y0 in spots:
+                c.rect(x0, y0, x0 + 3, y0 + 3, ramp[0])
+                c.rect(x0 + 1, y0 + 1, x0 + 2, y0 + 2, pocket)
+        if stripe:
+            sy = ty0 + (ty1 - ty0) * 2 // 3
+            p = img.load()
+            for x, y in pts:
+                if y == sy and (x, y) not in edge:
+                    p[col * CELL + x, row * CELL + y] = (*stripe, 255)
+    return fn
+
+
+def fit_feet(ramp, shaft=0, accent=None):
+    """신발: 신발 픽셀을 다시 칠한다. shaft 면 그 줄 수만큼 바짓단도 장화 목으로 덮는다."""
+    def fn(img, row, col, body, pp, edge, pose):
+        shoes = set(pp["shoes"])
+        pts = set(shoes)
+        tops = {}
+        for x, y in shoes:
+            tops[x] = min(tops.get(x, 99), y)
+        cover = {(x, y) for x, y in pp["pants"] if x in tops and tops[x] - shaft <= y < tops[x]}
+        # 신발이 없는 줄 끝 (다리 가장자리) 도 이웃 줄에 맞춰 덮는다
+        for x, y in pp["pants"]:
+            near = [tops[k] for k in (x - 1, x + 1) if k in tops]
+            if x not in tops and near and min(near) - shaft <= y < max(near):
+                cover.add((x, y))
+        pts |= cover
+        paint_ramp(img, row, col, body, pts, edge, ramp)
+        if accent and cover:
+            p = img.load()
+            for x, y in cover:
+                if y == min(yy for xx, yy in cover if xx == x) and (x, y) not in edge:
+                    p[col * CELL + x, row * CELL + y] = (*accent, 255)
+    return fn
+
+
+FIT = {
+    "straw_hat": fit_hat(straw_hat),
+    "work_cap": fit_hat(lambda c, row, b: cap(Recolor(c, {CAP: (236, 236, 226), CAP_D: (70, 140, 90), CAP_L: (250, 250, 244)}), row, b)),
+    "seed_vest": fit_top((VEST_D, VEST, VEST_L), vest=True, pocket=SEED),
+    "rain_suit": fit_top(((50, 66, 100), (70, 92, 132), (100, 126, 166)), stripe=(236, 214, 80)),
+    "rain_boots": fit_feet((RUBBER_D, RUBBER, RUBBER_L), shaft=4),
+    "work_boots": fit_feet(((40, 40, 48), (62, 62, 72), (96, 96, 108)), shaft=3, accent=(232, 196, 70)),
+}
+
+
+def make_fit(name, fn, body_name):
+    body = Image.open(os.path.join(OUT_DIR, "..", "characters", f"{body_name}.png")).convert("RGBA")
+    parts = Image.open(os.path.join(PARTS_DIR, f"{body_name}.png")).convert("RGBA")
+    img = Image.new("RGBA", (CELL * COLS, CELL * ROWS), (0, 0, 0, 0))
+    hat = Image.new("RGBA", img.size, (0, 0, 0, 0))
+    poses = IDLE + WALK
+    for row in range(ROWS):
+        for col in range(COLS):
+            pp, edge = cell_parts(parts, row, col)
+            fn(hat if fn in HAT_FITS else img, row, col, body, pp, edge, poses[col])
+    if fn in HAT_FITS:
+        outline(hat)
+        img = hat
+    grade_p1(img)
+    path = os.path.join(OUT_DIR, f"{name}.png")
+    img.save(path)
+    return path
+
+
+HAT_FITS = {FIT["straw_hat"], FIT["work_cap"]}
+
+
+def who_of(name):
+    """scripts/wearables.gd 의 who (농부 장비인지)"""
+    return "farmer" if name in ("straw_hat", "seed_vest", "rain_boots", "work_cap", "rain_suit", "work_boots") else "hunter"
+
+
 if __name__ == "__main__":
     os.makedirs(OUT_DIR, exist_ok=True)
     for name, fn in ITEMS.items():
-        print(make(name, fn))
+        body = BODY_OF.get(who_of(name))
+        if body and name in FIT and os.path.exists(os.path.join(PARTS_DIR, f"{body}.png")):
+            print(make_fit(name, FIT[name], body), "(새 몸)")
+        else:
+            print(make(name, fn))

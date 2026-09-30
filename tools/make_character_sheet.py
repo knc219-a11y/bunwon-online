@@ -345,4 +345,8 @@ def make(name, hd):
 if __name__ == "__main__":
     os.makedirs(OUT_DIR, exist_ok=True)
     for name, hd in HOODIES.items():
+        # AI 그림에서 가져온 몸 (tools/import_ai_character.py) 은 덮어쓰지 않는다
+        if os.path.exists(os.path.join(os.path.dirname(__file__), "char_parts", f"{name}.png")):
+            print(name, "건너뜀 (AI 그림 몸)")
+            continue
         print(make(name, hd))
