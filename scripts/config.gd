@@ -321,7 +321,8 @@ const HUNT_ZONES: Array[Dictionary] = [
 		monster_tint = Color(1, 0.8, 0.75), boss_tint = Color(1.0, 0.82, 0.4), ground_tint = Color(0.82, 0.9, 0.8), tree_tint = Color(0.78, 0.92, 0.78),
 	},
 	{
-		name = "금사리", junk_name = "모래게 껍데기", monster = "모래게", boss_monster = "금두꺼비", waypoint = true,
+		## 2026-09-30 사용자: "금사리 게도 너무 약해 보여" → 요괴 모래게 (그림 · 이름만, 동작 · 수치 · 파일 이름 그대로)
+		name = "금사리", junk_name = "모래게 껍데기", monster = "요괴 모래게", boss_monster = "금두꺼비", waypoint = true,
 		## 화면보다 넓은 맵 (2026-09-28 사용자 선택 C): data/hunt_maps/geumsa.txt, 카메라가 사냥꾼을 따라간다
 		map = "geumsa",
 		sheet = "res://assets/creatures/wild_sand_crab.png", boss_sheet = "res://assets/creatures/wild_gold_toad.png", burrow = true,
