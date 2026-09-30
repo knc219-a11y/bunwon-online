@@ -17,6 +17,7 @@
   scarecrow    → assets/creatures/wild_scarecrow.png (256x32): 0-1 흔들, 2-5 깡충, 6-7 짚단 던지기. 게임에서 1.8배
   baby_sparrow → assets/creatures/baby_sparrow_flying.png (320x32): 0-1 대기, 2-5 날기, 6-9 쪼기 (아기 까마귀)
   까마귀 둘은 왼쪽을 보는 옆모습: 앉은 그림 + --fly 날개 편 그림 (없으면 앉은 그림만 흔든다). 오른쪽을 보면 --flip.
+  발밑 보라 안개 · 다리 사이 흰 바탕은 지운다 (clear_mist). 붉은 눈은 --eyes/--fly-eyes + --eye-color 로 다시 찍는다.
 
 실행: python3 tools/import_ai_monster.py 그림.png --kind crab|boss|baby|sparrow|scarecrow|baby_sparrow [--width 24] [--colors 20] [--preview 미리보기.png]
       (--sand 숨은그림.png: 모래에 파묻힌 게 그림이 따로 있으면 숨기 칸에 그걸 쓴다)
@@ -25,6 +26,10 @@
   --kind crab --width 28 --colors 24 --eyes 0.402,0.283,0.594,0.283 --eye-ring
   --kind boss --colors 24 --eyes 0.545,0.17,0.849,0.16 --eye-lid
   --kind baby --colors 24 --eyes 0.518,0.181,0.882,0.159 --cheeks 0.465,0.353,0.934,0.345 --mouth 0.75,0.40
+광동리 (그림 원본: /mnt/project-files/design/gwangdong-ai/ai_*.png, 사용자 AI 그림 2026-09-30)
+  ai_crow.png --kind sparrow --fly ai_crow_fly.png --flip --colors 24 --eyes 0.2,0.31 --fly-eyes 0.2,0.53 --eye-color 230,50,60
+  ai_scarecrow.png --kind scarecrow --colors 28 --eyes 0.43,0.35,0.6,0.35 --eye-color 230,50,60
+  ai_baby.png --kind baby_sparrow --fly ai_baby_fly.png --flip --colors 24 --eyes 0.37,0.4 --fly-eyes 0.41,0.4 --eye-color 200,40,56
 """
 import argparse
 import os
@@ -69,7 +74,7 @@ KINDS = {
     # 광동리 세트 (2026-09-30). 참새 둘은 왼쪽을 보는 옆모습, 앉은 그림 + 날개 편 그림 (--fly) 두 장.
     #   rot: 발밑 가운데를 축으로 기울임 (도, + 는 머리가 왼쪽 아래로 = 쪼기), fly: 날개 편 그림을 쓴다
     #   fw: 날개 편 그림의 가로 px (날개 폭이 넓어서 따로)
-    "sparrow": dict(out="wild_sparrow", width=20, fw=26, frames=[
+    "sparrow": dict(out="wild_sparrow", width=26, fw=28, mist=True, frames=[
         dict(sx=1.0, sy=1.0, lift=0), dict(sx=1.0, sy=1.0, lift=0, rot=22),
         dict(fly=True, sx=1.0, sy=1.0, lift=2), dict(fly=True, sx=1.04, sy=0.72, lift=3),
         dict(fly=True, sx=1.0, sy=1.0, lift=3), dict(fly=True, sx=1.04, sy=0.72, lift=2),
@@ -82,7 +87,7 @@ KINDS = {
         dict(sx=1.0, sy=0.97, lift=1), dict(sx=1.03, sy=0.95, lift=0),
         dict(sx=1.0, sy=1.0, lift=0, rot=9, dx=-1), dict(sx=1.0, sy=1.0, lift=0),
     ]),
-    "baby_sparrow": dict(out="baby_sparrow_flying", width=15, fw=20, frames=[
+    "baby_sparrow": dict(out="baby_sparrow_flying", width=16, fw=21, mist=True, frames=[
         dict(sx=1.0, sy=1.0, lift=0), dict(sx=1.04, sy=0.95, lift=0),
         dict(fly=True, sx=1.0, sy=1.0, lift=6), dict(fly=True, sx=1.04, sy=0.72, lift=9),
         dict(fly=True, sx=1.0, sy=1.0, lift=9), dict(fly=True, sx=1.04, sy=0.72, lift=6),
@@ -92,8 +97,21 @@ KINDS = {
 }
 
 
-def load_figure(src, flip=False):
-    fig = peel_halo(largest_blob(white_to_alpha(Image.open(src))))
+def clear_mist(im):
+    """발밑 보라 안개 · 다리 사이에 갇힌 흰 바탕을 지운다 (요괴 까마귀). 밝고 푸른 기가 도는 연한 색만."""
+    px = im.load()
+    w, h = im.size
+    for y in range(h):
+        for x in range(w):
+            r, g, b, a = px[x, y]
+            if a and (min(r, g, b) > 225 or ((r + g + b) / 3 > 165 and b >= r - 10 and b > g + 10)):
+                px[x, y] = (0, 0, 0, 0)
+    return im
+
+
+def load_figure(src, flip=False, mist=False):
+    im = white_to_alpha(Image.open(src))
+    fig = peel_halo(largest_blob(clear_mist(im) if mist else im))
     if flip:
         fig = fig.transpose(Image.FLIP_LEFT_RIGHT)
     fig = fig.resize((WORK_W, round(WORK_W * fig.height / fig.width)), Image.LANCZOS)
@@ -149,7 +167,7 @@ def draw_tongue(l, mx, my, stage):
 LID = (150, 96, 40)
 
 
-def spot_face(l, left, top, W, H, eyes, size, ring, cheeks, lid=False):
+def spot_face(l, left, top, W, H, eyes, size, ring, cheeks, lid=False, eye=EYE):
     """정해 준 자리 (몸 비율)에 둥근 눈 + 반짝을 새로 찍는다. 22~30px 로 줄이면 AI 눈이 뭉개져서."""
     for fx, fy in cheeks:
         cx, cy = int(round(left + fx * W)), int(round(top + fy * H))
@@ -159,7 +177,7 @@ def spot_face(l, left, top, W, H, eyes, size, ring, cheeks, lid=False):
         ey = int(round(top + fy * H - (size + 1) / 2))
         if ring:
             l.rect(ex - 1, ey - 1, ex + size, ey + size + 1, RING)
-        l.rect(ex, ey, ex + size - 1, ey + size, EYE)
+        l.rect(ex, ey, ex + size - 1, ey + size, eye)
         l.px(ex, ey, GLINT)
         if size >= 3:
             l.px(ex + 1, ey, GLINT)
@@ -175,19 +193,26 @@ def tilt(body, deg):
     big = Image.new("RGBA", (w * 2, h * 2), (0, 0, 0, 0))
     big.alpha_composite(body, (w // 2, h - 1))
     big = big.rotate(deg, resample=Image.NEAREST, center=(w, h * 2 - 1))
-    box = big.getbbox()
-    return big.crop(box) if box else body
+    box = big.getbbox() or (0, 0, big.width, big.height)
+
+    def move(x, y):
+        """기울이기 전 몸 안 자리 → 기울인 뒤 자리 (눈을 따라 옮길 때)."""
+        import math
+        a = math.radians(deg)
+        dx, dy = x + w // 2 - w, y + h - 1 - (h * 2 - 1)
+        return (w + dx * math.cos(a) + dy * math.sin(a) - box[0], h * 2 - 1 - dx * math.sin(a) + dy * math.cos(a) - box[1])
+    return big.crop(box), move
 
 
 def build(src, kind, width=None, colors=20, redraw_eyes=False, sand_src=None, mouth=(0.5, 0.62),
           spot_eyes=None, eye_size=2, eye_ring=False, cheeks=(), eye_lid=False, fly_src=None, flip=False,
-          fly_eyes=None):
+          fly_eyes=None, eye_color=EYE):
     spec = KINDS[kind]
     width = width or spec["width"]
-    fig = load_figure(src, flip)
+    fig = load_figure(src, flip, spec.get("mist", False))
     fly = None
     if fly_src:
-        fly = load_figure(fly_src, flip)
+        fly = load_figure(fly_src, flip, spec.get("mist", False))
         fly_pal = fly.convert("RGB").quantize(colors, method=Image.Quantize.FASTOCTREE)
         fly_h = round(spec["fw"] * fly.height / fly.width)
     eyes = None
@@ -221,16 +246,19 @@ def build(src, kind, width=None, colors=20, redraw_eyes=False, sand_src=None, mo
         had_line = soften_edges(body) and had_line
         if f.get("step"):
             body = shove_legs(body, f["step"])
+        move = None
         if f.get("rot"):
-            body = tilt(body, f["rot"])
+            W0, H0 = W, H
+            body, mv = tilt(body, f["rot"])
             W, H = body.size
             H = min(H, CELL - f["lift"])
+            move = lambda fx, fy, mv=mv, W0=W0, H0=H0, W=W, H=H: tuple(v / d for v, d in zip(mv(fx * W0, fy * H0), (W, H)))
         if stalks is None and kind == "crab":
             stalks = eye_stalks(body)
         left = CELL // 2 - W // 2 + f.get("dx", 0)
         top = CELL - f["lift"] - H
         bodies.alpha_composite(body, (i * CELL + left, top))
-        placed.append((left, top, W, H))
+        placed.append((left, top, W, H, move))
     if not had_line:
         outline(bodies, CELL)
     grade_p1(bodies)
@@ -267,12 +295,14 @@ def build(src, kind, width=None, colors=20, redraw_eyes=False, sand_src=None, mo
             grade_p1(mound)
             sheet.alpha_composite(mound, (i * CELL, 0))
             continue
-        left, top, W, H = p
+        left, top, W, H, move = p
         if eyes:
             draw_face(l, left, top, W, H, eyes, mouth)
-        use_eyes = (fly_eyes if f.get("fly") and fly is not None else spot_eyes) if not f.get("rot") else None
+        use_eyes = fly_eyes if f.get("fly") and fly is not None else spot_eyes
+        if use_eyes and move:
+            use_eyes = [move(fx, fy) for fx, fy in use_eyes]
         if use_eyes:
-            spot_face(l, left, top, W, H, use_eyes, eye_size, eye_ring, cheeks if not f.get("fly") else (), eye_lid)
+            spot_face(l, left, top, W, H, use_eyes, eye_size, eye_ring, cheeks if not f.get("fly") else (), eye_lid, eye_color)
         if "work" in f:
             draw_tongue(l, int(round(left + mouth[0] * W)), int(round(top + mouth[1] * H)), f["work"])
         sheet.alpha_composite(l.img, (i * CELL, 0))
@@ -295,6 +325,7 @@ def main():
     ap.add_argument("--sand", help="모래에 파묻힌 게 그림 (crab 숨기 칸)")
     ap.add_argument("--fly", help="날개 편 그림 (sparrow · baby_sparrow 날갯짓 칸)")
     ap.add_argument("--fly-eyes", help="날개 편 그림의 눈 자리 (몸 비율 x,y, 옆모습이라 하나)")
+    ap.add_argument("--eye-color", help="눈 색 r,g,b (요괴 까마귀 붉은 눈)")
     ap.add_argument("--flip", action="store_true", help="그림을 좌우로 뒤집는다 (참새가 오른쪽을 보고 나왔을 때)")
     ap.add_argument("--out", help="기본: assets/creatures/<규격 이름>.png")
     ap.add_argument("--preview", help="4배 확대 미리보기 PNG")
@@ -302,7 +333,8 @@ def main():
     mouth = tuple(float(v) for v in a.mouth.split(","))
     pairs = lambda t: [tuple(v) for v in zip(*[iter(float(x) for x in t.split(","))] * 2)] if t else []
     sheet = build(a.src, a.kind, a.width, a.colors, a.redraw_eyes, a.sand, mouth,
-                  pairs(a.eyes), a.eye_size, a.eye_ring, pairs(a.cheeks), a.eye_lid, a.fly, a.flip, pairs(a.fly_eyes))
+                  pairs(a.eyes), a.eye_size, a.eye_ring, pairs(a.cheeks), a.eye_lid, a.fly, a.flip, pairs(a.fly_eyes),
+                  tuple(int(v) for v in a.eye_color.split(",")) if a.eye_color else EYE)
     out = a.out or os.path.join(ROOT, "assets", "creatures", KINDS[a.kind]["out"] + ".png")
     sheet.save(out)
     print(out)
