@@ -1,7 +1,7 @@
 class_name Forage
 extends Node2D
 ## 들나물 캐기 (2026-09-29 사용자 선택 A, 초반 며칠 할 일): 아침마다 밭 밖 풀밭에 냉이·쑥·달래가 몇 포기 돋는다.
-## 농부가 가까이서 F로 캐고, 마을 공급함에 진열하면 밤사이 팔린다. 그림은 임시 (코드로 그림).
+## 농부가 가까이서 F로 캐고, 마을 공급함에 진열하면 밤사이 팔린다. 그림은 assets/props/forage.png.
 ## 크리처 채집 (2026-09-29 사용자 선택 B): 채집 크리처가 캐서 바로 진열한다. 땅속 도라지 뿌리, 물 준 풀밭도 여기서 관리.
 
 ## 돋은 들나물: 칸 → 종류 번호 (Config.HERB_NAMES)
@@ -138,43 +138,21 @@ static func object_particle(word: String) -> String:
 	return "을" if code >= 0 and code < 11172 and code % 28 != 0 else "를"
 
 
+const SHEET := preload("res://assets/props/forage.png")
+## forage.png 칸: 0 냉이 · 1 쑥 · 2 달래 · 3 도라지 싹 · 4 물 준 풀밭 (tools/make_polish_sprites.py)
+const ROOT_FRAME := 3
+const WET_FRAME := 4
+
+
 func _draw() -> void:
 	for cell: Vector2i in watered:
-		# 물 준 풀밭: 젖은 흙빛 얼룩 (임시 그림)
-		draw_circle(Farm.center_of(cell) + Vector2(0, 4), 9, Color(0.3, 0.45, 0.6, 0.35))
+		_frame(cell, WET_FRAME)
 	for cell: Vector2i in roots:
-		_draw_root(Farm.center_of(cell) + Vector2(0, 2))
+		_frame(cell, ROOT_FRAME)
 	for cell: Vector2i in herbs:
-		_draw_herb(Farm.center_of(cell) + Vector2(0, 2), herbs[cell])
+		_frame(cell, herbs[cell])
 
 
-## 땅속 도라지 뿌리 표시 (임시 그림): 갈라진 흙 + 보라 꽃봉오리 하나
-func _draw_root(at: Vector2) -> void:
-	draw_set_transform(at, 0, Vector2(1.5, 1.5))
-	draw_circle(Vector2(0, 3), 6, Color(0.5, 0.36, 0.22))
-	draw_line(Vector2(-4, 1), Vector2(4, 5), Color(0.25, 0.15, 0.08), 1.0)
-	draw_line(Vector2(3, 0), Vector2(-2, 6), Color(0.25, 0.15, 0.08), 1.0)
-	draw_line(Vector2(0, 2), Vector2(0, -5), Color(0.3, 0.6, 0.3), 1.5)
-	draw_circle(Vector2(0, -6), 2.2, Color(0.6, 0.45, 0.85))
-	draw_set_transform(Vector2.ZERO)
-
-
-## 한 포기 (임시 그림): 0 냉이 흰 꽃 · 1 쑥 회녹색 잎 · 2 달래 가는 잎 + 흰 알뿌리
-func _draw_herb(at: Vector2, kind: int) -> void:
-	draw_set_transform(at, 0, Vector2(1.5, 1.5))
-	draw_circle(Vector2(0, 3), 6, Color(0.45, 0.32, 0.2))
-	draw_circle(Vector2(0, 3), 6, Color(0.2, 0.12, 0.06), false, 1.0)
-	match kind:
-		0:
-			for a in 6:
-				draw_line(Vector2.ZERO, Vector2.from_angle(a * TAU / 6) * 5, Color(0.15, 0.6, 0.15), 2.0)
-			for p: Vector2 in [Vector2(-2, -5), Vector2(2, -6), Vector2(0, -8)]:
-				draw_circle(p, 1.6, Color(1, 1, 0.95))
-		1:
-			for a in 5:
-				draw_line(Vector2(0, 3), Vector2.from_angle(-PI / 2 + (a - 2) * 0.6) * 7, Color(0.62, 0.82, 0.62), 3.0)
-		_:
-			for a in 4:
-				draw_line(Vector2(0, 3), Vector2(-4 + a * 2.5, -8), Color(0.2, 0.75, 0.2), 1.5)
-			draw_circle(Vector2(0, 4), 2.2, Color(0.95, 0.92, 0.85))
-	draw_set_transform(Vector2.ZERO)
+func _frame(cell: Vector2i, i: int) -> void:
+	var t := Config.TILE
+	draw_texture_rect_region(SHEET, Rect2(Vector2(cell * t), Vector2(t, t)), Rect2(i * 24, 0, 24, 24))

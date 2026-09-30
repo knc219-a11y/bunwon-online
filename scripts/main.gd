@@ -108,6 +108,10 @@ var _delete_armed := -1
 
 var _rng := RandomNumberGenerator.new()
 var _status: Label
+## 위 줄 알약 (그래픽 시범 2026-09-30). _status 글줄은 숨긴 채 같은 내용을 유지한다.
+var _hud_bar: HudBar
+## 하루 빛 · 불빛 · 구름 그림자 · 날리는 잎 (그래픽 시범 C)
+var ambience: Ambience
 var _message: Label
 
 
@@ -130,6 +134,14 @@ func _ready() -> void:
 	supply_box = _add_prop("마을 공급함", preload("res://assets/props/supply_box.png"), SUPPLY_RECT)
 	hunt_gate = _add_prop("사냥터 입구", preload("res://assets/props/hunt_gate.png"), HUNT_GATE_RECT)
 	stash_box = _add_prop("창고", preload("res://assets/props/stash.png"), STASH_RECT)
+
+	ambience = Ambience.new()
+	add_child(ambience)
+	var warm := Color(1.0, 0.78, 0.48)
+	ambience.add_light(house.position + Vector2(-32, -44), 46, warm)
+	ambience.add_light(house.position + Vector2(30, -44), 46, warm)
+	ambience.add_light(incubator.position + Vector2(10, -40), 34, Color(1.0, 0.55, 0.4))
+	ambience.add_light(supply_box.position + Vector2(0, -20), 30, warm)
 
 	farmer = _add_character("농부", preload("res://assets/characters/player.png"), Vector2i(14, 6), &"farmer")
 	hunter = _add_character("사냥꾼", preload("res://assets/characters/hunter.png"), Vector2i(20, 6), &"hunter")
@@ -164,6 +176,8 @@ func _add_prop(label: String, texture: Texture2D, rect: Rect2i, block := Rect2()
 	add_child(p)
 	props.append(p)
 	farm.add_blocker(p.blocker_world())
+	farm.deco_skip.append(rect)
+	farm.queue_redraw()
 	return p
 
 
@@ -1680,7 +1694,7 @@ func _rebuild_menu() -> void:
 	elif menu_kind == &"pause":
 		lines.append("사냥터 안에서 나가면 마을로 돌아온 채로 저장한다" if hunt else "Esc 계속하기")
 	_menu_text.text = "\n".join(lines)
-	_menu.size = _menu_text.get_minimum_size() + Vector2(16, 10)
+	_menu.size = _menu_text.get_minimum_size() + Vector2(22, 16)
 	# 공급함(또는 사냥터 입구) 옆에 띄우되 화면 밖으로 나가지 않게
 	var at := (hunt_gate.position + Vector2(-200, 8)) if companion or waypoint else supply_box.position + Vector2(36, -80)
 	if forging:
@@ -2044,34 +2058,43 @@ func _refresh_props() -> void:
 func _build_hud() -> void:
 	var layer := CanvasLayer.new()
 	add_child(layer)
-	var panel := ColorRect.new()
-	panel.color = Color(0, 0, 0, 0.45)
-	panel.size = Vector2(640, 28)
+	var panel := Control.new()
+	panel.position = Vector2(-4, -4)
+	panel.size = Vector2(648, 30)
+	panel.add_child(UiSkin.nine(UiSkin.BAR, 5))
 	layer.add_child(panel)
 	_status = Label.new()
 	_status.position = Vector2(6, 2)
 	_status.add_theme_font_size_override("font_size", 10)
+	_status.visible = false
 	layer.add_child(_status)
-	var bottom := ColorRect.new()
-	bottom.color = Color(0, 0, 0, 0.45)
-	bottom.position = Vector2(0, 328)
-	bottom.size = Vector2(640, 32)
+	_hud_bar = HudBar.new()
+	_hud_bar.size = Vector2(640, 26)
+	_hud_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	layer.add_child(_hud_bar)
+	var bottom := Control.new()
+	bottom.position = Vector2(-4, 328)
+	bottom.size = Vector2(648, 36)
+	bottom.add_child(UiSkin.nine(UiSkin.BAR, 5))
 	layer.add_child(bottom)
 	_message = Label.new()
-	_message.position = Vector2(6, 330)
+	_message.position = Vector2(8, 330)
 	_message.add_theme_font_size_override("font_size", 10)
+	_message.add_theme_color_override("font_color", Color(1, 0.96, 0.86))
 	layer.add_child(_message)
 	var help := Label.new()
-	help.position = Vector2(6, 345)
-	help.add_theme_font_size_override("font_size", 9)
-	help.modulate = Color(1, 1, 1, 0.7)
-	help.text = "이동 WASD · 도구 Space (사냥터: 클릭) · 도구 변경 Q/E · 상호작용 F (공급함: W/S 고르기) · 크리처 일 R · 가방 I · 캐릭터 전환 Tab · 잠자기 집 현관 F"
+	help.position = Vector2(8, 345)
+	help.add_theme_font_size_override("font_size", 10)
+	help.modulate = Color(1, 1, 1, 0.6)
+	help.text = "WASD 이동 · Space 도구 (사냥터: 클릭) · Q/E 도구 바꾸기 · F 상호작용 · R 크리처 일 · I 가방 · Tab 캐릭터 · 집 현관 F 잠자기"
 	layer.add_child(help)
 	# 저녁·밤 색 (하루 시계). 아침엔 투명.
 	_dusk = ColorRect.new()
 	_dusk.color = Color(0.1, 0.08, 0.3, 0.0)
 	_dusk.size = Vector2(640, 360)
 	_dusk.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# 저녁 어둡기는 Ambience 가 화면 색으로 그린다 (수치만 남김)
+	_dusk.visible = false
 	layer.add_child(_dusk)
 	layer.move_child(_dusk, 0)
 	# 잠잘 때 화면 전체를 덮는 밤 색. 평소에는 투명.
@@ -2081,7 +2104,8 @@ func _build_hud() -> void:
 	_night.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	layer.add_child(_night)
 	_morning_card = ColorRect.new()
-	(_morning_card as ColorRect).color = Color(0.99, 0.95, 0.85)
+	(_morning_card as ColorRect).color = Color(0, 0, 0, 0)
+	_morning_card.add_child(UiSkin.nine(UiSkin.WINDOW, 9))
 	_morning_card.size = MORNING_CARD_SIZE
 	_morning_card.position = (Vector2(640, 360) - _morning_card.size) / 2
 	_morning_card.visible = false
@@ -2093,16 +2117,17 @@ func _build_hud() -> void:
 	_morning_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_morning_text.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_morning_text.add_theme_font_size_override("font_size", 10)
-	_morning_text.add_theme_color_override("font_color", Color(0.3, 0.2, 0.15))
+	_morning_text.add_theme_color_override("font_color", UiSkin.INK)
 	_morning_card.add_child(_morning_text)
 	_menu = ColorRect.new()
-	_menu.color = Color(0.99, 0.95, 0.85)
+	_menu.color = Color(0, 0, 0, 0)
 	_menu.visible = false
+	_menu.add_child(UiSkin.nine(UiSkin.WINDOW, 9))
 	layer.add_child(_menu)
 	_menu_text = Label.new()
-	_menu_text.position = Vector2(8, 5)
+	_menu_text.position = Vector2(11, 8)
 	_menu_text.add_theme_font_size_override("font_size", 10)
-	_menu_text.add_theme_color_override("font_color", Color(0.3, 0.2, 0.15))
+	_menu_text.add_theme_color_override("font_color", UiSkin.INK)
 	_menu.add_child(_menu_text)
 	inventory = InventoryUI.new()
 	inventory.wear_changed.connect(_on_wear_changed)
@@ -2125,11 +2150,26 @@ func _refresh_hud() -> void:
 	if hunt:
 		var buddy := hunt.companion.display_name() if hunt.companion else "혼자"
 		_status.text = "%d일째 %s | %s | 도구: %s | 동행: %s | 남은 몬스터 %d | 주운 알 %d | 돈 %d원 · 잡템 %d" % [GameState.day, GameState.clock_text(GameState.minutes), Config.HUNT_ZONES[hunt.zone].name, tool_text, buddy, hunt.slimes.size(), hunt.picked.size(), GameState.money, GameState.junk]
+		_hud_bar.set_chips([
+			[_clock_icon(), "%d일째 %s" % [GameState.day, GameState.clock_text(GameState.minutes)]],
+			[UiSkin.Icon.TOOL, tool_text], [UiSkin.Icon.CREATURE, buddy],
+			[UiSkin.Icon.MONSTER, "남은 %d" % hunt.slimes.size()], [UiSkin.Icon.EGG, "%d" % hunt.picked.size()],
+			[UiSkin.Icon.COIN, "%d원" % GameState.money], [UiSkin.Icon.JUNK, "%d" % GameState.junk],
+		])
 		return
 	_status.text = "%d일째 %s | %s | 도구: %s | 돈 %d원 | 씨앗 %d  작물 %d  나물 %d | 알: 농부 %d · 사냥꾼 %d · 공급함 %d | 크리처 %d" % [
 		GameState.day, GameState.clock_text(GameState.minutes), active.display_name, tool_text, GameState.money, GameState.seeds, GameState.crops, GameState.herbs,
 		GameState.farmer_eggs.size(), GameState.hunter_eggs.size(), GameState.village_eggs.size(), creatures.size(),
 	]
+	var chips: Array = [
+		[_clock_icon(), "%d일째 %s" % [GameState.day, GameState.clock_text(GameState.minutes)]],
+		[UiSkin.Icon.PERSON, active.display_name], [UiSkin.Icon.TOOL, tool_text],
+		[UiSkin.Icon.COIN, "%d원" % GameState.money], [UiSkin.Icon.SEED, "%d" % GameState.seeds],
+		[UiSkin.Icon.RADISH, "%d" % GameState.crops], [UiSkin.Icon.HERB, "%d" % GameState.herbs],
+		[UiSkin.Icon.EGG, "%d·%d·%d" % [GameState.farmer_eggs.size(), GameState.hunter_eggs.size(), GameState.village_eggs.size()]],
+		[UiSkin.Icon.CREATURE, "%d" % creatures.size()],
+	]
+	var status_before := _status.text
 	# 윗줄이 넘치지 않게 대장간 단계에 필요한 것만
 	if GameState.forge_state >= 2:
 		_status.text += " | 고철 %d" % GameState.scrap
@@ -2143,3 +2183,12 @@ func _refresh_hud() -> void:
 		_status.text += " | %s %d/%d" % [Config.BOSS_MATERIAL3_NAME, GameState.material3, Config.BARN_COST_MATERIAL]
 	elif GameState.barn_state >= 2:
 		_status.text += " | 달걀 %d" % GameState.hen_eggs
+	# 대장간 · 약방 · 축사 단계에 붙은 것은 잡템 알약 하나로 모은다
+	var extra := _status.text.substr(status_before.length()).trim_prefix(" | ").replace(" | ", " · ")
+	if extra != "":
+		chips.append([UiSkin.Icon.JUNK, extra])
+	_hud_bar.set_chips(chips)
+
+
+func _clock_icon() -> int:
+	return UiSkin.Icon.SUN if GameState.minutes < 18 * 60 else UiSkin.Icon.MOON

@@ -95,6 +95,7 @@ var lunches := 0
 
 func _ready() -> void:
 	_register_inputs()
+	UiSkin.apply_font()
 
 
 func notify(text: String) -> void:

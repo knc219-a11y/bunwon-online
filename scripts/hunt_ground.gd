@@ -224,6 +224,12 @@ func _setup_night(z: Dictionary) -> void:
 	lamps.clear()
 	_lantern = null
 	_bus_light = null
+	if zone == 0 and map:
+		# 분원농협: 마을과 같은 하루 빛 · 구름 그림자 · 날리는 잎 (그래픽 시범 C)
+		var amb := Ambience.new()
+		amb.area = map.pixel_size()
+		add_child(amb)
+		_night.append(amb)
 	if z.has("shade") and not z.get("night", false):
 		# 그늘 구역 (밀목 솔숲): 조금 어둡기만 하고 불빛 규칙은 없다
 		var shade := CanvasModulate.new()
@@ -1104,10 +1110,9 @@ func _draw() -> void:
 		draw_circle(Vector2.ZERO, 7.0, Color(0.27, 0.16, 0.33, 0.25))
 		draw_set_transform(Vector2.ZERO)
 		var sp: CreatureSpecies = d.species
-		draw_circle(p + Vector2(0, 1), 6, sp.egg_color)
-		draw_circle(p + Vector2(0, -3), 5, sp.egg_color)
-		draw_circle(p + Vector2(-2, 0), 1.5, sp.egg_spot_color)
-		draw_circle(p + Vector2(2, 2), 1.2, sp.egg_spot_color)
+		draw_texture_rect_region(DROPS, Rect2(p + Vector2(-8, -10), Vector2(16, 16)), Rect2(0, 0, 16, 16), sp.egg_color)
+		draw_circle(p + Vector2(-2, -2), 1.2, sp.egg_spot_color)
+		draw_circle(p + Vector2(1, 1), 1.0, sp.egg_spot_color)
 	var font := ThemeDB.fallback_font
 	for d in loot:
 		var p: Vector2 = d.at
@@ -1117,13 +1122,13 @@ func _draw() -> void:
 		draw_set_transform(Vector2.ZERO)
 		match d.kind:
 			&"money":
-				draw_circle(p + Vector2(-2, 1), 3, col)
-				draw_circle(p + Vector2(2, 0), 3, col.darkened(0.15))
+				draw_texture_rect_region(DROPS, Rect2(p + Vector2(-8, -10), Vector2(16, 16)), Rect2(48, 0, 16, 16))
 			&"potion":
-				draw_rect(Rect2(p + Vector2(-1, -7), Vector2(2, 3)), Color(0.85, 0.8, 0.7))
-				draw_circle(p + Vector2(0, -1), 4, Color(0.85, 0.2, 0.22))
+				draw_texture_rect_region(DROPS, Rect2(p + Vector2(-8, -11), Vector2(16, 16)), Rect2(16, 0, 16, 16))
 			&"junk":
-				draw_circle(p, 4, Color(0.62, 0.52, 0.42, 0.9))
+				# 분원농협 잡템은 슬라임 젤리, 다른 구역은 보따리
+				var jx := 32 if zone == 0 else 64
+				draw_texture_rect_region(DROPS, Rect2(p + Vector2(-8, -10), Vector2(16, 16)), Rect2(jx, 0, 16, 16))
 			_ when Wearables.ITEMS[d.roll.base if d.has("roll") else d.id].slot == &"weapon":
 				draw_line(p + Vector2(-6, 2), p + Vector2(6, -8), Color(0.75, 0.75, 0.8), 2.0)
 				draw_line(p + Vector2(-6, -4), p + Vector2(-1, 2), Color(0.55, 0.38, 0.2), 2.0)
@@ -1192,6 +1197,8 @@ func _draw_sign(n: Sprite2D, text: String) -> void:
 func _draw_ground(n: Node2D) -> void:
 	if map:
 		n.draw_texture(map.ground, Vector2.ZERO)
+		if zone == 0:
+			_draw_yard_deco(n)
 		_draw_labels(n)
 		if zone == Config.FORGE_ZONE:
 			_draw_bridge(n)
@@ -1208,6 +1215,28 @@ func _draw_ground(n: Node2D) -> void:
 		for y in range(top, CLEARING.end.y + 3 if x >= 11 and x <= 13 else CLEARING.end.y):
 			n.draw_texture_rect_region(tiles, Rect2(x * T, y * T, T, T), Rect2(4 * T, 0, T, T))
 	_draw_waypoint(n)
+
+
+const YARD_DECO := preload("res://assets/tiles/yard_deco.png")
+const GROUND_DECO := preload("res://assets/tiles/ground_deco.png")
+const DROPS := preload("res://assets/hunt/drops.png")
+
+
+## 분원농협 바닥 장식 (2026-09-30 그래픽 시범): 시멘트 마당(%)엔 금 · 잡초 · 기름 얼룩 · 웅덩이 · 볏짚 · 낙엽, 풀밭(.)엔 풀꽃 · 풀포기
+func _draw_yard_deco(n: Node2D) -> void:
+	for y in map.size.y:
+		for x in map.size.x:
+			var ch := map.rows[y][x]
+			if ch != "%" and ch != ".":
+				continue
+			var h := absi((x * 92837111) ^ (y * 689287499) ^ 0x2f1a) % 1000
+			var off := Vector2((h / 16) % 9, (h / 144) % 7)
+			if ch == "%" and h < 170:
+				var k: int = [0, 1, 0, 2, 4, 5, 1, 3, 0, 4][h % 10]
+				n.draw_texture_rect_region(YARD_DECO, Rect2(Vector2(x, y) * T + off, Vector2(16, 16)), Rect2(k * 16, 0, 16, 16))
+			elif ch == "." and h < 300:
+				var k: int = [4, 5, 4, 0, 8, 3, 6, 4][h % 8]
+				n.draw_texture_rect_region(GROUND_DECO, Rect2(Vector2(x, y) * T + off, Vector2(16, 16)), Rect2(k * 16, 0, 16, 16))
 
 
 ## 금사리 윗길 쇠다리 (임시 그림): 대장간을 고치기 전엔 가운데가 끊겨 있다
@@ -1256,23 +1285,16 @@ func _draw_waypoint(n: Node2D) -> void:
 
 
 func _draw_hud() -> void:
-	for i in max_hearts():
-		var c := Color(0.9, 0.3, 0.35) if i < hearts else Color(0.45, 0.38, 0.38)
-		var p := Vector2(8 + i * 13, 34)
-		_hud.draw_circle(p + Vector2(3, 3), 3, c)
-		_hud.draw_circle(p + Vector2(7, 3), 3, c)
-		_hud.draw_colored_polygon(PackedVector2Array([p + Vector2(0, 4), p + Vector2(10, 4), p + Vector2(5, 10)]), c)
-	# 빨간 물약 수
+	# 하트 · 빨간 물약 · 지금 구역 (그래픽 시범 2026-09-30: 아이콘 + 한지 알약)
 	var font := ThemeDB.fallback_font
-	var x := 12.0 + max_hearts() * 13
-	_hud.draw_circle(Vector2(x, 41), 4, Color(0.85, 0.2, 0.22))
-	_hud.draw_rect(Rect2(x - 1, 34, 2, 3), Color(0.85, 0.8, 0.7))
-	_hud.draw_string(font, Vector2(x + 6, 45), "x%d (1)" % GameState.potions, HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(1, 0.97, 0.85))
-	# 지금 구역 (오른쪽 위)
+	var hw := max_hearts() * 13.0 + 6
+	_hud.draw_style_box(UiSkin.chip_box(), Rect2(4, 30, hw, 17))
+	for i in max_hearts():
+		UiSkin.draw_icon(_hud, UiSkin.Icon.HEART if i < hearts else UiSkin.Icon.HEART_EMPTY, Vector2(7 + i * 13, 32))
+	UiSkin.draw_chip(_hud, Vector2(7 + hw, 30), UiSkin.Icon.POTION, "x%d (1)" % GameState.potions, 17)
 	var zt := "%d구역 %s" % [zone + 1, Config.HUNT_ZONES[zone].name]
-	var zw := font.get_string_size(zt, HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x
-	_hud.draw_rect(Rect2(632 - zw - 6, 30, zw + 6, 14), Color(0, 0, 0, 0.55))
-	_hud.draw_string(font, Vector2(632 - zw - 3, 41), zt, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.95, 0.85, 0.45))
+	var zw := font.get_string_size(zt, HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x + 22
+	UiSkin.draw_chip(_hud, Vector2(636 - zw, 30), UiSkin.Icon.FLAG, zt, 17)
 	_draw_offscreen_hint(font)
 	_draw_minimap()
 	if path_open:
@@ -1348,8 +1370,9 @@ func _draw_minimap() -> void:
 	if _mini_tex == null or hunter == null:
 		return
 	var r := minimap_rect()
-	_hud.draw_rect(r.grow(2), Color(0, 0, 0, 0.55))
-	_hud.draw_texture_rect(_mini_tex, r, false, Color(1, 1, 1, 0.9))
+	_hud.draw_rect(r.grow(1), Color(0.2, 0.15, 0.18, 0.8))
+	_hud.draw_texture_rect(_mini_tex, r, false, Color(1, 1, 1, 0.95))
+	_hud.draw_style_box(UiSkin.frame_box(), r.grow(4))
 	# 아래 입구는 늘 보이고, 위쪽 길은 가 본 뒤에 보인다
 	var gold := Color(1, 0.95, 0.6)
 	var e := r.position + map.spot("E") / T * MINI_SCALE
