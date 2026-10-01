@@ -107,6 +107,10 @@ var _tiger_step := 0
 var _roar := -1.0
 ## 대장 그림이 32칸 시트가 아닐 때 한 장 크기 (유령 막차 96x48). ZERO 면 32칸 시트.
 var boss_frame := Vector2i.ZERO
+## 시트 한 칸 크기 (32 또는 대장 고해상 58) · 스프라이트를 이 노드 안에서 키우는 배율.
+## 2026-10-01 사용자: "보스몬스터의 도트가 너무 깨져보이는 현상" → 화면에서 원본 1px 이 늘 1px (고해상) 또는 2px (32칸 대장) 이 되게.
+var _frame := FRAME_SIZE
+var _px := 1.0
 ## 허수아비 장수 짚단 던지기: 떨어질 짚단들 {at, t = 남은 시간}, 던진 횟수 (두 번에 한 번 까마귀 부르기)
 var _bales: Array[Dictionary] = []
 var _throws := 0
@@ -140,7 +144,6 @@ func _ready() -> void:
 	_sprite = Sprite2D.new()
 	_sprite.centered = false
 	_sprite.modulate = _tint
-	_sprite.position = Vector2(-FRAME_SIZE / 2.0, BOTTOM_Y - FRAME_SIZE)
 	add_child(_sprite)
 	_apply_sheet()
 	_rest = randf_range(0.3, Config.WILD_SLIME_REST_TIME)
@@ -202,7 +205,13 @@ func _apply_sheet() -> void:
 		_sprite.hframes = 1
 		_sprite.position = Vector2(-boss_frame.x / 2.0, BOTTOM_Y - boss_frame.y)
 	else:
-		_sprite.hframes = sheet.get_width() / FRAME_SIZE
+		_frame = sheet.get_height()
+		_sprite.hframes = sheet.get_width() / _frame
+		# 화면 배율 (노드 배율 x 스프라이트 배율): 32칸이 아닌 시트 (대장 고해상 58 · 새끼 21) 는 1, 32칸 대장 시트는 정수 2, 그 밖은 노드 배율 그대로
+		var net := 1.0 if _frame != FRAME_SIZE else (2.0 if boss else scale.x)
+		_px = net / scale.x
+		_sprite.scale = Vector2.ONE * _px
+		_sprite.position = Vector2(-_frame * _px / 2.0, BOTTOM_Y - _frame * _px)
 
 
 ## 짝 대장으로 바꾼다 (도마리 지하여장군: 구역 데이터 partner = {name, sheet, pattern}). make_boss 뒤에 부른다.
@@ -213,8 +222,7 @@ func make_partner(zone := 0) -> void:
 	sheet = load(p.sheet)
 	_pattern_cd = 3.0
 	if _sprite:
-		_sprite.texture = sheet
-		_sprite.hframes = sheet.get_width() / FRAME_SIZE
+		_apply_sheet()
 
 
 func sort_y() -> float:
@@ -228,6 +236,12 @@ func make_minion() -> void:
 	max_hp = 1
 	title = "새끼 " + title
 	scale = Vector2.ONE * Config.MINION_SCALE
+	# 새끼용 작은 시트 (<이름>_mini.png, 21칸)가 있으면 그걸 줄이지 않고 그린다 (줄이면 도트가 깨짐)
+	var small := sheet.resource_path.get_basename() + "_mini.png" if sheet else ""
+	if small != "" and ResourceLoader.exists(small):
+		sheet = load(small)
+	if _sprite:
+		_apply_sheet()
 	_lunge_cd = 1.0
 
 
@@ -434,13 +448,19 @@ func tick(delta: float, target: Vector2) -> void:
 	var lift := sin(_air_t * PI) * 60.0 / scale.y if _air_t >= 0.0 else 0.0
 	if flyer and in_air():
 		lift = Config.FLY_HEIGHT * (1.0 - maxf(_dive_t, 0.0)) / scale.y
-	_sprite.position = Vector2(-FRAME_SIZE / 2.0, BOTTOM_Y - FRAME_SIZE - lift)
-	# 웅크림: 납작해졌다가 튀어나간다
-	_sprite.scale = Vector2(1.15, 0.85) if _windup >= 0.0 or _aim >= 0.0 or _log_aim >= 0.0 else Vector2.ONE
+	var crouch := _windup >= 0.0 or _aim >= 0.0 or _log_aim >= 0.0
+	_sprite.position = Vector2(-_frame * _px / 2.0, BOTTOM_Y - _frame * _px - lift)
+	# 웅크림: 납작해졌다가 튀어나간다. 대장은 배율을 바꾸면 도트가 깨져서 대신 2px 내려앉는다.
+	if boss:
+		_sprite.scale = Vector2.ONE * _px
+		if crouch:
+			_sprite.position.y += 2.0 / scale.y
+	else:
+		_sprite.scale = Vector2(1.15, 0.85) * _px if crouch else Vector2.ONE * _px
 	if wisp:
 		# 도깨비불은 둥둥 떠 있다
 		_sprite.position.y -= 3.0 + sin(_anim_time * 3.0 + _angle) * 2.0
-		_sprite.scale = Vector2.ONE
+		_sprite.scale = Vector2.ONE * _px
 	_sprite.modulate = Color(1, 1, 1) * 2.0 if _flash > 0.0 and int(_flash * 20) % 2 == 0 else _tint
 	if _slow > 0.0 and _flash <= 0.0:
 		# 물의 지팡이에 느려진 동안 푸르게

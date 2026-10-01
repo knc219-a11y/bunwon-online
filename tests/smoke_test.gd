@@ -894,7 +894,7 @@ func _ready() -> void:
 			sh.swing()
 			zw.position = main.hunter.feet() + Vector2(0, -8 - Config.SWING_REACH)
 	_check(sh.boss_spawned and sh.slimes.size() == 1 and sh.slimes[0].hp == z2.boss_hp, "2구역 대장 체력 %d" % z2.boss_hp)
-	_check(sh.slimes[0].title == z2.boss_monster and not sh.slimes[0].buried and sh.slimes[0].sheet.resource_path.ends_with("wild_gold_toad.png"), "금사리 대장은 %s" % z2.boss_monster)
+	_check(sh.slimes[0].title == z2.boss_monster and not sh.slimes[0].buried and sh.slimes[0].sheet.resource_path.ends_with("wild_gold_toad_hd.png"), "금사리 대장은 %s" % z2.boss_monster)
 	sh.slimes[0].hp = 1
 	sh.slimes[0].position = main.hunter.feet() + Vector2(0, -8 - Config.SWING_REACH)
 	sh.tick(Config.SWING_COOLDOWN)

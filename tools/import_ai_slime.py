@@ -15,6 +15,8 @@
 """
 import argparse
 import os
+
+import make_slime_sheet
 from collections import Counter
 
 from PIL import Image
@@ -197,7 +199,7 @@ def draw_face(l, left, top, W, H, eyes, mouth):
     l.px(rx + 3, ly + eye_h, CHEEK)
 
 
-def build(src, element, width=22, colors=20):
+def build(src, element, width=22, colors=20, k=1.0):
     fig = peel_halo(largest_blob(white_to_alpha(Image.open(src))))
     fig = fig.resize((WORK_W, round(WORK_W * fig.height / fig.width)), Image.LANCZOS)
     a = fig.getchannel("A").point(lambda v: 255 if v > 128 else 0)
@@ -212,8 +214,9 @@ def build(src, element, width=22, colors=20):
     frames = IDLE + HOP + WATER
     had_line = True
     for i, f in enumerate(frames):
-        W = max(8, round(f["w"] / 22 * width))
-        H = max(8, round(base_h * f["h"] / 16))
+        W = max(round(8 * k), round(f["w"] / 22 * width))
+        H = max(round(8 * k), round(base_h * f["h"] / 16 * k))
+        f = dict(f, lift=round(f["lift"] * k))
         body = pixelize(fig, pal_img, pal, W, H)
         had_line = soften_edges(body) and had_line
         left = CELL // 2 - W // 2
@@ -226,6 +229,9 @@ def build(src, element, width=22, colors=20):
     sheet = Image.new("RGBA", bodies.size, (0, 0, 0, 0))
     sheet.alpha_composite(bodies)
     for i, (f, (left, top, W, H)) in enumerate(zip(frames, faces)):
+        if k != 1.0:
+            # --mini: 물줄기는 그리지 않는다 (새끼는 물을 뿜지 않음)
+            f = dict(f, spout=None)
         l = Layer()
         draw_face(l, left, top, W, H, eyes, mouth)
         if f.get("spout"):
@@ -242,9 +248,15 @@ def main():
     ap.add_argument("--colors", type=int, default=20)
     ap.add_argument("--out", help="기본: assets/creatures/slime_<element>.png")
     ap.add_argument("--preview", help="4배 확대 미리보기 PNG")
+    ap.add_argument("--mini", action="store_true", help="대장 슬라임 새끼용 0.65배 (21칸) 시트 slime_<element>_mini.png (2026-10-01 도트 깨짐)")
     a = ap.parse_args()
-    sheet = build(a.src, a.element, a.width, a.colors)
-    out = a.out or os.path.join(ROOT, "assets", "creatures", f"slime_{a.element}.png")
+    k = 1.0
+    if a.mini:
+        global CELL
+        k, CELL = 0.65, 21
+        make_slime_sheet.CELL = CELL
+    sheet = build(a.src, a.element, round(a.width * k), a.colors, k)
+    out = a.out or os.path.join(ROOT, "assets", "creatures", f"slime_{a.element}{'_mini' if a.mini else ''}.png")
     sheet.save(out)
     print(out)
     if a.preview:
