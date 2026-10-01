@@ -27,7 +27,14 @@
   그루터기 숨기 칸: --hide 잠든 그루터기 그림이 있으면 그걸 쓰고 7칸에 --hide-eyes 자리에 붉은 눈을 찍는다.
   없으면 make_doma_sheets 의 코드 그루터기 (납작한 나이테 윗면)를 쓴다.
 
-실행: python3 tools/import_ai_monster.py 그림.png --kind crab|boss|baby|sparrow|scarecrow|baby_sparrow|stump|cheonha|jiha|tree_spirit [--width 24] [--colors 20] [--preview 미리보기.png]
+번천 세트 (2026-10-01): 프롬프트는 /mnt/project-files/design/bunjeon-ai/prompt.md.
+  will_o       → assets/creatures/wild_will_o.png (256x32): 0-1 대기 (일렁임), 2-5 떠다님, 6 부풂 (불똥 예고), 7 쪼그라듦 (칠 틈, 어두워짐)
+  will_o_baby  → assets/creatures/baby_will_o_fire.png (320x32): 0-1 대기, 2-5 이동, 6-9 일 (불똥 튀김)
+  bus          → assets/creatures/ghost_bus.png (96x48 한 장): 옆모습, 앞이 오른쪽 (왼쪽을 보고 나왔으면 --flip).
+                 바퀴 밑 = y 46, 반쯤 비치게 --alpha (기본 225). 전조등 빛 · 문 · 승객 도깨비불은 게임이 그린다.
+  도깨비불 일렁임: 위쪽 40% 줄을 1px 씩 옆으로 밀어 (sway) 불꽃 꼬리가 흔들려 보이게.
+
+실행: python3 tools/import_ai_monster.py 그림.png --kind crab|boss|baby|sparrow|scarecrow|baby_sparrow|stump|cheonha|jiha|tree_spirit|will_o|will_o_baby|bus [--width 24] [--colors 20] [--preview 미리보기.png]
       (--sand 숨은그림.png: 모래에 파묻힌 게 그림이 따로 있으면 숨기 칸에 그걸 쓴다)
 
 지금 시트를 만든 명령 (그림 원본: /mnt/project-files/design/gumsa-ai/ai_*.png, 사용자 AI 그림 2026-09-30)
@@ -133,7 +140,79 @@ KINDS = {
     ]),
 }
 KINDS["jiha"] = dict(KINDS["cheonha"], out="wild_jiha")
+# 번천 세트 (2026-10-01). 정면. sway: 불꽃 윗부분 흔들기 (-1/1), burst: 부풂 불똥, dim: 쪼그라들어 어두움, ember: 아기 일 칸 불똥 단계
+KINDS["will_o"] = dict(out="wild_will_o", width=18, max_h=24, frames=[
+    dict(sx=1.0, sy=1.0, lift=2), dict(sx=1.03, sy=0.97, lift=2, sway=1),
+    dict(sx=1.0, sy=1.0, lift=3, sway=-1), dict(sx=0.97, sy=1.03, lift=4, sway=1),
+    dict(sx=1.0, sy=1.0, lift=3, sway=-1), dict(sx=1.03, sy=0.97, lift=2),
+    dict(sx=1.3, sy=1.18, lift=1, sway=1, burst=1), dict(sx=0.78, sy=0.75, lift=1, dim=1),
+])
+KINDS["will_o_baby"] = dict(out="baby_will_o_fire", width=13, max_h=17, frames=[
+    dict(sx=1.0, sy=1.0, lift=0), dict(sx=1.03, sy=0.97, lift=0, sway=1),
+    dict(sx=1.06, sy=0.92, lift=0, sway=-1), dict(sx=0.95, sy=1.06, lift=3, sway=1),
+    dict(sx=0.97, sy=1.03, lift=2, sway=-1), dict(sx=1.06, sy=0.92, lift=0),
+    dict(sx=1.0, sy=1.0, lift=0, sway=1, ember=1), dict(sx=1.05, sy=1.04, lift=1, sway=-1, ember=2),
+    dict(sx=1.0, sy=1.0, lift=0, sway=1, ember=1), dict(sx=1.0, sy=1.0, lift=0),
+])
+BUS_W, BUS_H, BUS_FLOOR = 96, 48, 46
 DROP = (150, 200, 240)
+BLUE_L, FIRE_C, FIRE_L = (210, 236, 255), (250, 150, 60), (255, 230, 130)
+
+
+def sway(img, d):
+    """위 40% 줄을 d px 옆으로 민다 (가운데 줄은 반만): 불꽃 꼬리가 일렁여 보이게."""
+    w, h = img.size
+    out = img.copy()
+    cut = round(h * 0.4)
+    out.paste((0, 0, 0, 0), (0, 0, w, cut))
+    for y in range(cut):
+        k = d if y < cut // 2 else (d if y % 2 else 0)
+        row = img.crop((0, y, w, y + 1))
+        out.alpha_composite(row, (max(0, k), y)) if k >= 0 else out.alpha_composite(row.crop((-k, 0, w, 1)), (0, y))
+    return out
+
+
+def dim(img):
+    """쪼그라든 도깨비불: 밝기를 낮추고 푸르게 (칠 틈)."""
+    px = img.load()
+    for y in range(img.height):
+        for x in range(img.width):
+            r, g, b, a = px[x, y]
+            if a:
+                px[x, y] = (int(r * 0.5), int(g * 0.55), int(b * 0.75 + 20), a)
+    return img
+
+
+def burst_sparks(l, left, top, W, H):
+    """부풂 칸: 몸 둘레에 튀는 푸른 불똥 (코드 그림과 같은 자리 감각)."""
+    cx, cy = left + W / 2, top + H * 0.6
+    for dx, dy in ((-W / 2 - 3, -2), (W / 2 + 2, -3), (-W / 2 - 1, 5), (W / 2 + 1, 6)):
+        l.px(cx + dx, cy + dy, BLUE_L)
+
+
+def embers(l, cx, base, stage):
+    """아기 도깨비불 일 칸: 양옆으로 올라가는 불똥."""
+    for i in range(stage + 1):
+        l.px(cx + 7 + i, base - 10 - i * 3, FIRE_L)
+        l.px(cx - 7 - i, base - 8 - i * 3, FIRE_C)
+
+
+def build_bus(src, width=86, colors=32, alpha=225, flip=False):
+    """유령 막차 옆모습 한 장 → 96x48. 바퀴 밑을 BUS_FLOOR 에 맞추고 가운데 정렬, 반쯤 비치게."""
+    fig = load_figure(src, flip)
+    pal_img = fig.convert("RGB").quantize(colors, method=Image.Quantize.FASTOCTREE)
+    h = round(width * fig.height / fig.width)
+    if h > BUS_FLOOR - 1:
+        width, h = round(width * (BUS_FLOOR - 1) / h), BUS_FLOOR - 1
+    body = pixelize(fig, pal_img, pal_img.getpalette(), width, h)
+    if not soften_edges(body):
+        outline(body, max(width, h))
+    grade_p1(body)
+    a = body.getchannel("A").point(lambda v: alpha if v else 0)
+    body.putalpha(a)
+    sheet = Image.new("RGBA", (BUS_W, BUS_H), (0, 0, 0, 0))
+    sheet.alpha_composite(body, (BUS_W // 2 - width // 2, BUS_FLOOR - h))
+    return sheet
 
 
 def fury_sparks(l, left, top, W, stage):
@@ -312,6 +391,10 @@ def build(src, kind, width=None, colors=20, redraw_eyes=False, sand_src=None, mo
         had_line = soften_edges(body) and had_line
         if f.get("step"):
             body = shove_legs(body, f["step"])
+        if f.get("sway"):
+            body = sway(body, f["sway"])
+        if f.get("dim"):
+            body = dim(body)
         move = None
         if f.get("rot"):
             W0, H0 = W, H
@@ -408,6 +491,10 @@ def build(src, kind, width=None, colors=20, redraw_eyes=False, sand_src=None, mo
             fury_sparks(l, left, top, W, f["fury"])
         if f.get("water"):
             water_drops(l, left + W // 2, top, f["water"])
+        if f.get("burst"):
+            burst_sparks(l, left, top, W, H)
+        if f.get("ember"):
+            embers(l, left + W // 2, top + H, f["ember"])
         if "work" in f:
             draw_tongue(l, int(round(left + mouth[0] * W)), int(round(top + mouth[1] * H)), f["work"])
         sheet.alpha_composite(l.img, (i * CELL, 0))
@@ -417,7 +504,7 @@ def build(src, kind, width=None, colors=20, redraw_eyes=False, sand_src=None, mo
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("src")
-    ap.add_argument("--kind", required=True, choices=sorted(KINDS))
+    ap.add_argument("--kind", required=True, choices=sorted(KINDS) + ["bus"])
     ap.add_argument("--width", type=int, help="기본 몸 가로 px (crab 24 · boss 26 · baby 22)")
     ap.add_argument("--colors", type=int, default=20)
     ap.add_argument("--redraw-eyes", action="store_true", help="AI 눈 · 입을 지우고 둥근 눈 + 반짝으로 다시 그린다")
@@ -436,11 +523,22 @@ def main():
     ap.add_argument("--flip", action="store_true", help="그림을 좌우로 뒤집는다 (참새가 오른쪽을 보고 나왔을 때)")
     ap.add_argument("--hide", help="잠든 그루터기 그림 (stump 숨기 칸)")
     ap.add_argument("--hide-eyes", help="잠든 그루터기 그림에서 눈이 번쩍일 자리 (몸 비율 x1,y1,x2,y2)")
+    ap.add_argument("--alpha", type=int, default=225, help="bus: 반쯤 비치는 정도 (0-255)")
     ap.add_argument("--out", help="기본: assets/creatures/<규격 이름>.png")
     ap.add_argument("--preview", help="4배 확대 미리보기 PNG")
     a = ap.parse_args()
     mouth = tuple(float(v) for v in a.mouth.split(","))
     pairs = lambda t: [tuple(v) for v in zip(*[iter(float(x) for x in t.split(","))] * 2)] if t else []
+    if a.kind == "bus":
+        sheet = build_bus(a.src, a.width or 86, a.colors if a.colors != 20 else 32, a.alpha, a.flip)
+        out = a.out or os.path.join(ROOT, "assets", "creatures", "ghost_bus.png")
+        sheet.save(out)
+        print(out)
+        if a.preview:
+            bg = Image.new("RGBA", sheet.size, (40, 46, 60, 255))
+            bg.alpha_composite(sheet)
+            bg.resize((sheet.width * 4, sheet.height * 4), Image.NEAREST).save(a.preview)
+        return
     sheet = build(a.src, a.kind, a.width, a.colors, a.redraw_eyes, a.sand, mouth,
                   pairs(a.eyes), a.eye_size, a.eye_ring, pairs(a.cheeks), a.eye_lid, a.fly, a.flip, pairs(a.fly_eyes),
                   tuple(int(v) for v in a.eye_color.split(",")) if a.eye_color else EYE, a.peek, a.angry, a.hide, pairs(a.hide_eyes))
