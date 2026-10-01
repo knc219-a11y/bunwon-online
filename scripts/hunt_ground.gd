@@ -1056,6 +1056,7 @@ func _take(d: Dictionary) -> bool:
 func _hurt(from: Vector2, damage := 1, who := "야생 슬라임", what := "") -> void:
 	hearts -= damage
 	_invulnerable = Config.HURT_INVULNERABLE_TIME
+	Sound.sfx(&"hurt")
 	var away := (hunter.feet() - from).normalized()
 	if away == Vector2.ZERO:
 		away = Vector2.DOWN

@@ -2556,6 +2556,9 @@ func _ready() -> void:
 	ex.queue_free()
 	await get_tree().process_frame
 
+	# 43) 소리 (2026-10-01 사운드 첫 단계): 버스 · 소리 파일 · 배경음 고르기 · 크기 단계
+	await _sound_checks()
+
 	# 41) 저장/불러오기 (2026-09-30 사용자 선택 C 디아2식): 저장 → 장면을 버리고 → 새 장면에 불러오면 모든 상태가 같다
 	await _save_load_checks()
 
@@ -2655,7 +2658,7 @@ func _save_load_checks() -> void:
 	# 사냥터 안에서 저장하고 나가기: 마을로 돌아온 채로 저장
 	b.save_slot = 3
 	b.open_menu(&"pause")
-	_check(b.hunt.process_mode == Node.PROCESS_MODE_DISABLED and b._menu_options == [&"resume", &"save_quit"], "사냥 중 Esc: 사냥터가 멈추고 계속하기 · 저장하고 나가기")
+	_check(b.hunt.process_mode == Node.PROCESS_MODE_DISABLED and b._menu_options == [&"resume", &"music_volume", &"sfx_volume", &"save_quit"], "사냥 중 Esc: 사냥터가 멈추고 계속하기 · 소리 크기 · 저장하고 나가기")
 	b.close_menu()
 	b.leave_hunt()
 	_check(SaveGame.exists(3) and SaveGame.read(3).gs.hunts_today == 1 and SaveGame.read(3).gs.hunter_eggs.size() == eggs_n, "사냥터에서 돌아오면 저절로 저장")
@@ -2731,6 +2734,47 @@ func close_all(main: Node2D) -> void:
 	main.close_inventory()
 	if main.hunt:
 		main.leave_hunt()
+
+
+func _sound_checks() -> void:
+	_check(AudioServer.get_bus_index(&"Music") > 0 and AudioServer.get_bus_index(&"SFX") > 0, "오디오 버스: Master · Music · SFX")
+	var missing: Array[String] = []
+	for id in [&"hoe", &"water", &"harvest", &"coin", &"hatch", &"hit", &"hurt"]:
+		if Sound._stream(Sound.SFX_DIR, id) == null:
+			missing.append(String(id))
+	for id in [&"village_day", &"village_night", &"hunt"]:
+		var st := Sound._stream(Sound.BGM_DIR, id)
+		if st == null or not (st as AudioStreamOggVorbis).loop:
+			missing.append(String(id))
+	_check(missing.is_empty(), "효과음 7개 · 배경음 3개(반복) 모두 있음 %s" % [missing])
+	var so: Node2D = load("res://scenes/main.tscn").instantiate()
+	add_child(so)
+	await get_tree().process_frame
+	GameState.minutes = 8 * 60
+	var day_bgm: StringName = so.wanted_bgm()
+	GameState.minutes = Config.NIGHT_MUSIC_MINUTE + 30
+	var night_bgm: StringName = so.wanted_bgm()
+	GameState.hunter_unlocked = true
+	GameState.hunts_today = 0
+	so.hunter.position = so.hunt_gate.position
+	so.enter_hunt()
+	var hunt_bgm: StringName = so.wanted_bgm()
+	await get_tree().process_frame
+	_check(day_bgm == &"village_day" and night_bgm == &"village_night" and hunt_bgm == &"hunt" and Sound.bgm_name == &"hunt", "배경음: 낮 · 저녁 7시부터 밤 · 사냥터")
+	so.leave_hunt()
+	so.queue_free()
+	await get_tree().process_frame
+	var m0 := Sound.music_volume
+	var steps: Array[float] = []
+	var v := 1.0
+	for i in Sound.VOLUME_STEPS.size():
+		steps.append(v)
+		v = Sound.next_step(v)
+	_check(steps == Sound.VOLUME_STEPS and Sound.next_step(0.0) == 1.0 and Sound.percent(0.0) == "끔" and Sound.percent(0.6) == "60%", "크기 단계 100 → 80 → … → 끔 → 100")
+	Sound.set_music_volume(0.0)
+	_check(AudioServer.is_bus_mute(AudioServer.get_bus_index(&"Music")), "배경음 끔 = Music 버스 음소거")
+	Sound.set_music_volume(m0)
+	_check(not AudioServer.is_bus_mute(AudioServer.get_bus_index(&"Music")), "배경음 다시 켬")
 
 
 func _check(ok: bool, what: String) -> void:
