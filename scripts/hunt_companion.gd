@@ -91,12 +91,15 @@ func speed() -> float:
 func move_toward_point(to: Vector2, delta: float) -> bool:
 	var d := position.distance_to(to)
 	_moving = d > 2.0
+	if _moving:
+		Creature.face_sprite(_sprite, data.species.faces, to.x - position.x)
 	position = position.move_toward(to, speed() * delta)
 	return not _moving
 
 
 func play_attack(at: Vector2) -> void:
 	_attack_time = Creature.WATER_COLUMNS.size() / Creature.WORK_FPS
+	Creature.face_sprite(_sprite, data.species.faces, at.x - position.x)
 	if style == Style.SHOT:
 		shot_to = at
 		shot_time = 0.2

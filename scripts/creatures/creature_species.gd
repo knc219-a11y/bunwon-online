@@ -41,5 +41,8 @@ extends Resource
 ## 알 껍데기와 점 색 (사냥터 땅에 떨어진 알)
 @export var egg_color := Color(0.97, 0.93, 0.8)
 @export var egg_spot_color := Color(0.55, 0.8, 0.95)
+## 시트 그림이 보는 쪽 (2026-10-01 사용자: "두꺼비들이 한방향만 바라보니까 어색해"):
+## 1 = 오른쪽, -1 = 왼쪽, 0 = 정면. 옆을 보는 그림이면 가는 쪽 (동행은 공격하는 쪽) 으로 좌우 반전한다.
+@export var faces := 0
 ## 임시 도형 색 (시트가 없을 때)
 @export var color := Color.WHITE

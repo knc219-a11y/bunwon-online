@@ -416,6 +416,12 @@ func tick(delta: float, target: Vector2) -> void:
 		if _bus_t >= 0.0 or _bus_aim >= 0.0:
 			_sprite.flip_h = _bus_to.x < position.x
 	_sprite.frame = col
+	if boss and pattern == &"tongue":
+		# 금두꺼비 대장 그림은 오른쪽을 본다 (2026-10-01 사용자: "두꺼비들이 한방향만 바라보니까 어색해"): 혀 겨누는 쪽 · 사냥꾼 쪽으로
+		_sprite.flip_h = (_tongue_to.x < position.x) if _aim >= 0.0 else (target.x < position.x)
+	elif flyer:
+		# 요괴 까마귀 그림은 왼쪽을 본다: 내려찍는 쪽 · 사냥꾼 쪽으로
+		_sprite.flip_h = (_dive_to.x > position.x) if in_air() else (target.x > position.x)
 	if wolf or pattern == &"tiger":
 		# 네발 짐승 그림은 오른쪽을 본다: 사냥꾼 쪽 (달려드는 중이면 달려드는 쪽) 으로 뒤집는다
 		_sprite.flip_h = (_lunge_dir.x < 0.0) if (_windup >= 0.0 or _lunge_t >= 0.0) else (target.x < position.x)

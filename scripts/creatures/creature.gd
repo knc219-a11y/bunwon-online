@@ -246,6 +246,7 @@ func _forage_once() -> bool:
 func _hop_to(to: Vector2, done: Callable, by_distance := true) -> void:
 	_busy = true
 	_play(Anim.HOP)
+	face(to.x - position.x)
 	var tiles := maxf(position.distance_to(to) / Config.TILE, 1.0) if by_distance else 1.0
 	var tw := create_tween()
 	tw.tween_property(self, "position", to, hop_time() * tiles)
@@ -255,6 +256,16 @@ func _hop_to(to: Vector2, done: Callable, by_distance := true) -> void:
 		done.call()
 		_busy = false
 		_play(Anim.IDLE))
+
+
+## 옆을 보는 그림 (species.faces) 이면 dx 쪽을 보게 좌우 반전한다. 정면 그림은 그대로.
+func face(dx: float) -> void:
+	face_sprite(_sprite, data.species.faces, dx)
+
+
+static func face_sprite(sprite: Sprite2D, faces: int, dx: float) -> void:
+	if sprite != null and faces != 0 and absf(dx) > 0.5:
+		sprite.flip_h = (dx > 0.0) != (faces > 0)
 
 
 ## 시트에서 지금 보여 줄 열
