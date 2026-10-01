@@ -22,6 +22,7 @@ import argparse
 import colorsys
 import json
 import os
+import sys
 from collections import Counter
 
 from PIL import Image
@@ -303,39 +304,153 @@ def shift(img, box, dx, dy):
     return out
 
 
-def frames(fig, side_view, hip):
-    """[대기0, 대기1, 걷기 contact_a, pass_a, contact_b, pass_b]"""
+def move_px(img, pts, dx, dy, fill=None):
+    """pts 자리 픽셀을 (dx, dy) 옮긴다. 빈 자리는 fill(x, y) 색.
+    fill 이 없으면 빈 자리 뒤쪽 (옮긴 반대 방향) 이웃이 몸이면 원래 색을 남기고 (팔이 1px 늘어남, 어깨에 틈 없음), 끝이면 투명."""
+    out = img.copy()
+    src, dst = img.load(), out.load()
+    w, h = img.size
+    inside = set(pts)
+    for x, y in pts:
+        if fill:
+            dst[x, y] = fill(x, y)
+            continue
+        bx, by = x - dx, y - dy
+        keep = 0 <= bx < w and 0 <= by < h and (bx, by) not in inside and src[bx, by][3]
+        dst[x, y] = src[x, y] if keep else (0, 0, 0, 0)
+    for x, y in pts:
+        if 0 <= x + dx < w and 0 <= y + dy < h:
+            dst[x + dx, y + dy] = src[x, y]
+    return out
+
+
+def arm_points(part, hip, side_view):
+    """부위 지도에서 팔(살 · 윗도리 소매) 아랫부분 픽셀. 앞 · 뒤는 바지 폭 바깥, 옆은 몸통 위 살색."""
+    w, h = part.size
+    pm = part.load()
+    is_ = lambda x, y, *names: pm[x, y][3] and pm[x, y][:3] in [PART_COLORS[n] for n in names]
+    if side_view:
+        # 옆모습 팔: 어깨 아래 ~ 엉덩이 사이 살색 (얼굴은 어깨 위라 빠진다)
+        return [(x, y) for y in range(round(h * 0.5), hip + 2) for x in range(w) if is_(x, y, "skin")]
+    pants = [x for x in range(w) if is_(x, hip + 1, "pants", "top")]
+    if not pants:
+        return []
+    lo, hi = min(pants), max(pants)
+    # 팔 아랫부분 (아래팔 · 손)만: 어깨까지 옮기면 어깨에 틈이 생긴다
+    return [(x, y) for y in range(round(h * 0.5), hip + 3) for x in range(w)
+            if (x < lo or x > hi) and is_(x, y, "skin", "top")]
+
+
+def frames(fig, side_view, hip, part):
+    """[대기0, 대기1, 걷기 contact_a, pass_a, contact_b, pass_b]
+
+    2026-10-01 사용자 "캐릭터 걷는 모션이 너무 어색": 예전엔 앞 · 뒤는 엉덩이 아래 반쪽을 통째로 2px 올리고,
+    옆은 다리를 1px 씩만 벌려 미끄러지듯 보였다. 이제
+      - 내딛는 칸(contact)에서 몸이 1px 내려앉고, 지나가는 칸(pass)에서 1px 올라간다 (반대였음)
+      - 앞 · 뒤: 무릎 아래만 들고 (반바지가 찢어지지 않게), 반대쪽 팔 아랫부분이 1px 흔들린다
+      - 옆: 다리를 엉덩이에서 발끝으로 갈수록 벌린다 (뒷다리는 어둡게), 팔이 앞뒤로 1px 흔들린다
+    부위 지도(part)로 팔을 찾고, 같은 옮김을 부위 지도에도 해야 장비 덧그림이 맞는다 → frames 는 (그림, 부위 지도) 둘 다 돌려준다.
+    """
     w, h = fig.size
     mid = w // 2
-    idle1 = shift(fig, (0, 0, w, hip - 2), 0, 1)  # 숨쉬기: 윗몸 1px 내려감
-    up = shift(fig, (0, 0, w, h), 0, -1)  # 걸음 사이 몸이 1px 들썩
+    knee = hip + (h - hip) // 2
+    both = lambda f: (f(fig), f(part))
+    idle1 = both(lambda im: shift(im, (0, 0, w, hip - 2), 0, 1))  # 숨쉬기: 윗몸 1px 내려감
+    arms = arm_points(part, hip, side_view)
+    left_arm = [(x, y) for x, y in arms if x < mid]
+    right_arm = [(x, y) for x, y in arms if x >= mid]
     if not side_view:
-        ca = shift(fig, (0, hip, mid, h), 0, -2)  # 왼발 들기
-        cb = shift(fig, (mid, hip, w, h), 0, -2)  # 오른발 들기
+        def step(lift_left):
+            def f(im):
+                # 무릎 아래 한쪽 발 들기 + 반대쪽 팔 앞으로 (1px 위) · 같은 쪽 팔 뒤로 (1px 아래) + 몸 1px 내려앉기
+                box = (0, knee, mid, h) if lift_left else (mid, knee, w, h)
+                out = shift(im, box, 0, -2)
+                fwd, back = (right_arm, left_arm) if lift_left else (left_arm, right_arm)
+                out = move_px(out, fwd, 0, -1)
+                out = move_px(out, [(x, y) for x, y in back], 0, 1)
+                return shift(out, (0, 0, w, knee), 0, 1)
+            return f
+        ca, cb = both(step(True)), both(step(False))
+        pa = both(lambda im: shift(im, (0, 0, w, h), 0, -1))
+        pb = pa
     else:
-        def stride(d):
-            # 엉덩이 아래 줄마다 뒤쪽 반은 -d, 앞쪽 반은 +d 로 벌리고 가운데 빈틈은 가운데 색으로 메운다
-            out = fig.copy()
-            src, dst = fig.load(), out.load()
-            for y in range(hip, h):
-                row = [src[x, y] for x in range(w)]
-                for x in range(w):
-                    sx_ = x + d if x < mid - d else (x - d if x >= mid + d else mid - (1 if x < mid else 0))
-                    dst[x, y] = row[sx_] if 0 <= sx_ < w else (0, 0, 0, 0)
-            return out
-        ca, cb = stride(1), stride(-1)
-    return [fig, idle1, ca, up, cb, up]
+        def stride(d, dark_back):
+            def f(im):
+                # 엉덩이 아래를 앞다리(+) · 뒷다리(-) 둘로: 아래로 갈수록 벌어진다. 뒷다리는 조금 어둡게.
+                src = im.load()
+                legs_front = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+                legs_back = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+                lf, lb = legs_front.load(), legs_back.load()
+                for y in range(hip, h):
+                    off = round(d * (y - hip + 1) / (h - hip))
+                    for x in range(w):
+                        c = src[x, y]
+                        if not c[3]:
+                            continue
+                        if 0 <= x + off < w:
+                            lf[x + off, y] = c
+                        if 0 <= x - off < w:
+                            k = 0.82 if dark_back and im is fig else 1.0
+                            lb[x - off, y] = (int(c[0] * k), int(c[1] * k), int(c[2] * k), c[3])
+                out = im.copy()
+                out.paste((0, 0, 0, 0), (0, hip, w, h))
+                out.alpha_composite(legs_back)
+                out.alpha_composite(legs_front)
+                # 팔은 뒷다리 쪽으로 (다리와 반대로) 1px, 비운 자리는 바로 옆 몸통 색
+                o = out.load()
+                out = move_px(out, arms, -1 if d > 0 else 1, 0,
+                              lambda x, y: o[x + (1 if d > 0 else -1), y] if 0 <= x + (1 if d > 0 else -1) < w and (x + (1 if d > 0 else -1), y) not in arms else o[x, y])
+                return shift(out, (0, 0, w, hip), 0, 1)
+            return f
+        ca, cb = both(stride(3, True)), both(stride(-3, True))
+        def passing(im):
+            # 지나가는 칸: 다리 모으고 몸 1px 들썩, 뒷발 1px 들기
+            out = shift(im, (0, 0, w, h), 0, -1)
+            return shift(out, (0, h - 3, mid, h), 0, -1)
+        pa = both(passing)
+        pb = pa
+    return [(fig, part), idle1, ca, pa, cb, pb]
 
 
-def build_sheet(views, hip):
+def build_sheet(views, parts, hip):
     sheet = Image.new("RGBA", (CELL * COLS, CELL * ROWS), (0, 0, 0, 0))
-    for r, (fig, sv) in enumerate([(views["down"], False), (views["up"], False), (views["side"], True)]):
-        for c, fr in enumerate(frames(fig, sv, hip)):
-            sheet.alpha_composite(fr, (c * CELL + (CELL - fr.width) // 2, r * CELL + CELL - fr.height))
-    return sheet
+    parts_sheet = Image.new("RGBA", sheet.size, (0, 0, 0, 0))
+    for r, (key, sv) in enumerate([("down", False), ("up", False), ("side", True)]):
+        for c, (fr, pt) in enumerate(frames(views[key], sv, hip, parts[key])):
+            pos = (c * CELL + (CELL - fr.width) // 2, r * CELL + CELL - fr.height)
+            sheet.alpha_composite(fr, pos)
+            parts_sheet.alpha_composite(pt, pos)
+    return sheet, parts_sheet
+
+
+def rewalk(name):
+    """이미 만든 시트의 대기 0칸(손대지 않은 몸)에서 숨쉬기 · 걷기 칸만 다시 만든다. 원본 그림 · 옵션 없이도 된다.
+    (2026-10-01 걷기 모션 고칠 때 다섯 캐릭터에 썼다. 그 뒤엔 make_wear_sheets.py 를 다시 돌린다.)"""
+    sheet_path = os.path.join(ROOT, "assets", "characters", f"{name}.png")
+    parts_path = os.path.join(PARTS_DIR, f"{name}.png")
+    sheet, parts = Image.open(sheet_path).convert("RGBA"), Image.open(parts_path).convert("RGBA")
+    new_sheet = Image.new("RGBA", sheet.size, (0, 0, 0, 0))
+    new_parts = Image.new("RGBA", sheet.size, (0, 0, 0, 0))
+    for r, sv in enumerate((False, False, True)):
+        cell = (0, r * CELL, CELL, r * CELL + CELL)
+        fig, part = sheet.crop(cell), parts.crop(cell)
+        box = fig.getbbox()
+        fig, part = fig.crop(box), part.crop(box)
+        hip = round(fig.height * 0.68)
+        for c, (fr, pt) in enumerate(frames(fig, sv, hip, part)):
+            pos = (c * CELL + box[0], r * CELL + box[1])
+            new_sheet.alpha_composite(fr, pos)
+            new_parts.alpha_composite(pt, pos)
+    new_sheet.save(sheet_path)
+    new_parts.save(parts_path)
+    print("rewalk", name)
 
 
 def main():
+    if len(sys.argv) > 2 and sys.argv[1] == "--rewalk":
+        for name in sys.argv[2:]:
+            rewalk(name)
+        return
     ap = argparse.ArgumentParser()
     ap.add_argument("src")
     ap.add_argument("--name", default="player")
@@ -397,8 +512,7 @@ def main():
         with open(a.patch, encoding="utf-8") as fp:
             apply_patch(views, json.load(fp))
     hip = round(a.height * 0.68)
-    sheet = build_sheet(views, hip)
-    parts_sheet = build_sheet(parts, hip)
+    sheet, parts_sheet = build_sheet(views, parts, hip)
     out = a.out or os.path.join(ROOT, "assets", "characters", f"{a.name}.png")
     sheet.save(out)
     os.makedirs(PARTS_DIR, exist_ok=True)

@@ -19,7 +19,15 @@
   까마귀 둘은 왼쪽을 보는 옆모습: 앉은 그림 + --fly 날개 편 그림 (없으면 앉은 그림만 흔든다). 오른쪽을 보면 --flip.
   발밑 보라 안개 · 다리 사이 흰 바탕은 지운다 (clear_mist). 붉은 눈은 --eyes/--fly-eyes + --eye-color 로 다시 찍는다.
 
-실행: python3 tools/import_ai_monster.py 그림.png --kind crab|boss|baby|sparrow|scarecrow|baby_sparrow [--width 24] [--colors 20] [--preview 미리보기.png]
+도마리 세트 (2026-09-30): 프롬프트는 /mnt/project-files/design/doma-ai/prompt.md.
+  stump        → assets/creatures/wild_old_stump.png (256x32): 0-1 깨어 있음, 2-5 뿌리 다리로 걷기, 6 그루터기인 척, 7 숨은 채 눈 번쩍
+  cheonha      → assets/creatures/wild_cheonha.png (256x32): 0-1 노려봄, 2-5 깡충, 6-7 성남 (흔들림 + 불꽃). 게임에서 1.8배
+  jiha         → assets/creatures/wild_jiha.png (256x32): 천하대장군과 같음
+  tree_spirit  → assets/creatures/baby_tree_spirit_earth.png (320x32): 0-1 대기, 2-5 깡충, 6-9 일 (새싹 흔들기 + 물방울)
+  그루터기 숨기 칸: --hide 잠든 그루터기 그림이 있으면 그걸 쓰고 7칸에 --hide-eyes 자리에 붉은 눈을 찍는다.
+  없으면 make_doma_sheets 의 코드 그루터기 (납작한 나이테 윗면)를 쓴다.
+
+실행: python3 tools/import_ai_monster.py 그림.png --kind crab|boss|baby|sparrow|scarecrow|baby_sparrow|stump|cheonha|jiha|tree_spirit [--width 24] [--colors 20] [--preview 미리보기.png]
       (--sand 숨은그림.png: 모래에 파묻힌 게 그림이 따로 있으면 숨기 칸에 그걸 쓴다)
 
 지금 시트를 만든 명령 (그림 원본: /mnt/project-files/design/gumsa-ai/ai_*.png, 사용자 AI 그림 2026-09-30)
@@ -33,6 +41,11 @@
   ai_crow.png --kind sparrow --fly ai_crow_fly.png --flip --colors 24 --eyes 0.2,0.31 --fly-eyes 0.2,0.53 --eye-color 230,50,60
   ai_scarecrow.png --kind scarecrow --colors 28   (눈은 AI 그림 그대로: 다시 찍은 빨간 눈은 사용자가 이상하다고 함)
   ai_baby.png --kind baby_sparrow --fly ai_baby_fly.png --flip --colors 24 --eyes 0.37,0.4 --fly-eyes 0.41,0.4 --eye-color 200,40,56
+도마리 (그림 원본: /mnt/project-files/design/doma-ai/ai_*.png, 사용자 AI 그림 2026-10-01, 보기 A 붉은 눈 나무 요괴)
+  ai_stump.png --kind stump --width 31 --hide ai_stump_sleep.png --hide-eyes 0.42,0.5,0.6,0.5 --colors 28 --eyes 0.398,0.469,0.602,0.469 --eye-color 255,56,40 --angry
+  ai_cheonha.png --kind cheonha --colors 28 --eyes 0.325,0.379,0.662,0.379 --eye-size 1 --eye-ring --eye-color 220,30,30
+  ai_jiha.png --kind jiha --colors 28 --eyes 0.273,0.329,0.71,0.329 --eye-size 1 --eye-ring --eye-color 220,30,30
+  ai_baby.png --kind tree_spirit --colors 24 --eyes 0.2,0.63,0.6,0.645 --cheeks 0.14,0.73,0.66,0.76
 """
 import argparse
 import os
@@ -42,6 +55,7 @@ from PIL import Image
 from import_ai_character import pixelize, white_to_alpha
 from import_ai_slime import draw_face, find_face, inpaint, largest_blob, peel_halo, soften_edges
 from make_character_sheet import grade_p1, outline
+from make_doma_sheets import FIRE, stump as code_stump
 from make_gold_toad_sheet import GOLD, GOLD_L, TONGUE, TONGUE_D, TONGUE_L
 from make_slime_sheet import CELL, Layer
 from make_wild_sheets import GOLD as SAND_GOLD, SAND, SAND_D, SAND_L, crab_buried, ellipse
@@ -97,7 +111,45 @@ KINDS = {
         dict(sx=1.0, sy=1.0, lift=0, rot=22), dict(sx=1.0, sy=1.0, lift=0),
         dict(sx=1.0, sy=1.0, lift=0, rot=22), dict(sx=1.03, sy=0.96, lift=0),
     ]),
+    # 도마리 세트 (2026-09-30). 모두 정면. hide: 그루터기인 척 (0 잠듦 · 1 눈 번쩍), fury: 성난 불꽃, water: 물방울 단계
+    "stump": dict(out="wild_old_stump", width=26, max_h=26, frames=[
+        dict(sx=1.0, sy=1.0, lift=0), dict(sx=1.02, sy=0.97, lift=0),
+        dict(sx=1.0, sy=1.0, lift=1, step=1, dx=-1), dict(sx=1.0, sy=0.97, lift=0, step=-1, dx=0),
+        dict(sx=1.0, sy=1.0, lift=1, step=1, dx=1), dict(sx=1.0, sy=0.97, lift=0, step=-1, dx=0),
+        dict(hide=0), dict(hide=1),
+    ]),
+    "cheonha": dict(out="wild_cheonha", width=17, max_h=31, frames=[
+        dict(sx=1.0, sy=1.0, lift=0), dict(sx=1.03, sy=0.98, lift=0),
+        dict(sx=1.06, sy=0.92, lift=0, dx=-1), dict(sx=0.95, sy=1.0, lift=2),
+        dict(sx=0.97, sy=0.98, lift=1, dx=1), dict(sx=1.06, sy=0.93, lift=0),
+        dict(sx=1.0, sy=1.0, lift=0, dx=-1, fury=1), dict(sx=1.04, sy=0.98, lift=1, dx=1, fury=2),
+    ]),
+    "tree_spirit": dict(out="baby_tree_spirit_earth", width=15, frames=[
+        dict(sx=1.0, sy=1.0, lift=0), dict(sx=1.04, sy=0.96, lift=0),
+        dict(sx=1.08, sy=0.9, lift=0), dict(sx=0.93, sy=1.06, lift=3),
+        dict(sx=0.96, sy=1.03, lift=4), dict(sx=1.08, sy=0.9, lift=0),
+        dict(sx=1.0, sy=1.0, lift=0, rot=-6, water=1), dict(sx=1.0, sy=1.0, lift=0, rot=6, water=2),
+        dict(sx=1.0, sy=1.0, lift=0, rot=-6, water=1), dict(sx=1.03, sy=0.97, lift=0),
+    ]),
 }
+KINDS["jiha"] = dict(KINDS["cheonha"], out="wild_jiha")
+DROP = (150, 200, 240)
+
+
+def fury_sparks(l, left, top, W, stage):
+    """장승이 성날 때 머리 둘레에 튀는 불꽃 (코드 그림과 같은 자리 감각)."""
+    for i, (fx, dy) in enumerate(((-0.25, 1), (1.2, 2), (-0.35, 7), (1.3, 8))):
+        if i < 2 or stage == 2:
+            x, y = int(round(left + fx * W)), top + dy - (stage == 2)
+            l.px(x, y, FIRE)
+            l.px(x, y - 1, (255, 244, 190))
+
+
+def water_drops(l, cx, top, stage):
+    """아기 나무 정령 일 칸: 새싹을 흔들면 양옆으로 물방울."""
+    for i in range(stage + 1):
+        l.px(cx + 7 + i, top + 2 + i * 3, DROP)
+        l.px(cx - 8 - i, top + 3 + i * 3, DROP)
 
 
 def clear_mist(im):
@@ -220,7 +272,7 @@ def tilt(body, deg):
 
 def build(src, kind, width=None, colors=20, redraw_eyes=False, sand_src=None, mouth=(0.5, 0.62),
           spot_eyes=None, eye_size=2, eye_ring=False, cheeks=(), eye_lid=False, fly_src=None, flip=False,
-          fly_eyes=None, eye_color=EYE, peek=None, angry=False):
+          fly_eyes=None, eye_color=EYE, peek=None, angry=False, hide_src=None, hide_eyes=None):
     spec = KINDS[kind]
     width = width or spec["width"]
     fig = load_figure(src, flip, spec.get("mist", False))
@@ -246,7 +298,7 @@ def build(src, kind, width=None, colors=20, redraw_eyes=False, sand_src=None, mo
     had_line = True
     stalks = None
     for i, f in enumerate(frames):
-        if "sand" in f:
+        if "sand" in f or "hide" in f:
             placed.append(None)
             continue
         use_fly = f.get("fly") and fly is not None
@@ -280,6 +332,29 @@ def build(src, kind, width=None, colors=20, redraw_eyes=False, sand_src=None, mo
     sheet.alpha_composite(bodies)
     for i, (f, p) in enumerate(zip(frames, placed)):
         l = Layer()
+        if "hide" in f:
+            if hide_src:
+                # 잠든 그루터기 그림: 깨어난 몸과 같은 가로로, 7칸은 --hide-eyes 자리에 붉은 눈이 번쩍
+                hid = load_figure(hide_src)
+                hp = hid.convert("RGB").quantize(colors, method=Image.Quantize.FASTOCTREE)
+                hw = width
+                hh = min(CELL, round(hw * hid.height / hid.width))
+                img = pixelize(hid, hp, hp.getpalette(), hw, hh)
+                if not soften_edges(img):
+                    outline(img, max(hw, hh))
+                grade_p1(img)
+                hl, ht = CELL // 2 - hw // 2, CELL - hh
+                sheet.alpha_composite(img, (i * CELL + hl, ht))
+                if f["hide"] and hide_eyes:
+                    spot_face(l, hl, ht, hw, hh, hide_eyes, eye_size, False, (), False, eye_color, True)
+                    sheet.alpha_composite(l.img, (i * CELL, 0))
+                continue
+            code_stump(l, hide=2, axe=0, glow=bool(f["hide"]))
+            mound = l.img
+            outline(mound, CELL)
+            grade_p1(mound)
+            sheet.alpha_composite(mound, (i * CELL, 0))
+            continue
         if "sand" in f:
             if sand_src:
                 sand = load_figure(sand_src)
@@ -329,6 +404,10 @@ def build(src, kind, width=None, colors=20, redraw_eyes=False, sand_src=None, mo
             use_eyes = [move(fx, fy) for fx, fy in use_eyes]
         if use_eyes:
             spot_face(l, left, top, W, H, use_eyes, eye_size, eye_ring, cheeks if not f.get("fly") else (), eye_lid, eye_color, angry)
+        if f.get("fury"):
+            fury_sparks(l, left, top, W, f["fury"])
+        if f.get("water"):
+            water_drops(l, left + W // 2, top, f["water"])
         if "work" in f:
             draw_tongue(l, int(round(left + mouth[0] * W)), int(round(top + mouth[1] * H)), f["work"])
         sheet.alpha_composite(l.img, (i * CELL, 0))
@@ -355,6 +434,8 @@ def main():
     ap.add_argument("--fly-eyes", help="날개 편 그림의 눈 자리 (몸 비율 x,y, 옆모습이라 하나)")
     ap.add_argument("--eye-color", help="눈 색 r,g,b (요괴 까마귀 붉은 눈)")
     ap.add_argument("--flip", action="store_true", help="그림을 좌우로 뒤집는다 (참새가 오른쪽을 보고 나왔을 때)")
+    ap.add_argument("--hide", help="잠든 그루터기 그림 (stump 숨기 칸)")
+    ap.add_argument("--hide-eyes", help="잠든 그루터기 그림에서 눈이 번쩍일 자리 (몸 비율 x1,y1,x2,y2)")
     ap.add_argument("--out", help="기본: assets/creatures/<규격 이름>.png")
     ap.add_argument("--preview", help="4배 확대 미리보기 PNG")
     a = ap.parse_args()
@@ -362,7 +443,7 @@ def main():
     pairs = lambda t: [tuple(v) for v in zip(*[iter(float(x) for x in t.split(","))] * 2)] if t else []
     sheet = build(a.src, a.kind, a.width, a.colors, a.redraw_eyes, a.sand, mouth,
                   pairs(a.eyes), a.eye_size, a.eye_ring, pairs(a.cheeks), a.eye_lid, a.fly, a.flip, pairs(a.fly_eyes),
-                  tuple(int(v) for v in a.eye_color.split(",")) if a.eye_color else EYE, a.peek, a.angry)
+                  tuple(int(v) for v in a.eye_color.split(",")) if a.eye_color else EYE, a.peek, a.angry, a.hide, pairs(a.hide_eyes))
     out = a.out or os.path.join(ROOT, "assets", "creatures", KINDS[a.kind]["out"] + ".png")
     sheet.save(out)
     print(out)
