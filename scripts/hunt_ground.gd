@@ -213,6 +213,10 @@ func _fill_zone() -> void:
 		add_child(sign_node)
 	_setup_night(z)
 	_ground.queue_redraw()
+	# 한 번 쓰러뜨린 구역은 대장이 처음부터 나와 있다 (일반 몬스터도 그대로 있다)
+	boss_spawned = false
+	if zone in GameState.bosses_beaten:
+		spawn_boss()
 
 
 ## 밤 구역 (2026-09-29 번천, 사용자: "주변에 산이랑 도로만있어서 다른데보다 기온이 낮고 어두워"):
@@ -502,6 +506,8 @@ func advance() -> bool:
 	var text := "%d구역 %s에 들어왔다. %s이(가) 더 단단하고 빠르다!" % [zone + 1, z.name, z.monster]
 	if z.has("advice"):
 		text += " (%s)" % z.advice
+	if boss_spawned:
+		text += " " + boss_waiting_text()
 	if z.waypoint and not zone in GameState.waypoints:
 		GameState.waypoints.append(zone)
 		text += " 웨이포인트가 켜졌다. 내일부터 사냥터 입구에서 여기서 시작할 수 있다."
@@ -812,6 +818,8 @@ func _defeat(s: WildSlime) -> void:
 		drops.append({at = _reachable(s.position + Vector2(-10, 4)), species = sp})
 		GameState.first_egg_done = true
 		GameState.notify("%s이(가) 알을 남겼다! 부화하면 %s." % [s.title, sp.display_name])
+	if last_boss and not zone in GameState.bosses_beaten:
+		GameState.bosses_beaten.append(zone)
 	if last_boss and zone + 1 < Config.HUNT_ZONES.size():
 		path_open = true
 		_ground.queue_redraw()
@@ -829,6 +837,13 @@ func _defeat(s: WildSlime) -> void:
 
 
 ## 야생 슬라임을 다 쓰러뜨리면 공터 가운데에 대장 슬라임이 나온다 (디아블로2 챔피언처럼).
+## 한 번 쓰러뜨린 대장이 처음부터 나와 있을 때 알림
+func boss_waiting_text() -> String:
+	var z: Dictionary = Config.HUNT_ZONES[zone]
+	var who := "%s과(와) %s" % [z.boss_monster, z.partner.name] if z.has("partner") else String(z.boss_monster)
+	return "전에 쓰러뜨린 %s이(가) 벌써 기다리고 있다!" % who
+
+
 func _egg_roll() -> float:
 	return egg_roll if egg_roll >= 0.0 else loot_rng.randf()
 

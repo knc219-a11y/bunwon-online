@@ -839,6 +839,8 @@ func _ready() -> void:
 	# 23) 스테이지 사냥터 (2026-09-28 사용자 선택 B + 웨이포인트): 대장을 쓰러뜨리면 위쪽 길로 다음 구역, 웨이포인트는 도착하면 켜짐
 	var z2: Dictionary = Config.HUNT_ZONES[1]
 	_check(GameState.waypoints == [0], "처음엔 웨이포인트가 1구역(입구)뿐")
+	# 앞 섹션에서 잡은 대장은 지운다 (처음 들어가는 흐름부터 보고, 다시 들어가면 대장이 나와 있는 것은 이 섹션 끝에서 본다)
+	GameState.bosses_beaten.clear()
 	main.next_day()
 	main._set_active(main.hunter)
 	main.hunter.position = main.hunt_gate.position
@@ -929,6 +931,27 @@ func _ready() -> void:
 	main.next_day()
 	_check(main.enter_hunt(null, 5) and main.hunt.zone == 0, "켜지지 않은 구역은 입구에서 시작")
 	main.leave_hunt()
+	# 23b) 한 번 잡은 대장은 다음부터 처음부터 나와 있음 (2026-10-01 사용자: "보스를 한번 잡으면 그담부터는 일반 몬스터 안잡아도 보스가 팝업되어있도록")
+	_check(GameState.bosses_beaten == [0, 1], "대장을 쓰러뜨린 구역을 기억함 %s" % [GameState.bosses_beaten])
+	_check(SaveGame.snapshot(main).gs.has("bosses_beaten"), "대장 처치 기록도 저장됨")
+	main.next_day()
+	_check(main.enter_hunt(null, 1) and main.hunt.zone == 1, "다시 금사리로")
+	var rh: HuntGround = main.hunt
+	var rboss := rh._boss()
+	_check(rh.boss_spawned and rboss != null and rboss.title == z2.boss_monster and rh.slimes.size() == z2.count + 1, "한 번 잡은 %s이(가) 처음부터 나와 있고, %s %d마리도 그대로" % [z2.boss_monster, z2.monster, z2.count])
+	_check(not rh.path_open, "대장을 다시 잡기 전엔 위쪽 길이 닫힘")
+	rboss.hp = 1
+	rh._defeat(rboss)
+	_check(rh._boss() == null and rh.path_open and rh.slimes.size() == z2.count, "일반 몬스터를 안 잡고 대장만 잡아도 위쪽 길이 열림")
+	for rw: WildSlime in rh.slimes.duplicate():
+		rw.hp = 1
+		rh._defeat(rw)
+	_check(rh.slimes.is_empty() and rh._boss() == null, "다 잡아도 대장이 또 나오지는 않음 (사냥 한 번에 한 번)")
+	main.leave_hunt()
+	main.next_day()
+	_check(main.enter_hunt(null, 2) and main.hunt.zone == 2 and not main.hunt.boss_spawned, "아직 못 잡은 광동리는 지금처럼 다 잡아야 대장이 나옴")
+	main.leave_hunt()
+	GameState.bosses_beaten.clear()
 	# 2구역 드롭: 등급 무게가 오르고, 대장 돈 주머니도 큼
 	var zr := RandomNumberGenerator.new()
 	zr.seed = 23
@@ -1330,6 +1353,7 @@ func _ready() -> void:
 	_check(is_equal_approx(main.hunter.slow_mult, 1.0), "C. 사냥터를 나오면 빠르기 원래대로")
 	# C. 대장 슬라임 내려찍기 + 새끼
 	GameState.hunts_today = 0
+	GameState.bosses_beaten.clear()  # 일반 몬스터를 다 잡아 대장이 나오는 흐름으로
 	main.enter_hunt(null, 0)
 	var d_bh2: HuntGround = main.hunt
 	d_bh2.set_ai(false)
