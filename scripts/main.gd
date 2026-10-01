@@ -1009,7 +1009,7 @@ func _on_wear_changed() -> void:
 func _forge_morning() -> String:
 	if GameState.forge_state == 0 and GameState.forge_boss_down:
 		show_forge_site()
-		return "금사리 대장이 쓰러진 뒤, 마을 아래 풀밭에 무너진 대장간 터가 드러났다. 터에서 F."
+		return "금사리 대장이 쓰러진 뒤, 마을 아랫길 왼쪽 풀밭에 무너진 대장간 터가 드러났다. 터에서 F."
 	if GameState.forge_state >= 2:
 		GameState.scrap_pile = Config.SCRAP_PER_DAY
 	return ""
@@ -1157,7 +1157,7 @@ func craft(base: StringName) -> StringName:
 func _yak_morning() -> String:
 	if GameState.yak_state == 0 and GameState.yak_boss_down:
 		show_yak_site()
-		return "장승이 쓰러진 뒤, 당산나무 옆에 무너진 약방 터가 드러났다. 터에서 F. 이제 캔 도라지는 팔지 않고 약방에 모은다."
+		return "장승이 쓰러진 뒤, 아랫길 가운데 풀밭에 무너진 약방 터가 드러났다. 터에서 F. 이제 캔 도라지는 팔지 않고 약방에 모은다."
 	if GameState.yak_state >= 2:
 		GameState.herb_bed = Config.HERB_BED_PER_DAY
 	return ""
@@ -1319,7 +1319,7 @@ func feed_tonic() -> bool:
 func _barn_morning() -> String:
 	if GameState.barn_state == 0 and GameState.barn_boss_down:
 		show_barn_site()
-		return "%s 대장이 쓰러진 뒤, 부화기 위 풀밭에 무너진 축사 터가 드러났다. 터에서 F." % Config.HUNT_ZONES[Config.BARN_ZONE].name
+		return "%s 대장이 쓰러진 뒤, 부화기 오른쪽 큰길 위 풀밭에 무너진 축사 터가 드러났다. 터에서 F." % Config.HUNT_ZONES[Config.BARN_ZONE].name
 	if GameState.barn_state < 2:
 		return ""
 	var guarded := creatures.any(func(c: Creature) -> bool: return c.data.species.guards_coop and c.job == CreatureJobs.FEED)

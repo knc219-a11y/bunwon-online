@@ -37,8 +37,8 @@ const FIELD_PLOTS: Array[Rect2i] = [Rect2i(2, 3, 6, 4), Rect2i(8, 3, 6, 4), Rect
 const FIELD_PLOT_NAMES: Array[String] = ["처음 밭", "오른쪽 구역", "왼쪽 아래 구역", "오른쪽 아래 구역"]
 const FIELD_PLOT_PRICES: Array[int] = [0, 300, 500, 800]
 const START_FIELD_PLOTS := 1
-## 흙길 (타일 좌표). 밭 → 부화기·공급함 → 사냥터 입구(오른쪽 위, 정면)를 잇는 임시 배치
-## 큰길에서 x=19로 내려와 농부 집 현관(22, 12)까지 잇는 길 포함
+## 흙길 (타일 좌표). 2026-10-01 마을 넓히기 A: 위쪽 큰길 = 밭 울타리 입구 → 부화기 · 공급함 → 사냥터 입구 (오른쪽 위),
+## 큰길에서 내려오는 길 → 아랫길 (대장간 · 약방 · 당산나무 · 시설 4 · 5 자리), 농부 집 현관은 아랫길에 붙음
 const PATH_RECTS: Array[Rect2i] = [Rect2i(14, 7, 24, 1), Rect2i(35, 5, 1, 2), Rect2i(18, 5, 1, 5), Rect2i(22, 8, 1, 6), Rect2i(25, 13, 1, 1), Rect2i(3, 14, 31, 1)]
 ## 밭 울타리: 밭 한 칸 바깥 둘레 (타일 좌표). 흙길이 들어오는 칸은 비운다.
 const FENCE_RECT := Rect2i(1, 2, 14, 10)
@@ -66,8 +66,14 @@ const HERB_NAMES: Array[String] = ["냉이", "쑥", "달래"]
 const HERB_PRICE := 20
 ## 하루에 돋는 포기 수 [최소, 최대]
 const HERBS_PER_DAY := Vector2i(5, 6)
-## 돋을 수 있는 풀밭 칸 (울타리·흙길·집·나무·마을 오브젝트를 피한 자리, 화면 위아래 글 띠에 가리지 않게 1~12줄)
-const HERB_SPOTS: Array[Vector2i] = [Vector2i(39, 15), Vector2i(11, 21), Vector2i(35, 13), Vector2i(31, 11), Vector2i(32, 20), Vector2i(35, 8), Vector2i(24, 21), Vector2i(15, 13), Vector2i(39, 5), Vector2i(31, 6), Vector2i(4, 21), Vector2i(31, 1), Vector2i(0, 19), Vector2i(17, 21), Vector2i(8, 13), Vector2i(25, 15), Vector2i(37, 11), Vector2i(38, 20), Vector2i(21, 13), Vector2i(21, 3)]
+## 돋을 수 있는 풀밭 칸 (울타리·흙길·집·나무·마을 오브젝트를 피한 자리. F로 쓰는 오브젝트 둘레 2칸 밖이라 캐기가 오브젝트보다 먼저 잡히지 않음.
+## 맵 맨 위 줄 · 아래 두 줄은 비움. 마을 넓히기 배치 도구 design/village-wide/mock/layouts.py 가 고른 자리)
+const HERB_SPOTS: Array[Vector2i] = [
+	Vector2i(39, 15), Vector2i(11, 21), Vector2i(35, 13), Vector2i(31, 11), Vector2i(32, 20), Vector2i(35, 8),
+	Vector2i(24, 21), Vector2i(15, 13), Vector2i(39, 5), Vector2i(31, 6), Vector2i(4, 21), Vector2i(31, 1),
+	Vector2i(0, 19), Vector2i(17, 21), Vector2i(8, 13), Vector2i(25, 15), Vector2i(37, 11), Vector2i(38, 20),
+	Vector2i(21, 13), Vector2i(21, 3),
+]
 
 ## 크리처 채집 (2026-09-29 사용자 선택 B 속성별 채집): 채집을 맡긴 크리처는 밭 범위와 상관없이 마을 풀밭을 돌며
 ## 돋은 들나물을 캐서 공급함에 바로 진열한다. 땅속성은 손으로 못 캐는 땅속 도라지 뿌리도 캐고,
@@ -534,14 +540,14 @@ const WILD_BURROW_POP_DISTANCE := 60.0
 const WILD_PACK_DISTANCE := 110.0
 
 ## 대장간 복구 · 대장장이 (2026-09-29 사용자 선택 A: 한 번에 복구 + 사람 장비 제작). 본편 첫 조각. 값·자리·그림 전부 임시.
-## 1막 대장(금사리 금두꺼비)을 처음 쓰러뜨린 다음 날 아침, 마을 아래쪽 풀밭에 무너진 대장간 터가 드러난다.
+## 1막 대장(금사리 금두꺼비)을 처음 쓰러뜨린 다음 날 아침, 마을 아랫길 왼쪽 풀밭에 무너진 대장간 터가 드러난다.
 ## 터에서 F → 복구에 드는 것 (돈 · 무 · 1막 대장 재료 사금 덩이)을 다 모았으면 한 번에 고친다.
 ## 고치면 대장장이(셋째 캐릭터, Tab)가 열리고, 옆에 고물 더미가 생겨 크리처에게 고철 줍기를 맡길 수 있다.
 ## 대장장이는 모루에서 고철 + 돈으로 현대풍 장비를 만든다. 만들 때마다 디아블로2 제작처럼 옵션을 무작위로 굴린다.
-## 자리: 왼쪽 감나무 두 그루 사이 풀밭 (3칸 x 2칸). 고물 더미는 오른쪽 (2칸 x 1칸).
+## 자리: 아랫길 왼쪽 풀밭 (3칸 x 2칸). 고물 더미는 오른쪽 (2칸 x 1칸), 대장장이는 그 사이 (2026-10-01 마을 넓히기 A).
 const FORGE_RECT := Rect2i(4, 16, 3, 2)
 const SCRAP_RECT := Rect2i(11, 17, 2, 1)
-## 대장장이가 처음 서는 칸 (대장간 오른쪽 앞)
+## 대장장이가 처음 서는 칸 (대장간 오른쪽 앞, 한 칸 띄움. 대장간 그림 · 배지와 이름표가 안 겹치게)
 const SMITH_CELL := Vector2i(8, 17)
 ## 대장 재료를 주는 구역 (Config.HUNT_ZONES 번호) = 대장간 터를 여는 구역
 const FORGE_ZONE := 1
@@ -564,7 +570,7 @@ const CRAFT_COSTS := {
 const CRAFT_AFFIX_WEIGHTS := {1: 50, 2: 35, 3: 15}
 
 ## 약방 복구 · 연금술사 (2026-09-29 사용자 선택: 대장간처럼 한 번에 복구 + 연금술사 A+B "물약 · 크리처 보약"). 본편 둘째 시설. 값·자리·그림 전부 임시.
-## 2막 대장(도마리 장승 한 쌍)을 처음 쓰러뜨린 다음 날 아침, 당산나무 오른쪽 풀밭에 무너진 약방 터가 드러난다.
+## 2막 대장(도마리 장승 한 쌍)을 처음 쓰러뜨린 다음 날 아침, 아랫길 가운데 풀밭에 무너진 약방 터가 드러난다.
 ## 터가 드러난 뒤로 땅 크리처가 캔 도라지는 공급함에 팔지 않고 약방에 모아 둔다 (GameState.roots).
 ## 터에서 F → 돈 · 도라지 · 2막 대장 재료 장승 조각을 다 모았으면 한 번에 고친다.
 ## 고치면 연금술사(넷째 캐릭터, Tab)가 오고, 호롱을 만들어 줘서 도마리 윗길 너머 캄캄한 번천으로 갈 수 있다.
@@ -574,7 +580,7 @@ const YAK_ZONE := 3
 const BOSS_MATERIAL2_NAME := "장승 조각"
 const YAK_RECT := Rect2i(19, 17, 3, 2)
 const HERB_BED_RECT := Rect2i(22, 18, 1, 1)
-## 연금술사가 처음 서는 칸 (약방 오른쪽 위, 공급함 아래)
+## 연금술사가 처음 서는 칸 (약방 왼쪽 앞, 한 칸 띄움. 약방 배지 · 이름표와 안 겹치게)
 const ALCHEMIST_CELL := Vector2i(17, 18)
 ## 복구에 드는 것 (로드맵: 약방 ≈ 4.5시간 ≈ 45일째). 장승 조각(장승 한 쌍을 잡을 때마다 1개)이 속도를 정한다.
 const YAK_COST_MONEY := 4000
@@ -598,7 +604,7 @@ const SPEED_POTION_MULT := 1.25
 const TONIC_SPEED_MULT := 2.0
 
 ## 축사 복구 · 목축인 (2026-09-30 사용자 선택 A 닭장). 본편 셋째 시설. 값·자리·그림 전부 임시.
-## 3막 대장(밀목)을 처음 쓰러뜨린 다음 날 아침, 부화기 위 풀밭에 무너진 축사 터가 드러난다.
+## 3막 대장(밀목)을 처음 쓰러뜨린 다음 날 아침, 부화기 오른쪽 큰길 위 풀밭에 무너진 축사 터가 드러난다.
 ## 터에서 F → 돈 · 무 · 3막 대장 재료를 다 모았으면 한 번에 고친다 (대장간 · 약방처럼, Claude 기본값).
 ## 고치면 목축인(다섯째 캐릭터, Tab)이 오고 닭장에 수탉 · 암탉 한 쌍이 들어온다.
 ## 규칙 (사용자): 가축은 짝이 있으면 새끼를 낳는다. 크리처 알은 지금처럼 사냥터에서만 나온다 (가축은 크리처가 아니라 마을 동물).
@@ -659,7 +665,10 @@ const ADOPT_GIFTS := {
 	&"alchemist": {name = "연금술사", text = "빨간 물약 2병", count = 2},
 	&"rancher": {name = "목축인", text = "사냥 도시락 1개", count = 1},
 }
-const ADOPT_SPOTS := {&"smith": [Vector2i(3, 17), Vector2i(2, 17), Vector2i(3, 18), Vector2i(2, 18)], &"alchemist": [Vector2i(18, 19), Vector2i(17, 19), Vector2i(16, 18), Vector2i(16, 19)], &"rancher": [Vector2i(21, 6), Vector2i(22, 6), Vector2i(21, 5), Vector2i(21, 7)]}
+const ADOPT_SPOTS := {
+	&"smith": [Vector2i(3, 17), Vector2i(2, 17), Vector2i(3, 18), Vector2i(2, 18)],
+	&"alchemist": [Vector2i(18, 19), Vector2i(17, 19), Vector2i(16, 18), Vector2i(16, 19)],
+	&"rancher": [Vector2i(21, 6), Vector2i(22, 6), Vector2i(21, 5), Vector2i(21, 7)]}
 
 ## 농사가 아닌 크리처 (채집 · 고철 · 도라지밭 · 모이) 의 일 이름표는 조작 중인 캐릭터가 이 거리 (px) 안일 때만 보인다
 const CREATURE_TAG_DISTANCE := 56.0
