@@ -530,6 +530,8 @@ func enter_hunt(companion: Creature = null, zone := 0) -> bool:
 	hunter.farm = null
 	hunt.start(hunter, zone)
 	_pending_zone = 0
+	if hunt.boss_spawned:
+		GameState.notify(hunt.boss_waiting_text())
 	# 연금술사 물약 (2026-09-29): 힘 · 빠르기 물약은 사냥에 들어갈 때 하나씩 마신다
 	var drank: Array[String] = []
 	if GameState.strength > 0:

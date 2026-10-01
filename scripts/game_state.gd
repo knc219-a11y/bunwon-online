@@ -29,6 +29,9 @@ var village_eggs: Array[CreatureSpecies] = []
 var hunts_today := 0
 ## 켜진 사냥터 웨이포인트 (Config.HUNT_ZONES 번호). 0 = 숲 공터 (처음부터 입구에서 시작).
 var waypoints: Array[int] = [0]
+## 대장을 한 번이라도 쓰러뜨린 구역 (Config.HUNT_ZONES 번호). 이런 구역은 다음부터 들어가면 대장이 처음부터 나와 있다
+## (2026-10-01 사용자: "보스를 한번 잡으면 그담부터는 일반 몬스터 안잡아도 보스가 팝업되어있도록").
+var bosses_beaten: Array[int] = []
 ## 강화한 농사 도구 (Farm.Work 값 → 단계). 0이면 처음 도구.
 var tool_levels := {}
 ## 사냥꾼 튼튼한 사냥칼을 샀는지
@@ -146,6 +149,7 @@ func reset() -> void:
 		village_eggs.append(CreatureCatalog.STARTER_EGG)
 	hunts_today = 0
 	waypoints = [0]
+	bosses_beaten = []
 	tool_levels = {}
 	hunter_knife = false
 	owned_wear = []

@@ -158,6 +158,8 @@ static func apply(main: Node2D, id: StringName) -> bool:
 	GameState.hunter_unlocked = true
 	GameState.first_egg_done = true
 	GameState.waypoints.assign(s.get("waypoints", [0]))
+	# 웨이포인트가 켜진 구역 앞 구역들의 대장은 이미 쓰러뜨린 것으로 친다
+	GameState.bosses_beaten.assign(range(GameState.waypoints.max()))
 	# 구역 대장 첫 처치 선물(무기)은 들고 시작하는 만큼 이미 받은 것으로 친다
 	for z: int in Config.FIRST_WEAPON_DROPS:
 		if Config.FIRST_WEAPON_DROPS[z] in s.get("weapons", []):
@@ -198,6 +200,8 @@ static func apply(main: Node2D, id: StringName) -> bool:
 	var forge_state: int = s.get("forge", 0)
 	if forge_state >= 1:
 		GameState.forge_boss_down = true
+		if not Config.FORGE_ZONE in GameState.bosses_beaten:
+			GameState.bosses_beaten.append(Config.FORGE_ZONE)
 		main.show_forge_site()
 	if forge_state >= 2:
 		# 복구비만큼 잠깐 채워서 실제 복구 흐름으로 고친다
@@ -209,6 +213,8 @@ static func apply(main: Node2D, id: StringName) -> bool:
 	var yak_state: int = s.get("yak", 0)
 	if yak_state >= 1:
 		GameState.yak_boss_down = true
+		if not Config.YAK_ZONE in GameState.bosses_beaten:
+			GameState.bosses_beaten.append(Config.YAK_ZONE)
 		main.show_yak_site()
 	if yak_state >= 2:
 		GameState.money += Config.YAK_COST_MONEY
@@ -218,6 +224,8 @@ static func apply(main: Node2D, id: StringName) -> bool:
 	var barn_state: int = s.get("barn", 0)
 	if barn_state >= 1:
 		GameState.barn_boss_down = true
+		if not Config.BARN_ZONE in GameState.bosses_beaten:
+			GameState.bosses_beaten.append(Config.BARN_ZONE)
 		main.show_barn_site()
 	if barn_state >= 2:
 		GameState.money += Config.BARN_COST_MONEY
