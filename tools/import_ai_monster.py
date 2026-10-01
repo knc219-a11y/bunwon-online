@@ -41,6 +41,11 @@
   ai_crow.png --kind sparrow --fly ai_crow_fly.png --flip --colors 24 --eyes 0.2,0.31 --fly-eyes 0.2,0.53 --eye-color 230,50,60
   ai_scarecrow.png --kind scarecrow --colors 28   (눈은 AI 그림 그대로: 다시 찍은 빨간 눈은 사용자가 이상하다고 함)
   ai_baby.png --kind baby_sparrow --fly ai_baby_fly.png --flip --colors 24 --eyes 0.37,0.4 --fly-eyes 0.41,0.4 --eye-color 200,40,56
+도마리 (그림 원본: /mnt/project-files/design/doma-ai/ai_*.png, 사용자 AI 그림 2026-10-01, 보기 A 붉은 눈 나무 요괴)
+  ai_stump.png --kind stump --width 31 --hide ai_stump_sleep.png --hide-eyes 0.42,0.5,0.6,0.5 --colors 28 --eyes 0.398,0.469,0.602,0.469 --eye-color 255,56,40 --angry
+  ai_cheonha.png --kind cheonha --colors 28 --eyes 0.325,0.379,0.662,0.379 --eye-size 1 --eye-ring --eye-color 220,30,30
+  ai_jiha.png --kind jiha --colors 28 --eyes 0.273,0.329,0.71,0.329 --eye-size 1 --eye-ring --eye-color 220,30,30
+  ai_baby.png --kind tree_spirit --colors 24 --eyes 0.2,0.63,0.6,0.645 --cheeks 0.14,0.73,0.66,0.76
 """
 import argparse
 import os
@@ -117,7 +122,7 @@ KINDS = {
         dict(sx=1.0, sy=1.0, lift=0), dict(sx=1.03, sy=0.98, lift=0),
         dict(sx=1.06, sy=0.92, lift=0, dx=-1), dict(sx=0.95, sy=1.0, lift=2),
         dict(sx=0.97, sy=0.98, lift=1, dx=1), dict(sx=1.06, sy=0.93, lift=0),
-        dict(sx=1.0, sy=1.0, lift=0, rot=-3, dx=-1, fury=1), dict(sx=1.04, sy=0.98, lift=0, rot=3, dx=1, fury=2),
+        dict(sx=1.0, sy=1.0, lift=0, dx=-1, fury=1), dict(sx=1.04, sy=0.98, lift=1, dx=1, fury=2),
     ]),
     "tree_spirit": dict(out="baby_tree_spirit_earth", width=15, frames=[
         dict(sx=1.0, sy=1.0, lift=0), dict(sx=1.04, sy=0.96, lift=0),
