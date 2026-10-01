@@ -648,3 +648,6 @@ const ADOPT_SPOTS := {
 	&"alchemist": [Vector2i(19, 11), Vector2i(19, 10), Vector2i(15, 10), Vector2i(14, 10)],
 	&"rancher": [Vector2i(14, 4), Vector2i(15, 4), Vector2i(14, 3), Vector2i(14, 5)],
 }
+
+## 농사가 아닌 크리처 (채집 · 고철 · 도라지밭 · 모이) 의 일 이름표는 조작 중인 캐릭터가 이 거리 (px) 안일 때만 보인다
+const CREATURE_TAG_DISTANCE := 56.0

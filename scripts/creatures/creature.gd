@@ -22,6 +22,9 @@ var job: StringName = CreatureJobs.REST
 var home := Vector2i.ZERO
 ## 들고 옮기는 중이면 따라갈 캐릭터
 var carried_by: Character = null
+## 조작 중인 캐릭터 자리 (main 이 매 프레임 넣음). 농사가 아닌 크리처의 일 이름표는 이 근처에서만 보인다
+## (채집 크리처가 몰리면 이름표가 겹쳐 쌓여서, 2026-10-01)
+static var focus := Vector2.INF
 ## 원정 중인 구역 (Config.HUNT_ZONES 번호, Expedition). -1 = 마을에 있음
 var expedition_zone := -1
 ## false 면 타이머로 스스로 일하지 않는다 (work_once 를 직접 불러야 함). 테스트에서 끈다.
@@ -347,6 +350,8 @@ func _draw() -> void:
 		draw_circle(Vector2(-4, 2), 1.5, Color.BLACK)
 		draw_circle(Vector2(4, 2), 1.5, Color.BLACK)
 	if job == CreatureJobs.REST:
+		return
+	if job != CreatureJobs.FARM and carried_by == null and position.distance_to(focus) > Config.CREATURE_TAG_DISTANCE:
 		return
 	var label := CreatureJobs.display_name(job)
 	if data.train_total() > 0:
