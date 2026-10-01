@@ -38,7 +38,7 @@ var total_hand_herbs := 0
 var total_creature_herbs := 0
 var total_roots := 0
 ## 채집 크리처가 사는 자리 (밭이 아니라 공급함 옆 풀밭)
-const FORAGE_HOME := Vector2i(15, 7)
+const FORAGE_HOME := Config.FORAGE_CELLS[0]
 ## 크리처 일 배분 (2026-09-29 선택 A+B): 열린 밭 구역이 모두 농사 크리처로 찬 첫날, 농사 크리처가 한가할 때 캔 나물,
 ## 물 준 풀밭 덕분에 더 돋은 포기
 var full_day := -1

@@ -19,25 +19,21 @@ const TOOL_UPGRADES := {
 	&"upgrade_hoe": [Farm.Work.TILL, Config.HOE_UPGRADE_PRICE],
 	&"upgrade_can": [Farm.Work.WATER, Config.CAN_UPGRADE_PRICE],
 }
-## 마을 오브젝트가 차지하는 칸 (왼쪽 위 칸, 크기). 크기는 2026-09-27 결정, 자리는 임시 배치.
-const INCUBATOR_RECT := Rect2i(17, 3, 2, 2)
-const SUPPLY_RECT := Rect2i(17, 9, 2, 1)
-const HUNT_GATE_RECT := Rect2i(21, 3, 3, 2)
-## 마을 공용 창고 궤짝 (2026-09-28 사용자 요청 "창고 기능"). 자리는 임시 배치 (공급함 왼쪽).
-const STASH_RECT := Rect2i(16, 9, 1, 1)
-## 배경 오브젝트 (2026-09-27 결정: 집 B 양옥, 나무 감나무 + 당산나무 하나). 자리는 임시 배치.
-const HOUSE_RECT := Rect2i(20, 8, 5, 4)
-const DANGSAN_RECT := Rect2i(13, 11, 2, 2)
-const PERSIMMON_CELLS: Array[Vector2i] = [Vector2i(2, 12), Vector2i(7, 12), Vector2i(11, 12), Vector2i(15, 3), Vector2i(25, 6)]
+## 마을 오브젝트 · 배경 자리는 Config "마을 배치" 에 모았다 (2026-10-01 마을 넓히기). 테스트가 main.X 로도 읽는다.
+const INCUBATOR_RECT := Config.INCUBATOR_RECT
+const SUPPLY_RECT := Config.SUPPLY_RECT
+const HUNT_GATE_RECT := Config.HUNT_GATE_RECT
+const STASH_RECT := Config.STASH_RECT
+const HOUSE_RECT := Config.HOUSE_RECT
+const DANGSAN_RECT := Config.DANGSAN_RECT
+const PERSIMMON_CELLS := Config.PERSIMMON_CELLS
 ## 막는 범위 (그림 아래쪽 가운데 기준, px). 2026-09-27 결정 C: 집은 벽 두 줄, 나무는 밑동만 막고
 ## 지붕·나뭇잎 뒤로는 지나간다. 뒤로 가면 가리는 그림이 반투명해진다.
 const HOUSE_BLOCK := Rect2(-60, -48, 120, 48)
 const PERSIMMON_BLOCK := Rect2(-8, -12, 16, 12)
 const DANGSAN_BLOCK := Rect2(-20, -18, 40, 18)
-## 알이 부화하면 크리처가 나타나는 칸 (부화기 왼쪽 아래)
-const HATCH_CELL := Vector2i(16, 5)
-## 농부 집 현관 앞 흙길 칸. 여기서 F를 누르면 잔다 (2026-09-27 결정 A②).
-const DOOR_CELL := Vector2i(22, 12)
+const HATCH_CELL := Config.HATCH_CELL
+const DOOR_CELL := Config.DOOR_CELL
 ## 아침 카드 기본 크기 (글이 많으면 세로로 늘어난다)
 const MORNING_CARD_SIZE := Vector2(300, 150)
 ## 선택창에 한 번에 보이는 항목 수 (크리처 훈련처럼 길어질 때)
@@ -117,6 +113,8 @@ var _hud_bar: HudBar
 ## 하루 빛 · 불빛 · 구름 그림자 · 날리는 잎 (그래픽 시범 C)
 var ambience: Ambience
 var _message: Label
+## 마을 카메라 (2026-10-01 마을 넓히기): 맵이 화면보다 크면 조작 중인 캐릭터를 따라간다. 사냥터에서는 사냥터 카메라가 켜진다.
+var camera: Camera2D
 
 
 func _ready() -> void:
@@ -140,6 +138,7 @@ func _ready() -> void:
 	stash_box = _add_prop("창고", preload("res://assets/props/stash.png"), STASH_RECT)
 
 	ambience = Ambience.new()
+	ambience.area = world_size()
 	add_child(ambience)
 	var warm := Color(1.0, 0.78, 0.48)
 	ambience.add_light(house.position + Vector2(-32, -44), 46, warm)
@@ -147,15 +146,23 @@ func _ready() -> void:
 	ambience.add_light(incubator.position + Vector2(10, -40), 34, Color(1.0, 0.55, 0.4))
 	ambience.add_light(supply_box.position + Vector2(0, -20), 30, warm)
 
-	farmer = _add_character("농부", preload("res://assets/characters/player.png"), Vector2i(14, 6), &"farmer")
-	hunter = _add_character("사냥꾼", preload("res://assets/characters/hunter.png"), Vector2i(20, 6), &"hunter")
+	farmer = _add_character("농부", preload("res://assets/characters/player.png"), Config.FARMER_START, &"farmer")
+	hunter = _add_character("사냥꾼", preload("res://assets/characters/hunter.png"), Config.HUNTER_START, &"hunter")
 	smith = _add_character("대장장이", preload("res://assets/characters/smith.png"), Config.SMITH_CELL, &"smith")
 	smith.visible = false
 	alchemist = _add_character("연금술사", preload("res://assets/characters/alchemist.png"), Config.ALCHEMIST_CELL, &"alchemist")
 	alchemist.visible = false
 	rancher = _add_character("목축인", preload("res://assets/characters/rancher.png"), Config.RANCHER_CELL, &"rancher")
 	rancher.visible = false
+	camera = Camera2D.new()
+	camera.limit_left = 0
+	camera.limit_top = 0
+	camera.limit_right = int(world_size().x)
+	camera.limit_bottom = int(world_size().y)
+	add_child(camera)
+	camera.make_current()
 	_set_active(farmer)
+	follow_camera()
 
 	_build_hud()
 	GameState.changed.connect(_refresh_hud)
@@ -204,8 +211,33 @@ func _set_active(c: Character) -> void:
 	GameState.touch()
 
 
+## 마을 맵 크기 (px). 화면보다 좁으면 화면만큼 (남는 곳도 풀밭으로 그린다).
+static func world_size() -> Vector2:
+	return Vector2(Config.MAP_SIZE * Config.TILE).max(Vector2(640, 360))
+
+
+## 월드 px → 화면 px (CanvasLayer 위 창을 오브젝트 옆에 띄울 때)
+func to_screen(world: Vector2) -> Vector2:
+	if camera == null or hunt != null:
+		return world
+	return world - (view_center() - Vector2(320, 180))
+
+
+## 마을 화면 가운데 (월드 px): 조작 중인 캐릭터, 맵 가장자리에서는 맵 안쪽으로 멈춘 자리
+func view_center() -> Vector2:
+	var half := Vector2(320, 180)
+	return active.position.round().clamp(half, world_size() - half)
+
+
+## 마을 카메라를 조작 중인 캐릭터에게 맞춘다 (가장자리에서는 맵 밖이 안 보이게 멈춘다)
+func follow_camera() -> void:
+	if camera and active and hunt == null:
+		camera.position = active.position.round()
+
+
 func _process(delta: float) -> void:
 	if hunt == null:
+		follow_camera()
 		update_fading()
 		Creature.focus = active.position
 	if clock_running and not sleeping and not menu_open and not inventory.visible:
@@ -588,6 +620,7 @@ func leave_hunt() -> void:
 	for n in _village_nodes:
 		n.visible = true
 	_village_nodes.clear()
+	camera.make_current()
 	if _companion_source:
 		# 데려간 크리처는 원래 자리에서 원래 일을 다시 한다
 		_companion_source.process_mode = Node.PROCESS_MODE_INHERIT
@@ -1812,6 +1845,8 @@ func _rebuild_menu() -> void:
 		at = yak.position + Vector2(-260, -150)
 	if ranching:
 		at = barn.position + Vector2(-300, 20)
+	# 오브젝트 자리(월드)를 화면 자리로 (마을 카메라가 움직여도 오브젝트 옆에 뜨게)
+	at = to_screen(at)
 	if starting or saving:
 		at = (Vector2(640, 360) - _menu.size) / 2
 	_menu.position = at.clamp(Vector2(4, 32), Vector2(636, 324) - _menu.size)

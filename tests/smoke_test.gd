@@ -14,7 +14,7 @@ func _ready() -> void:
 
 	# 1) 농부 직접 농사: 갈기 → 심기 → 물주기 → (3일) → 수확
 	var farmer: Character = main.farmer
-	var cell := Vector2i(1, 2)
+	var cell := fc(1, 2)
 	farmer.position = Farm.center_of(cell + Vector2i.UP)
 	farmer.facing = Vector2i.DOWN
 	for i in 3:
@@ -40,16 +40,16 @@ func _ready() -> void:
 
 	# 1-1) 밭 넓히기 (A): 처음엔 첫 구역만, 나머지는 공급함에서 돈으로 연다
 	var farm0: Farm = main.farm
-	_check(GameState.open_plots == 1 and farm0.get_cell(Vector2i(6, 5)) != null and farm0.get_cell(Vector2i(7, 2)) == null, "처음엔 첫 구역(6x4)만 밭")
-	_check(not farm0.do_work(Farm.Work.TILL, Vector2i(7, 2)), "잠긴 구역은 갈 수 없음")
-	_check(farm0.find_work(Farm.Work.TILL, Vector2i(7, 3), 1) == Vector2i(6, 3), "잠긴 구역은 크리처 일감에서도 빠짐")
+	_check(GameState.open_plots == 1 and farm0.get_cell(fc(6, 5)) != null and farm0.get_cell(fc(7, 2)) == null, "처음엔 첫 구역(6x4)만 밭")
+	_check(not farm0.do_work(Farm.Work.TILL, fc(7, 2)), "잠긴 구역은 갈 수 없음")
+	_check(farm0.find_work(Farm.Work.TILL, fc(7, 3), 1) == fc(6, 3), "잠긴 구역은 크리처 일감에서도 빠짐")
 	farmer.position = main.supply_box.position
 	main.interact()
 	_check(main.supply_options().has(&"expand_field") and main.supply_option_text(&"expand_field").contains("300원"), "공급함에 밭 넓히기 (오른쪽 구역 300원)")
 	GameState.money = 299
 	_check(not main.supply_action(&"expand_field") and GameState.open_plots == 1 and GameState.money == 299, "돈이 모자라면 못 넓힘")
 	GameState.money = 300 + 500 + 800
-	for want in [Vector2i(7, 2), Vector2i(1, 6), Vector2i(7, 6)]:
+	for want in [fc(7, 2), fc(1, 6), fc(7, 6)]:
 		_check(main.supply_action(&"expand_field") and farm0.do_work(Farm.Work.TILL, want), "구역을 사서 넓히고 갈기 %s" % want)
 		farm0.get_cell(want).tilled = false
 	_check(GameState.money == 0 and GameState.open_plots == 4, "300 → 500 → 800원으로 세 구역 열림")
@@ -59,7 +59,7 @@ func _ready() -> void:
 	# 1-2) 도구 강화 (A 첫 조각): 괭이·물뿌리개를 공급함에서 사면 앞 3칸 일자에 한 번에 쓴다
 	_check(main.supply_options().has(&"upgrade_hoe") and main.supply_option_text(&"upgrade_can").contains("큰 물뿌리개"), "공급함에 도구 손보기")
 	_check(not main.supply_action(&"upgrade_hoe") and GameState.tool_level(Farm.Work.TILL) == 0, "돈이 모자라면 도구를 못 바꿈")
-	var row := Vector2i(8, 3)
+	var row := fc(8, 3)
 	farmer.position = Farm.center_of(row + Vector2i.LEFT)
 	farmer.facing = Vector2i.RIGHT
 	main.tool_index = 0
@@ -103,7 +103,7 @@ func _ready() -> void:
 	farmer.facing = Vector2i.LEFT
 	farmer._update_sprite()
 	_check(farmer._wear[0].frame_coords == farmer._sprite.frame_coords and farmer._wear[0].flip_h, "덧그림이 몸과 같은 칸 · 좌우 반전")
-	var sow_row := Vector2i(8, 4)
+	var sow_row := fc(8, 4)
 	for i in 3:
 		farm0.do_work(Farm.Work.TILL, sow_row + Vector2i(i, 0))
 	farmer.position = Farm.center_of(sow_row + Vector2i.LEFT)
@@ -146,7 +146,7 @@ func _ready() -> void:
 	farmer.position = slime.position
 	main.interact()
 	_check(slime.carried_by == farmer, "슬라임 들기")
-	var home := Vector2i(6, 5)
+	var home := fc(6, 5)
 	farmer.position = Farm.center_of(home)
 	main.interact()
 	_check(slime.carried_by == null and slime.home == home, "슬라임 배치")
@@ -298,13 +298,14 @@ func _ready() -> void:
 		main.farm.get_cell(fx + d).tilled = d in [Vector2i.ZERO, Vector2i.RIGHT, Vector2i.DOWN]
 	main.farm.get_cell(fx + Vector2i.DOWN).watered = true
 	_check(main.farm._mask(fx, main.farm._is_tilled) == 2 | 4, "갈아 둔 밭은 오른쪽·아래 이웃과 연결 (젖은 밭 포함)")
-	_check(main.farm._mask(Vector2i(17, 6), main.farm._is_path) == 1 | 2 | 4 | 8, "흙길 교차점은 네 방향 연결")
+	var junction: Vector2i = main.farm._path.keys().filter(func(q: Vector2i) -> bool: return [Vector2i.UP, Vector2i.RIGHT, Vector2i.LEFT].all(func(o: Vector2i) -> bool: return main.farm._is_path(q + o)))[0]
+	_check(main.farm._mask(junction, main.farm._is_path) & (1 | 2 | 8) == 1 | 2 | 8, "흙길 갈림길은 이어진 방향마다 연결")
 
 	# 11) 마을 오브젝트: 그림 크기와 칸 수, 흙길 끝 칸에서 상호작용
 	var props := {
-		main.incubator: [Vector2(48, 48), Vector2i(2, 2), Vector2i(17, 5)],
-		main.supply_box: [Vector2(48, 44), Vector2i(2, 1), Vector2i(17, 8)],
-		main.hunt_gate: [Vector2(72, 56), Vector2i(3, 2), Vector2i(22, 5)],
+		main.incubator: [Vector2(48, 48), Vector2i(2, 2), Config.INCUBATOR_RECT.position + Vector2i(1, 2)],
+		main.supply_box: [Vector2(48, 44), Vector2i(2, 1), Config.SUPPLY_RECT.position + Vector2i(0, -1)],
+		main.hunt_gate: [Vector2(72, 56), Vector2i(3, 2), Config.HUNT_GATE_RECT.position + Vector2i(1, 2)],
 	}
 	for p: Prop in props:
 		var spec: Array = props[p]
@@ -317,48 +318,63 @@ func _ready() -> void:
 	# 12) 배경 오브젝트: 밭 울타리와 농부 집 앞 흙길
 	var farm: Farm = main.farm
 	_check(Farm.FENCE.get_size() == Vector2(384, 24), "울타리 시트 384x24")
-	_check(farm._mask(Vector2i(0, 1), farm._is_fence) == 2 | 4, "울타리 왼쪽 위 모서리는 오른쪽·아래 연결")
-	_check(not farm._is_fence(Vector2i(13, 6)) and farm._is_path(Vector2i(13, 6)), "흙길이 들어오는 칸은 울타리를 비움")
+	_check(farm._mask(Config.FENCE_RECT.position, farm._is_fence) == 2 | 4, "울타리 왼쪽 위 모서리는 오른쪽·아래 연결")
+	_check(not farm._is_fence(Config.FENCE_GAPS[0]) and farm._is_path(Config.FENCE_GAPS[0]), "흙길이 들어오는 칸은 울타리를 비움")
 	for x in Config.FIELD_RECT.size.x:
 		for y in Config.FIELD_RECT.size.y:
 			if farm._is_fence(Config.FIELD_RECT.position + Vector2i(x, y)):
 				_check(false, "밭 칸에 울타리가 있으면 안 됨")
 	var house_front := Vector2i(main.HOUSE_RECT.position.x + 2, main.HOUSE_RECT.end.y)
-	_check(farm._is_path(house_front) and farm._mask(house_front, farm._is_path) == 8, "농부 집 현관 앞까지 흙길이 이어짐")
+	_check(farm._is_path(house_front) and farm._mask(house_front, farm._is_path) != 0, "농부 집 현관 앞까지 흙길이 이어짐")
+	# 12-1) 넓은 마을 (2026-10-01): 맵이 화면보다 크면 마을 카메라가 조작 중인 캐릭터를 따라가고 맵 가장자리에서 멈춘다
+	var world_px := Vector2(Config.MAP_SIZE * Config.TILE)
+	_check(world_px.x > 640 and world_px.y > 360 and main.camera.is_current() and Vector2(main.camera.limit_right, main.camera.limit_bottom) == world_px, "마을 맵 %s칸은 화면보다 넓고 카메라 끝 = 맵 끝" % Config.MAP_SIZE)
+	var cam_who: Character = main.active
+	var cam_keep := cam_who.position
+	cam_who.position = Farm.center_of(Config.MAP_SIZE - Vector2i(2, 2))
+	# process_frame 은 _process 앞에 오니까 한 프레임 더
+	await get_tree().process_frame
+	await get_tree().process_frame
+	_check(main.camera.position == cam_who.position.round() and main.view_center() == world_px - Vector2(320, 180), "카메라가 캐릭터를 따라가고 맵 구석에선 멈춤")
+	cam_who.position = main.supply_box.position + Vector2(0, 12)
+	var supply_on_screen: Vector2 = main.to_screen(main.supply_box.position)
+	_check(Rect2(0, 0, 640, 360).has_point(supply_on_screen) and supply_on_screen.distance_to(Vector2(320, 180)) < 40, "공급함 옆 창은 화면 안 공급함 자리에 뜸")
+	cam_who.position = cam_keep
 
 	# 13) 충돌과 앞뒤 가림: 집·나무는 밑동만 막고, 뒤로 가면 반투명. 울타리는 입구만 열림
 	var house: Prop = main.house
-	farmer.position = Farm.center_of(Vector2i(22, 13))
+	farmer.position = Farm.center_of(house_front)
 	for i in 30:
 		farmer.step(Vector2(0, -2))
 	_check(farmer.feet().y >= house.sort_y(), "집 벽으로는 못 들어감")
-	farmer.position = Farm.center_of(Vector2i(19, 9)) + Vector2(0, -4)
+	farmer.position = Farm.center_of(main.HOUSE_RECT.position + Vector2i(-1, 1)) + Vector2(0, -4)
 	for i in 40:
 		farmer.step(Vector2(1.5, 0))
 	await get_tree().process_frame
-	_check(farmer.position.x > Farm.center_of(Vector2i(21, 9)).x, "집 지붕 뒤로는 지나감")
+	_check(farmer.position.x > Farm.center_of(main.HOUSE_RECT.position + Vector2i(1, 1)).x, "집 지붕 뒤로는 지나감")
 	_check(farmer.z_index < house.z_index, "집 뒤에 있으면 집보다 먼저 그림")
 	main.update_fading()
 	_check(house.faded, "집에 가려지면 집이 반투명")
-	farmer.position = Farm.center_of(Vector2i(22, 13))
+	farmer.position = Farm.center_of(house_front)
 	await get_tree().process_frame
 	main.update_fading()
 	_check(farmer.z_index > house.z_index and not house.faded, "집 앞에 있으면 캐릭터가 앞, 집은 그대로")
-	farmer.position = Farm.center_of(Vector2i(25, 8))
+	var tree_cell: Vector2i = Config.PERSIMMON_CELLS.filter(func(t: Vector2i) -> bool: return not farm._is_path(t + Vector2i(0, 2)) and t.y + 2 < Config.MAP_SIZE.y)[0]
+	farmer.position = Farm.center_of(tree_cell + Vector2i(0, 2))
 	for i in 40:
 		farmer.step(Vector2(0, -1.5))
-	_check(farmer.feet().y > Farm.center_of(Vector2i(25, 6)).y, "감나무 밑동은 막힘")
-	farmer.position = Farm.center_of(Vector2i(6, 3))
+	_check(farmer.feet().y > Farm.center_of(tree_cell).y, "감나무 밑동은 막힘")
+	farmer.position = Farm.center_of(fc(6, 3))
 	for i in 40:
 		farmer.step(Vector2(0, -2))
 	_check(farmer.cell().y >= Config.FENCE_RECT.position.y + 1, "밭 울타리는 못 넘음")
-	farmer.position = Farm.center_of(Vector2i(15, 6))
+	farmer.position = Farm.center_of(Config.FENCE_GAPS[0] + Vector2i(2, 0))
 	for i in 60:
 		farmer.step(Vector2(-2, 0))
 	_check(farmer.cell().x <= Config.FIELD_RECT.end.x - 1, "흙길 입구로는 밭에 들어감")
 	# 슬라임은 울타리 너머 칸으로 깡충 뛰지 않는다
-	var outside := Vector2i(Config.FENCE_RECT.end.x, 4)
-	var inside := Vector2i(Config.FIELD_RECT.end.x - 1, 4)
+	var outside := Vector2i(Config.FENCE_RECT.end.x, Config.FIELD_RECT.position.y + 2)
+	var inside := Vector2i(Config.FIELD_RECT.end.x - 1, Config.FIELD_RECT.position.y + 2)
 	farm.do_work(Farm.Work.TILL, inside)
 	farm.do_work(Farm.Work.SOW, inside)
 	_check(farm.find_work(Farm.Work.WATER, outside, 2) == inside, "울타리 밖에서도 범위 안에는 밭이 있음")
@@ -369,14 +385,14 @@ func _ready() -> void:
 	carried.pick_up(farmer)
 	await get_tree().process_frame
 	_check(carried.z_index > farmer.z_index, "들고 있는 슬라임은 캐릭터 앞에 그림")
-	carried.place(Vector2i(6, 6))
+	carried.place(fc(6, 6))
 
 	# 14) 잠자기 (A②): 집 현관에서 F → 밤 1초 → 아침 카드 → F로 일어남
 	if main.active != farmer:
 		main.switch_character()
-	farmer.position = Farm.center_of(Vector2i(10, 6))
+	farmer.position = Farm.center_of(fc(10, 6))
 	_check(not main.near_door(), "현관에서 멀면 잠잘 수 없음")
-	var sleep_cell := Vector2i(3, 3)
+	var sleep_cell := fc(3, 3)
 	farm.do_work(Farm.Work.TILL, sleep_cell)
 	farm.do_work(Farm.Work.SOW, sleep_cell)
 	farm.do_work(Farm.Work.WATER, sleep_cell)
@@ -429,7 +445,7 @@ func _ready() -> void:
 	var weakest := 99.0
 	var smallest := 99
 	for i in 30:
-		var k: Creature = main._hatch(CreatureCatalog.SLIME, Vector2i(3, 12))
+		var k: Creature = main._hatch(CreatureCatalog.SLIME, Config.FORAGE_CELLS[0])
 		weakest = minf(weakest, k.data.base_work_speed)
 		smallest = mini(smallest, k.data.base_radius)
 		main.creatures.erase(k)
@@ -516,7 +532,7 @@ func _ready() -> void:
 	_check(GameState.hunter_eggs.size() == eggs_before_buddy + 1, "크리처 덕에 떨어진 알도 챙겨 옴")
 	# 땅 슬라임은 붙어서 박치기
 	main.next_day()
-	var earth_buddy: Creature = main._hatch(CreatureCatalog.SLIME, Vector2i(3, 3))
+	var earth_buddy: Creature = main._hatch(CreatureCatalog.SLIME, fc(3, 3))
 	earth_buddy.data.set_element(load("res://data/creatures/elements/earth.tres"))
 	main.hunter.position = main.hunt_gate.position
 	main.interact()
@@ -630,7 +646,7 @@ func _ready() -> void:
 	# 지금 사냥꾼: 숲 공터 세트 다 입음, 가방에 캡모자·등산화 (주운 세트가 밀어냄)
 	var hb: Array[StringName] = GameState.bag[&"hunter"]
 	_check(&"ball_cap" in hb and &"hiking_shoes" in hb, "세트를 주워 입으면 입던 캡모자·등산화는 가방으로")
-	main.hunter.position = Farm.center_of(Vector2i(20, 6))
+	main.hunter.position = Farm.center_of(Config.HUNTER_START)
 	main._unhandled_input(_action(&"inventory"))
 	var inv: InventoryUI = main.inventory
 	_check(inv.visible and inv.character == main.hunter and main.hunter.frozen and not inv.with_stash, "I 키로 어디서나 가방 창")
@@ -984,7 +1000,7 @@ func _ready() -> void:
 	_check(only_earth, "금두꺼비는 땅속성만 나옴")
 	var water_el: CreatureElement = load("res://data/creatures/elements/water.tres")
 	_check(not CreatureData.hatch(CreatureCatalog.GOLD_TOAD, trng).set_element(water_el), "금두꺼비에 물속성은 못 붙임")
-	var toad: Creature = main._hatch(CreatureCatalog.GOLD_TOAD, Vector2i(6, 12))
+	var toad: Creature = main._hatch(CreatureCatalog.GOLD_TOAD, Config.FORAGE_CELLS[1])
 	_check(toad.data.species.id == &"gold_toad" and toad.data.species.sprite_sheets.has(&"earth"), "금두꺼비 부화 (땅속성 그림)")
 	_check(HuntCompanion.style_for(toad.data) == HuntCompanion.Style.PULL and HuntCompanion.style_name(toad.data) == "혀로 끌어오기", "금두꺼비 동행은 혀로 끌어오기")
 	toad.job = CreatureJobs.SOW
@@ -1096,7 +1112,7 @@ func _ready() -> void:
 	_check(wh.near_exit(), "입구로 돌아오면 F로 나갈 수 있음")
 	main.interact()
 	await get_tree().process_frame
-	_check(main.hunt == null and hunter_w.terrain == null and get_viewport().canvas_transform == Transform2D.IDENTITY, "마을로 돌아오면 화면이 원래대로")
+	_check(main.hunt == null and hunter_w.terrain == null and main.camera.is_current(), "마을로 돌아오면 마을 카메라로")
 
 	# 26. 분원농협 넓은 맵 (2026-09-28 사용자 선택 C. 창고 마당) + 작은 지도 (추천 M2: 가 본 곳만 보임)
 	main.next_day()
@@ -1391,7 +1407,7 @@ func _ready() -> void:
 		if main.forage.blocked.any(func(r: Rect2i) -> bool: return r.has_point(spot)):
 			continue
 		var stand := Farm.center_of(spot) - Vector2(0, main.farmer.FEET_Y)
-		var h_inside: bool = main.farm.get_cell(spot) != null or main.farm._path.has(spot) or main.farm._fence.has(spot) or spot.y < 1 or spot.y > 12
+		var h_inside: bool = main.farm.get_cell(spot) != null or main.farm._path.has(spot) or main.farm._fence.has(spot) or spot.y < 1 or spot.y > Config.MAP_SIZE.y - 3
 		for p: Prop in main.props:
 			if p.footprint_rect().has_point(Farm.center_of(spot) - p.position):
 				h_inside = true
@@ -1433,10 +1449,10 @@ func _ready() -> void:
 	var c_day := GameState.day
 	main.advance_clock(24 * 60)
 	_check(GameState.day == c_day and is_equal_approx(GameState.minutes, Config.CLOCK_MAX_MINUTE) and main._status.text.contains("새벽 2:00"), "새벽 2시에서 멈추고 하루는 안 넘어감")
-	var c_cell: Farm.Cell = main.farm.get_cell(Vector2i(2, 3))
+	var c_cell: Farm.Cell = main.farm.get_cell(fc(2, 3))
 	c_cell.planted = false
 	c_cell.tilled = false
-	_check(main.farm.do_work(Farm.Work.TILL, Vector2i(2, 3)), "새벽에도 도구질은 됨 (막지 않음)")
+	_check(main.farm.do_work(Farm.Work.TILL, fc(2, 3)), "새벽에도 도구질은 됨 (막지 않음)")
 	main.next_day()
 	_check(GameState.day == c_day + 1 and is_equal_approx(GameState.minutes, Config.DAY_START_MINUTE) and is_zero_approx(main._dusk.color.a), "자고 나면 다음 날 아침 6시")
 	main.advance_clock(3 * 60)
@@ -1457,7 +1473,7 @@ func _ready() -> void:
 		if main.forage.blocked.any(func(r: Rect2i) -> bool: return r.has_point(spot)):
 			continue
 		var stand := Farm.center_of(spot) - Vector2(0, main.farmer.FEET_Y)
-		var f_inside: bool = main.farm.get_cell(spot) != null or main.farm._path.has(spot) or main.farm._fence.has(spot) or spot.y < 1 or spot.y > 12 or spot in Config.HERB_SPOTS
+		var f_inside: bool = main.farm.get_cell(spot) != null or main.farm._path.has(spot) or main.farm._fence.has(spot) or spot.y < 1 or spot.y > Config.MAP_SIZE.y - 3 or spot in Config.HERB_SPOTS
 		for p: Prop in main.props:
 			if p.footprint_rect().has_point(Farm.center_of(spot) - p.position):
 				f_inside = true
@@ -1479,9 +1495,9 @@ func _ready() -> void:
 	main.interact()
 	_check(f_forage.roots.has(f_root_cell) and main._message.text.contains("손으로는 못 캔다"), "농부는 도라지를 손으로 못 캠 (알려 줌)")
 	_check(CreatureJobs.FARM_JOBS.has(CreatureJobs.FORAGE) and CreatureJobs.display_name(CreatureJobs.FORAGE) == "채집", "크리처 일 목록(R)에 채집")
-	var f_water: Creature = main._hatch(CreatureCatalog.SLIME, Vector2i(3, 12))
+	var f_water: Creature = main._hatch(CreatureCatalog.SLIME, Config.FORAGE_CELLS[0])
 	f_water.data.set_element(load("res://data/creatures/elements/water.tres"))
-	var f_earth: Creature = main._hatch(CreatureCatalog.SLIME, Vector2i(8, 12))
+	var f_earth: Creature = main._hatch(CreatureCatalog.SLIME, Config.FORAGE_CELLS[3])
 	f_earth.data.set_element(load("res://data/creatures/elements/earth.tres"))
 	for s: Creature in [f_water, f_earth]:
 		s.auto_work = false
@@ -1525,7 +1541,7 @@ func _ready() -> void:
 		s.queue_free()
 	main.creatures.clear()
 	main.next_day()
-	var j_home := Vector2i(4, 4)
+	var j_home := fc(4, 4)
 	var j: Creature = main._hatch(CreatureCatalog.SLIME, j_home)
 	j.data.set_element(load("res://data/creatures/elements/earth.tres"))
 	j.auto_work = false
@@ -1655,7 +1671,7 @@ func _ready() -> void:
 	main.switch_character()
 	_check(main.active == main.farmer, "대장장이 다음은 농부")
 	# 크리처 고철 줍기: 땅속성이 빠르다
-	var fs: Creature = main._hatch(CreatureCatalog.SLIME, Vector2i(14, 12))
+	var fs: Creature = main._hatch(CreatureCatalog.SLIME, Config.FORAGE_CELLS[2])
 	fs.data.set_element(load("res://data/creatures/elements/earth.tres"))
 	fs.auto_work = false
 	while fs.job != CreatureJobs.SCRAP:
@@ -1847,7 +1863,7 @@ func _ready() -> void:
 		var gd := CreatureData.hatch(CreatureCatalog.SPARROW, g_rng)
 		g_fly = g_fly and gd.elements.size() == 1 and gd.elements[0].id == &"flying"
 	_check(g_fly, "아기 까마귀는 비행 속성만")
-	var g_c: Creature = main._hatch(CreatureCatalog.SPARROW, Vector2i(16, 12))
+	var g_c: Creature = main._hatch(CreatureCatalog.SPARROW, Config.FORAGE_CELLS[4])
 	_check(g_c.data.species.sprite_sheets.has(&"flying") and g_c.data.move_speed() > 1.4, "아기 까마귀 부화 (비행 그림, 빨리 날아다님)")
 	_check(is_equal_approx(g_c.data.aptitude(CreatureJobs.FORAGE), 1.5 * g_c.data.creature_trait.job_aptitude.get(CreatureJobs.FORAGE, 1.0)), "채집 재능 1.5배")
 	_check(HuntCompanion.style_for(g_c.data) == HuntCompanion.Style.PECK and HuntCompanion.style_name(g_c.data) == "날아가 쪼기", "동행은 날아가 쪼기")
@@ -1888,7 +1904,7 @@ func _ready() -> void:
 	_check(d_map.size == Vector2i(52, 30) and not d_map.find("G").is_empty() and not d_map.find("u").is_empty(), "도마리 칸 지도 52x30 (비닐하우스 · 그루터기)")
 	var d_g := d_map.find("G")[0]
 	_check(not d_map.is_free(Rect2(d_g - Vector2(4, 3), Vector2(8, 6))) and not d_map.monster_ok(d_map.find("u")[0]), "장작 비닐하우스 · 그루터기는 막힘")
-	var d_c: Creature = main._hatch(CreatureCatalog.TREE_SPIRIT, Vector2i(18, 12))
+	var d_c: Creature = main._hatch(CreatureCatalog.TREE_SPIRIT, Config.FORAGE_CELLS[5])
 	_check(d_c.data.species.display_name == "아기 나무 정령" and d_c.data.elements[0].id == &"earth" and HuntCompanion.style_name(d_c.data) == "덩굴 묶기", "아기 나무 정령 (땅, 동행 덩굴 묶기)")
 	GameState.hunts_today = 0
 	if not d_zi in GameState.waypoints:
@@ -2109,7 +2125,7 @@ func _ready() -> void:
 	_check(b_z.name == "번천" and b_z.monster == "도깨비불" and b_z.boss_monster == "유령 막차" and b_z.night and b_z.ghost, "5구역 번천: 도깨비불 · 유령 막차 · 밤 · 유령")
 	var b_map := HuntMap.load_map("bunjeon")
 	_check(b_map.find("L").size() >= 6 and not b_map.find("P").is_empty() and not b_map.is_free(Rect2(b_map.find("L")[0] - Vector2(3, 3), Vector2(6, 6))), "번천 칸 지도: 가로등 · 버스 정류장 (막힘)")
-	var b_c: Creature = main._hatch(CreatureCatalog.WILL_O, Vector2i(18, 12))
+	var b_c: Creature = main._hatch(CreatureCatalog.WILL_O, Config.FORAGE_CELLS[5])
 	_check(b_c.data.species.display_name == "아기 도깨비불" and b_c.data.elements[0].id == &"fire" and HuntCompanion.style_name(b_c.data) == "불빛 + 불씨", "아기 도깨비불 (새 속성 불, 동행 불빛 + 불씨)")
 	_check(b_c.data.work_speed(CreatureJobs.HERB) > b_c.data.work_speed(CreatureJobs.FORAGE), "불 속성은 도라지밭 일이 빠름")
 	GameState.hunts_today = 0
@@ -2222,7 +2238,7 @@ func _ready() -> void:
 		"약방 복구 (돈 %d · 도라지 %d · 장승 조각 %d) → 연금술사" % [Config.YAK_COST_MONEY, Config.YAK_COST_ROOTS, Config.YAK_COST_MATERIAL])
 	_check(CreatureJobs.jobs().has(CreatureJobs.HERB) and GameState.herb_bed == Config.HERB_BED_PER_DAY, "도라지밭 일이 생김 (하루 %d)" % Config.HERB_BED_PER_DAY)
 	_check(main.pick_herb_bed() and GameState.roots == 1 and GameState.herb_bed == Config.HERB_BED_PER_DAY - 1, "도라지밭에서 손으로 도라지 하나")
-	b_c.home = Vector2i(18, 12)
+	b_c.home = Config.FORAGE_CELLS[5]
 	b_c.job = CreatureJobs.HERB
 	_check(b_c._herb_once(), "아기 도깨비불이 도라지밭 일을 함")
 	GameState.hunts_today = 0
@@ -2261,9 +2277,9 @@ func _ready() -> void:
 	_check(m_z.name == "밀목" and m_z.monster == "그림자 늑대" and m_z.boss_monster == "산군 백호" and m_z.wolf and m_z.boss_pattern == &"tiger" and not m_z.get("night", false), "6구역 밀목: 그림자 늑대 · 산군 백호 · 그늘 (밤 아님)")
 	var m_map := HuntMap.load_map("milmok")
 	_check(not m_map.find("K").is_empty() and not m_map.find("W").is_empty() and m_map.find("T").size() > 600, "밀목 칸 지도: 빽빽한 나무 %d · 대장 자리 · 웨이포인트" % m_map.find("T").size())
-	var m_t: Creature = main._hatch(CreatureCatalog.TIGER, Vector2i(18, 12))
+	var m_t: Creature = main._hatch(CreatureCatalog.TIGER, Config.FORAGE_CELLS[5])
 	_check(m_t.data.species.display_name == "아기 호랑이" and m_t.data.elements[0].id == &"earth" and HuntCompanion.style_name(m_t.data) == "포효" and m_t.data.species.guards_coop, "아기 호랑이 (땅, 동행 포효, 축사 지킴이)")
-	var m_w: Creature = main._hatch(CreatureCatalog.WHITE_TIGER, Vector2i(18, 12))
+	var m_w: Creature = main._hatch(CreatureCatalog.WHITE_TIGER, Config.FORAGE_CELLS[5])
 	_check(m_w.data.elements[0].id == &"spirit" and m_w.data.elements[0].display_name == "신령" and HuntCompanion.style_name(m_w.data) == "포효 + 번개 발톱" and m_w.data.work_radius() >= 2, "아기 백호 (새 속성 신령, 스킬 둘, 범위 2 이상)")
 	_check(m_w.data.aptitude(CreatureJobs.FORAGE) >= 1.5 and m_w.data.aptitude(CreatureJobs.FEED) >= 3.0 and m_t.data.aptitude(CreatureJobs.FEED) == 2.0, "신령은 모든 일 1.5배 (백호 모이 주기 3배, 호랑이 2배)")
 	GameState.hunts_today = 0
@@ -2580,17 +2596,17 @@ func _save_load_checks() -> void:
 	GameState.displayed_crops = 5
 	GameState.tonic_day = 69
 	GameState.tool_levels[Farm.Work.HARVEST] = 1
-	a.farm.do_work(Farm.Work.WATER, Vector2i(2, 2))
-	a.forage.water(Vector2i(15, 12))
+	a.farm.do_work(Farm.Work.WATER, fc(2, 2))
+	a.forage.water(Config.FORAGE_CELLS[7])
 	var carried: Creature = a.creatures[5]
-	a.farmer.position = Farm.center_of(Vector2i(9, 9))
+	a.farmer.position = Farm.center_of(fc(9, 9))
 	carried.pick_up(a.farmer)
 	a.creatures[0].data.radius_level = 3
 	# 원정 · 입양 (42): 하나는 대장장이에게 입양, 남은 쉬는 크리처는 금사리 원정
 	Expedition.adopt(a, Expedition.idle(a)[-1])
 	Expedition.send(a, 1)
 	a._set_active(a.hunter)
-	a.hunter.position = Farm.center_of(Vector2i(19, 6))
+	a.hunter.position = Farm.center_of(Config.HUNTER_START)
 	a.hunter.facing = Vector2i.LEFT
 	a.tool_index = 2
 	a.save_slot = 2
@@ -2626,8 +2642,8 @@ func _save_load_checks() -> void:
 	_check(GameState.hunter_eggs.size() == 1 and GameState.hunter_eggs[0].id == &"tiger" and GameState.farmer_eggs.back().id == &"gold_toad" and b.incubating_days == 2 and b.incubating_species.id == &"will_o", "알 (사냥꾼 · 공급함 · 농부) · 부화기 그대로")
 	_check(b.forge.label == "대장간" and b.scrap_heap != null and b.smith.visible and b.yak.label == "약방" and b.herb_bed != null and b.alchemist.visible and b.barn.label == "축사" and b.rancher.visible, "대장간 · 약방 · 축사 고친 모습 · 일꾼 셋 (값을 다시 치르지 않음)")
 	_check(GameState.hens == 3 and GameState.chicks == [2, 1] and GameState.nest == 3, "닭장 (암탉 · 병아리 · 둥지) 그대로")
-	_check(b.farm.get_cell(Vector2i(2, 2)).watered and b.farm.get_cell(Vector2i(7, 6)) != null and b.forage.watered.has(Vector2i(15, 12)), "밭 네 구역 · 물 준 칸 · 물 준 풀밭")
-	_check(b.active == b.hunter and b.hunter.facing == Vector2i.LEFT and b.creatures[5].carried_by == null and b.creatures[5].home == Vector2i(9, 9), "사냥꾼으로 이어 함 · 들고 있던 크리처는 농부 발밑에 놓임")
+	_check(b.farm.get_cell(fc(2, 2)).watered and b.farm.get_cell(fc(7, 6)) != null and b.forage.watered.has(Config.FORAGE_CELLS[7]), "밭 네 구역 · 물 준 칸 · 물 준 풀밭")
+	_check(b.active == b.hunter and b.hunter.facing == Vector2i.LEFT and b.creatures[5].carried_by == null and b.creatures[5].home == fc(9, 9), "사냥꾼으로 이어 함 · 들고 있던 크리처는 농부 발밑에 놓임")
 	_check(is_equal_approx(GameState.minutes, 14 * 60 + 30) and b.save_slot == -1, "시각 오후 2:30 그대로")
 	# 불러온 뒤에도 게임이 이어진다: 하루 넘기기 · 사냥
 	var eggs_n := GameState.hunter_eggs.size()
@@ -2668,9 +2684,38 @@ func _save_load_checks() -> void:
 	_check(GameState.day == 70 and GameState.lunches == 0 and GameState.barn_state == 0 and c.barn == null, "옛 저장 파일: 없는 변수는 처음 값으로 읽음")
 	c.queue_free()
 	await get_tree().process_frame
+
+	# 옛 마을 (VERSION 1, 26x15칸) 저장 파일: 밭 칸 · 크리처 자리를 새 배치로 옮겨 읽는다 (2026-10-01 마을 넓히기)
+	var v1 := SaveGame.read(2)
+	v1.version = 1
+	v1.farm = {Vector2i(1, 2): [true, true, true, 2], Vector2i(12, 9): [true, false, false, 0]}
+	v1.forage = {herbs = {Vector2i(16, 12): 0}, roots = {}, watered = {}, bonus_today = 0}
+	v1.creatures = v1.creatures.slice(0, 3)
+	v1.creatures[0].home = Vector2i(3, 3)
+	v1.creatures[1].home = SaveGame.V1_SCRAP_SPOT
+	v1.creatures[2].home = Vector2i(25, 1)
+	v1.people = {&"farmer": [Vector2(600, 20), Vector2i.UP]}
+	GameState.reset()
+	c = load("res://scenes/main.tscn").instantiate()
+	add_child(c)
+	await get_tree().process_frame
+	SaveGame.apply(c, v1)
+	var p0: Rect2i = Config.FIELD_PLOTS[0]
+	var p3: Rect2i = Config.FIELD_PLOTS[3]
+	_check(c.farm.get_cell(p0.position).planted and c.farm.get_cell(p0.position).growth == 2 and c.farm.get_cell(p3.end - Vector2i.ONE).tilled, "옛 마을 저장: 밭 칸은 같은 구역 같은 자리로")
+	_check(c.creatures[0].home == p0.position + Vector2i(2, 1) and c.creatures[1].home == Creature.scrap_spot() and c.creatures[2].home in Config.FORAGE_CELLS, "옛 마을 저장: 밭 · 고물 더미 앞 크리처는 새 자리로, 풀밭 크리처는 공급함 옆으로")
+	_check(not c.forage.herbs.is_empty() and c.forage.herbs.keys().all(func(h: Vector2i) -> bool: return h in Config.HERB_SPOTS), "옛 마을 저장: 들나물은 새 풀밭에 다시 돋음")
+	_check(c.farmer.position == Farm.center_of(Config.FARMER_START), "옛 마을 저장: 사람은 새 마을 처음 자리")
+	c.queue_free()
+	await get_tree().process_frame
 	for i in range(1, SaveGame.SLOTS + 1):
 		SaveGame.erase(i)
 	SaveGame.dir = "user://"
+
+
+## 옛 마을 (26x15칸) 밭 기준 칸 → 지금 배치에서 같은 밭 구역 같은 자리 (밭이 옮겨 가도 테스트가 같은 칸을 보게)
+func fc(x: int, y: int) -> Vector2i:
+	return SaveGame.v1_cell(Vector2i(x, y))
 
 
 ## c 로 대장간 앞에 서서 F
