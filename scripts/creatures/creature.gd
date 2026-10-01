@@ -22,6 +22,8 @@ var job: StringName = CreatureJobs.REST
 var home := Vector2i.ZERO
 ## 들고 옮기는 중이면 따라갈 캐릭터
 var carried_by: Character = null
+## 원정 중인 구역 (Config.HUNT_ZONES 번호, Expedition). -1 = 마을에 있음
+var expedition_zone := -1
 ## false 면 타이머로 스스로 일하지 않는다 (work_once 를 직접 불러야 함). 테스트에서 끈다.
 var auto_work := true
 

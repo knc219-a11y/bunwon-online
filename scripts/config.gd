@@ -613,3 +613,38 @@ const FEED_CROP_COST := 1
 const LUNCH_EGGS := 2
 const LUNCH_CROPS := 1
 const LUNCH_HEARTS := 2
+
+## 크리처 원정 + 입양 (2026-10-01 사용자 선택 B + D, Expedition). 값은 전부 임시.
+## 원정대 크기 (쉬는 · 채집 크리처 중 잘 맞는 크리처부터)
+const EXPEDITION_TEAM_MIN := 3
+const EXPEDITION_TEAM_MAX := 5
+## 잘 맞음: 그 구역 알에서 나온 종 (고향) x1.5, 속성이 맞으면 x1.25. 팀 힘 = 합 / 5 가 돈 · 재료 · 장비 확률에 곱해진다.
+const EXPEDITION_HOME_MULT := 1.5
+const EXPEDITION_ELEMENT_MULT := 1.25
+## 구역마다 (Config.HUNT_ZONES 번호 순): 5마리 보통 팀이 하룻밤에 가져오는 돈 = 봇 run1~3 의 그 구역 사냥 한 번 돈 평균의 약 1/3
+## (분원농협 38 · 금사리 67 · 광동리 230 · 도마리 280 · 번천 약 300 · 밀목 227원, design/act3/runs). 알은 안 가져온다.
+const EXPEDITION_ZONES: Array[Dictionary] = [
+	{money = [8, 18], elements = [&"water"], species = [&"slime"], hint = "물 · 슬라임"},
+	{money = [15, 30], elements = [&"earth"], species = [&"gold_toad"], hint = "땅 · 아기 금두꺼비"},
+	{money = [55, 100], elements = [&"flying"], species = [&"sparrow"], hint = "비행 · 아기 까마귀"},
+	{money = [70, 120], elements = [&"earth"], species = [&"tree_spirit"], hint = "땅 · 아기 나무 정령"},
+	{money = [75, 125], elements = [&"fire"], species = [&"will_o"], hint = "불 · 아기 도깨비불"},
+	{money = [55, 100], elements = [&"spirit"], species = [&"tiger", &"white_tiger"], hint = "신령 · 아기 호랑이"},
+]
+## 원정대 하나가 하룻밤에 가져오는 잡템 (그 구역 잡템, 공급함에서 사냥꾼 잡템처럼 판다)
+const EXPEDITION_JUNK := [1, 2]
+## 대장 재료 (사금 덩이 · 장승 조각 · 산군 발톱을 주는 구역만) · 장비 (그 구역 등급 무게, 공용 창고로) 확률, 팀 힘을 곱한다
+const EXPEDITION_MATERIAL_CHANCE := 0.1
+const EXPEDITION_GEAR_CHANCE := 0.06
+## 입양: 시설을 고친 주민마다 받아 주는 수 · 보답 (한 번) · 지내는 칸
+const ADOPT_CAP := 4
+const ADOPT_GIFTS := {
+	&"smith": {name = "대장장이", text = "고철 5개", count = 5},
+	&"alchemist": {name = "연금술사", text = "빨간 물약 2병", count = 2},
+	&"rancher": {name = "목축인", text = "사냥 도시락 1개", count = 1},
+}
+const ADOPT_SPOTS := {
+	&"smith": [Vector2i(6, 11), Vector2i(8, 11), Vector2i(7, 11), Vector2i(8, 12)],
+	&"alchemist": [Vector2i(19, 11), Vector2i(19, 10), Vector2i(15, 10), Vector2i(14, 10)],
+	&"rancher": [Vector2i(14, 4), Vector2i(15, 4), Vector2i(14, 3), Vector2i(14, 5)],
+}

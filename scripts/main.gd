@@ -70,6 +70,8 @@ var stash_box: Prop
 var house: Prop
 var props: Array[Prop] = []
 var creatures: Array[Creature] = []
+## 주민에게 입양 보낸 크리처 (Expedition.spawn_adopted). 일은 안 하고 주민 곁에 있다. creatures 에는 없다.
+var adoptees: Array[Creature] = []
 var active: Character
 var tool_index := 0
 ## 부화기에 든 알이 부화하기까지 남은 날. -1 이면 비어 있음.
@@ -100,6 +102,8 @@ var hunt: HuntGround
 var _village_nodes: Array[Node2D] = []
 ## 사냥에 데려간 농장 크리처 (돌아오면 제자리로). 없으면 혼자.
 var _companion_source: Creature
+## 마지막으로 사냥에 데려간 크리처. 원정 · 입양에 고르지 않는다 (아끼는 동행이 떠나지 않게, Expedition.idle)
+var last_companion: Creature
 
 ## 지금 쓰는 저장 슬롯 (2026-09-30 사용자 선택 C). -1 = 저장하지 않음 (테스트 장면, 개발 중 처음 화면 없이 켠 때)
 var save_slot := -1
@@ -233,7 +237,7 @@ func update_fading() -> void:
 				continue
 			hidden = hidden or (c.sort_y() < p.sort_y() and pic.intersects(Rect2(c.position + Vector2(-8, -30), Vector2(16, 40))))
 		for s in creatures:
-			hidden = hidden or (s.carried_by == null and s.sort_y() < p.sort_y() and pic.intersects(Rect2(s.position + Vector2(-8, -10), Vector2(16, 18))))
+			hidden = hidden or (s.visible and s.carried_by == null and s.sort_y() < p.sort_y() and pic.intersects(Rect2(s.position + Vector2(-8, -10), Vector2(16, 18))))
 		p.set_faded(hidden)
 
 
@@ -435,6 +439,12 @@ func _farmer_interact() -> void:
 		open_inventory(true)
 	elif _near(supply_box):
 		open_menu()
+	elif _near(hunt_gate):
+		# 크리처 원정 (2026-10-01 사용자 선택 B): 농부가 사냥터 입구에서 원정대를 보내고 불러들인다
+		if Expedition.zones().is_empty():
+			GameState.notify("대장을 한 번이라도 쓰러뜨린 구역이 있어야 크리처 원정대를 보낼 수 있다.")
+		else:
+			open_menu(&"expedition")
 	elif _near(incubator):
 		if incubating_days >= 0:
 			GameState.notify("알이 부화 중이다. %d일 남았다." % incubating_days)
@@ -503,7 +513,7 @@ func _open_companion_or_enter() -> void:
 func companion_candidates() -> Array[Creature]:
 	var list: Array[Creature] = []
 	for s in creatures:
-		if s.carried_by == null:
+		if s.carried_by == null and s.expedition_zone < 0:
 			list.append(s)
 	return list
 
@@ -551,6 +561,7 @@ func enter_hunt(companion: Creature = null, zone := 0) -> bool:
 	var drank_text := (" %s을(를) 먹었다." % " · ".join(drank)) if not drank.is_empty() else ""
 	if companion:
 		_companion_source = companion
+		last_companion = companion
 		companion.process_mode = Node.PROCESS_MODE_DISABLED
 		var c := hunt.add_companion(companion)
 		GameState.notify("%s과(와) 사냥터에 들어왔다. 클릭(또는 Space)으로 휘두르면 %s도 알아서 돕는다!%s" % [c.display_name(), c.display_name(), drank_text])
@@ -622,6 +633,8 @@ func supply_options() -> Array[StringName]:
 	options.append(&"buy_seeds")
 	if not creatures.is_empty():
 		options.append(&"train")
+	if Expedition.any_villager() and not Expedition.idle(self).is_empty():
+		options.append(&"adopt")
 	if Farm.next_plot() >= 0:
 		options.append(&"expand_field")
 	for id: StringName in TOOL_UPGRADES:
@@ -650,6 +663,8 @@ func supply_option_text(id: StringName) -> String:
 			return "씨앗 %d개 사기 (%d원)" % [Config.SEED_PACK_SIZE, Config.SEED_PACK_PRICE]
 		&"train":
 			return "크리처 훈련 (%d마리) ▶" % creatures.size()
+		&"adopt":
+			return "크리처 입양 보내기 (쉬는 · 채집 %d마리) ▶" % Expedition.idle(self).size()
 		&"expand_field":
 			var i := Farm.next_plot()
 			return "밭 넓히기: %s (%d원)" % [Config.FIELD_PLOT_NAMES[i], Config.FIELD_PLOT_PRICES[i]]
@@ -759,6 +774,34 @@ func menu_confirm() -> void:
 				return
 		else:
 			craft(id)
+		_rebuild_menu()
+		return
+	if menu_kind == &"expedition":
+		if id == &"close":
+			close_menu()
+			return
+		var z := String(id).trim_prefix("exp_").to_int()
+		if Expedition.team(self, z).is_empty():
+			Expedition.send(self, z)
+		else:
+			Expedition.recall(self, z)
+		_rebuild_menu()
+		_refresh_props()
+		return
+	if menu_kind == &"adopt":
+		if id == &"back":
+			menu_kind = &"supply"
+			menu_index = 0
+		else:
+			Expedition.adopt(self, adopt_from_option(id))
+			if adopt_options().size() <= 1:
+				menu_kind = &"supply"
+				menu_index = 0
+		_rebuild_menu()
+		return
+	if id == &"adopt":
+		menu_kind = &"adopt"
+		menu_index = 0
 		_rebuild_menu()
 		return
 	if menu_kind == &"train":
@@ -1590,6 +1633,47 @@ func waypoint_option_text(id: StringName) -> String:
 	return text
 
 
+# --- 크리처 원정 · 입양 (2026-10-01 사용자 선택 B + D, Expedition) ----------
+
+## 원정 선택창: 대장을 잡은 구역마다 &"exp_<번호>" (보내기 또는 불러들이기), 마지막에 닫기
+func expedition_options() -> Array[StringName]:
+	var options: Array[StringName] = []
+	for z in Expedition.zones():
+		options.append(StringName("exp_%d" % z))
+	options.append(&"close")
+	return options
+
+
+func expedition_option_text(id: StringName) -> String:
+	if id == &"close":
+		return "닫기"
+	return Expedition.zone_text(self, String(id).trim_prefix("exp_").to_int())
+
+
+## 입양 선택창: 쉬는 · 채집 크리처마다 &"adopt_<번호>" (받을 주민이 없으면 비어 있음), 마지막에 뒤로
+func adopt_options() -> Array[StringName]:
+	var options: Array[StringName] = []
+	if Expedition.next_villager() != &"":
+		for i in Expedition.idle(self).size():
+			options.append(StringName("adopt_%d" % i))
+	options.append(&"back")
+	return options
+
+
+func adopt_from_option(id: StringName) -> Creature:
+	var list := Expedition.idle(self)
+	var i := String(id).trim_prefix("adopt_").to_int()
+	return list[i] if String(id).begins_with("adopt_") and i < list.size() else null
+
+
+func adopt_option_text(id: StringName) -> String:
+	var s := adopt_from_option(id)
+	if s == null:
+		return "뒤로"
+	var star := (" ★%d" % s.data.train_total()) if s.data.train_total() > 0 else ""
+	return "%s %s%s · %s · 속도 %.2f / 범위 %d" % [s.data.element_names(), s.data.species.display_name, star, CreatureJobs.display_name(s.job), s.data.base_work_speed, s.data.work_radius()]
+
+
 func _rebuild_menu() -> void:
 	var companion := menu_kind == &"companion"
 	var waypoint := menu_kind == &"waypoint"
@@ -1598,6 +1682,8 @@ func _rebuild_menu() -> void:
 	var brewing := menu_kind == &"yak" or menu_kind == &"brew"
 	var starting := menu_kind == &"start"
 	var ranching := menu_kind == &"barn" or menu_kind == &"coop"
+	var expedition := menu_kind == &"expedition"
+	var adopting := menu_kind == &"adopt"
 	var saving := menu_kind == &"title" or menu_kind == &"delete" or menu_kind == &"pause"
 	if saving:
 		_menu_options = save_menu_options()
@@ -1611,12 +1697,21 @@ func _rebuild_menu() -> void:
 		_menu_options = forge_options() if menu_kind == &"forge" else craft_options()
 	elif training:
 		_menu_options = train_options()
+	elif expedition:
+		_menu_options = expedition_options()
+	elif adopting:
+		_menu_options = adopt_options()
 	else:
 		_menu_options = companion_options() if companion else (waypoint_options() if waypoint else supply_options())
 	menu_index = clampi(menu_index, 0, _menu_options.size() - 1)
 	var head := "사냥터 입구 · 누구랑 갈까?" if companion else ("사냥터 입구 · 어디서 시작할까?" if waypoint else "마을 공급함   가진 돈 %d원" % GameState.money)
 	if training:
 		head = "크리처 훈련   가진 돈 %d원" % GameState.money
+	if expedition:
+		head = "사냥터 입구 · 크리처 원정   쉬는 · 채집 %d마리 · 원정 중 %d마리" % [Expedition.idle(self).size(), Expedition.away_count(self)]
+	if adopting:
+		var who := Expedition.next_villager()
+		head = "크리처 입양 보내기 → %s" % (Expedition.gift_text(who) if who != &"" else "받아 줄 주민이 없다")
 	if starting:
 		head = "테스트용 시작 지점 (개발용 빌드에서만)"
 	if menu_kind == &"title":
@@ -1652,6 +1747,10 @@ func _rebuild_menu() -> void:
 			text = TestStarts.option_text(o)
 		elif training:
 			text = train_option_text(o)
+		elif expedition:
+			text = expedition_option_text(o)
+		elif adopting:
+			text = adopt_option_text(o)
 		elif forging:
 			text = forge_option_text(o)
 		elif brewing:
@@ -1681,6 +1780,13 @@ func _rebuild_menu() -> void:
 	elif menu_kind == &"craft":
 		lines.append("만들 때마다 옵션 1~3개가 무작위로 붙는다 (디아블로2 제작처럼)")
 		lines.append("만든 장비는 칸이 비었으면 바로 입고, 아니면 그 사람 가방으로")
+	if expedition:
+		lines.append("쉬는 · 채집 크리처 중 잘 맞는 크리처부터 %d~%d마리가 한 팀" % [Config.EXPEDITION_TEAM_MIN, Config.EXPEDITION_TEAM_MAX])
+		lines.append("밤마다 다녀와 아침에 돈 · 잡템 · 가끔 대장 재료 · 드물게 장비")
+		lines.append("불러들일 때까지 날마다 다시 간다 · 알은 안 가져온다")
+	if adopting:
+		lines.append("고른 크리처는 주민 곁에서 지낸다 (일은 안 함, 되돌릴 수 없음)")
+		lines.append("주민마다 %d마리까지 · 입양 수가 적은 주민에게 먼저" % Config.ADOPT_CAP)
 	if companion:
 		lines.append("데려간 크리처는 돌아오면 제자리에서 다시 일한다")
 	if waypoint:
@@ -1698,7 +1804,7 @@ func _rebuild_menu() -> void:
 	_menu_text.text = "\n".join(lines)
 	_menu.size = _menu_text.get_minimum_size() + Vector2(22, 16)
 	# 공급함(또는 사냥터 입구) 옆에 띄우되 화면 밖으로 나가지 않게
-	var at := (hunt_gate.position + Vector2(-200, 8)) if companion or waypoint else supply_box.position + Vector2(36, -80)
+	var at := (hunt_gate.position + Vector2(-200, 8)) if companion or waypoint or expedition else supply_box.position + Vector2(36, -80)
 	if forging:
 		at = forge.position + Vector2(40, -150)
 	if brewing:
@@ -1916,6 +2022,9 @@ func next_day() -> Array[String]:
 		lines.append("아기 까마귀가 벌판에서 낟알을 물어 왔다. 씨앗 +%d" % seeds)
 	if grain_money > 0:
 		lines.append("씨앗이 넉넉해서 남는 낟알은 공급함에서 팔렸다. +%d원" % grain_money)
+	var expedition_line := Expedition.night(self, _rng)
+	if expedition_line != "":
+		lines.append(expedition_line)
 	if GameState.hunter_unlocked and GameState.hunts_today > 0:
 		lines.append("사냥꾼이 다시 사냥을 나갈 수 있다.")
 	GameState.hunts_today = 0
@@ -1943,7 +2052,7 @@ func gather_gold_dust() -> int:
 	var total := 0
 	for c in creatures:
 		var r := c.data.species.daily_gold
-		if r.y > 0 and c.job != CreatureJobs.REST:
+		if r.y > 0 and c.job != CreatureJobs.REST and c.expedition_zone < 0:
 			total += _rng.randi_range(r.x, r.y)
 	GameState.money += total
 	return total
@@ -1966,7 +2075,7 @@ func gather_seeds() -> int:
 	var total := 0
 	for c in creatures:
 		var r := c.data.species.daily_seeds
-		if r.y > 0 and c.job != CreatureJobs.REST:
+		if r.y > 0 and c.job != CreatureJobs.REST and c.expedition_zone < 0:
 			total += _rng.randi_range(r.x, r.y)
 	var kept := clampi(Config.GRAIN_SEED_CAP - GameState.seeds, 0, total)
 	GameState.seeds += kept
@@ -2018,6 +2127,8 @@ func _nearest_creature() -> Creature:
 	var best: Creature = null
 	var best_d := Config.INTERACT_DISTANCE
 	for s in creatures:
+		if not s.visible:
+			continue
 		var d := farmer.position.distance_to(s.position)
 		if d <= best_d:
 			best_d = d
@@ -2044,6 +2155,8 @@ func _refresh_props() -> void:
 	if GameState.displayed_roots > 0:
 		shelf.append("%s %d" % [Config.ROOT_NAME, GameState.displayed_roots])
 	supply_box.set_badge(" · ".join(shelf))
+	var away := Expedition.away_count(self)
+	hunt_gate.set_badge("원정 %d마리" % away if away > 0 else "")
 	if forge:
 		forge.set_badge("%s %d/%d" % [Config.BOSS_MATERIAL_NAME, GameState.material, Config.FORGE_COST_MATERIAL] if GameState.forge_state == 1 else ("고철 %d" % GameState.scrap))
 	if scrap_heap:
