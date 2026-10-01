@@ -34,6 +34,7 @@ const NAMES := {
 	SCRAP: "고철 줍기",
 	HERB: "도라지밭",
 	FEED: "모이 주기",
+	&"expedition": "원정",
 }
 
 ## 농장에서 R 키로 돌아가며 고르는 일

@@ -2480,6 +2480,66 @@ func _ready() -> void:
 		ts.queue_free()
 		await get_tree().process_frame
 
+	# 42) 크리처 원정 + 입양 (2026-10-01 사용자 선택 B + D)
+	var ex: Node2D = load("res://scenes/main.tscn").instantiate()
+	add_child(ex)
+	await get_tree().process_frame
+	TestStarts.apply(ex, &"barn")
+	var ex_idle := Expedition.idle(ex)
+	_check(Expedition.zones() == range(Config.HUNT_ZONES.size()) and ex_idle.size() == 5, "원정: 대장 잡은 구역 %s · 쉬는 · 채집 %d마리" % [Expedition.zones(), ex_idle.size()])
+	ex.farmer.position = ex.hunt_gate.position + Vector2(0, 8)
+	ex._set_active(ex.farmer)
+	ex.interact()
+	_check(ex.menu_open and ex.menu_kind == &"expedition" and ex._menu_options.size() == Expedition.zones().size() + 1, "농부가 사냥터 입구에서 F: 원정 선택창 (대장 잡은 구역 + 닫기)")
+	ex.menu_index = 1
+	ex.menu_confirm()
+	var team1 := Expedition.team(ex, 1)
+	_check(team1.size() == Config.EXPEDITION_TEAM_MAX and team1.filter(func(x: Creature) -> bool: return x.data.species == CreatureCatalog.GOLD_TOAD).size() == 2 and Expedition.power(team1, 1) > Config.EXPEDITION_TEAM_MAX,
+		"금사리로 5마리: 아기 금두꺼비(고향) 먼저 (%s)" % ", ".join(team1.map(func(x: Creature) -> String: return x.data.species.display_name)))
+	_check(team1.all(func(x: Creature) -> bool: return not x.visible and x.job == Expedition.JOB) and Expedition.idle(ex).is_empty() and ex.companion_candidates().size() == ex.creatures.size() - 5,
+		"원정 중인 크리처는 마을에서 사라지고 동행 · 채집에서 빠짐")
+	ex.close_menu()
+	_check(Expedition.send(ex, 2) == 0, "쉬는 크리처가 3마리보다 적으면 원정대를 못 보냄")
+	var ex_eggs_before := GameState.village_eggs.size() + GameState.farmer_eggs.size() + GameState.hunter_eggs.size()
+	var ex_m0 := GameState.money
+	var ex_j0 := GameState.junk
+	var ex_lines: Array[String] = ex.next_day()
+	var ex_line := ""
+	for l in ex_lines:
+		if l.begins_with("원정대"):
+			ex_line = l
+	_check(ex_line != "" and GameState.money > ex_m0 and GameState.junk > ex_j0 and GameState.village_eggs.size() + GameState.farmer_eggs.size() + GameState.hunter_eggs.size() == ex_eggs_before,
+		"아침 카드: %s (알은 안 가져옴)" % ex_line)
+	_check(Expedition.team(ex, 1).size() == 5, "원정대는 불러들일 때까지 날마다 다시 감")
+	# 1/3 어림: 5마리 보통 팀이 100밤 가져온 돈 평균
+	var ex_erng := RandomNumberGenerator.new()
+	ex_erng.seed = 42
+	var ex_ez: Dictionary = Config.EXPEDITION_ZONES[1]
+	var ex_esum := 0
+	for i in 100:
+		ex_esum += ex_erng.randi_range(ex_ez.money[0], ex_ez.money[1])
+	_check(absf(ex_esum / 100.0 - 67.0 / 3.0) < 4.0, "금사리 보통 팀 하룻밤 돈 평균 %.0f원 ≈ 사냥 한 번(67원)의 1/3" % (ex_esum / 100.0))
+	Expedition.recall(ex, 1)
+	_check(Expedition.team(ex, 1).is_empty() and Expedition.idle(ex).size() == 5 and team1.all(func(x: Creature) -> bool: return x.visible and x.job == CreatureJobs.FORAGE), "불러들이면 마을로 돌아와 채집")
+	# 입양
+	_check(&"adopt" in ex.supply_options(), "공급함: 크리처 입양 보내기")
+	var ex_n_before: int = ex.creatures.size()
+	var ex_scrap0 := GameState.scrap
+	var ex_potions0 := GameState.potions
+	var ex_who1 := Expedition.adopt(ex, Expedition.idle(ex)[0])
+	var ex_who2 := Expedition.adopt(ex, Expedition.idle(ex)[0])
+	_check(ex_who1 == &"smith" and ex_who2 == &"alchemist" and GameState.scrap == ex_scrap0 + 5 and GameState.potions == ex_potions0 + 2, "입양: 대장장이 → 고철 +5, 연금술사 → 빨간 물약 +2")
+	await get_tree().process_frame
+	_check(ex.creatures.size() == ex_n_before - 2 and ex.adoptees.size() == 2 and GameState.adopted.size() == 2 and ex.adoptees[0].position == Farm.center_of(Config.ADOPT_SPOTS[&"smith"][0]),
+		"입양된 크리처는 마을 크리처에서 빠지고 주민 곁에 있음")
+	for i in 20:
+		if Expedition.idle(ex).is_empty():
+			break
+		Expedition.adopt(ex, Expedition.idle(ex)[0])
+	_check(Expedition.adopted_by(&"smith") <= Config.ADOPT_CAP and GameState.adopted.size() == 5, "쉬는 크리처가 다 입양되면 끝 (%d마리)" % GameState.adopted.size())
+	ex.queue_free()
+	await get_tree().process_frame
+
 	# 41) 저장/불러오기 (2026-09-30 사용자 선택 C 디아2식): 저장 → 장면을 버리고 → 새 장면에 불러오면 모든 상태가 같다
 	await _save_load_checks()
 
@@ -2526,6 +2586,9 @@ func _save_load_checks() -> void:
 	a.farmer.position = Farm.center_of(Vector2i(9, 9))
 	carried.pick_up(a.farmer)
 	a.creatures[0].data.radius_level = 3
+	# 원정 · 입양 (42): 하나는 대장장이에게 입양, 남은 쉬는 크리처는 금사리 원정
+	Expedition.adopt(a, Expedition.idle(a)[-1])
+	Expedition.send(a, 1)
 	a._set_active(a.hunter)
 	a.hunter.position = Farm.center_of(Vector2i(19, 6))
 	a.hunter.facing = Vector2i.LEFT
@@ -2556,6 +2619,7 @@ func _save_load_checks() -> void:
 					diff.append("gs." + g)
 		elif before[k] != after.get(k):
 			diff.append(k)
+	_check(b.adoptees.size() == 1 and Expedition.team(b, 1).size() == 3 and Expedition.team(b, 1).all(func(x: Creature) -> bool: return not x.visible), "입양된 크리처 · 원정 중인 크리처 그대로")
 	_check(diff.is_empty(), "저장 전과 불러온 뒤 전체 상태가 같음 %s" % (diff if not diff.is_empty() else ""))
 	_check(GameState.gear == gear_before and b.creatures.map(func(c: Creature) -> String: return c.describe()) == creatures_before, "장비 옵션 · 크리처 능력치 · 일 · 훈련이 그대로 (%d개 · %d마리)" % [GameState.gear.size(), b.creatures.size()])
 	_check(GameState.bag.hunter is Array and GameState.bag.hunter.get_typed_builtin() == TYPE_STRING_NAME and GameState.hunter_eggs.get_typed_class_name() == &"Resource" or GameState.hunter_eggs[0] is CreatureSpecies, "가방 · 알 목록 타입이 그대로")

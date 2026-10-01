@@ -97,6 +97,15 @@ var lunches_eaten := 0
 var hen_eggs_sold := 0
 var weasel_nights := 0
 var tigers_got := {}
+## 크리처 원정 + 입양 (2026-10-01). EXPEDITION=0 이면 끈다 (비교용).
+var expedition_on := true
+## 채집으로 마을에 남겨 두는 크리처 수 (풀밭 들나물이 하루 7~8포기라 그 정도)
+const KEEP_FORAGERS := 6
+var expedition_money := 0
+var expedition_gear := 0
+var adopted_n := 0
+## 날짜 → [크리처 전체, 놀고 있는(쉬는 · 채집) 수, 원정 중, 입양]
+var crowd_by_day := {}
 ## 밤 구역: 이보다 가까우면 물러서며 쏜다 (사람처럼 호롱 불빛 44 안에 두려다 불똥 원 40 가장자리에 걸치기도 함)
 const NIGHT_KITE := 40.0
 
@@ -107,6 +116,7 @@ func _ready() -> void:
 	if OS.get_environment("WEAPON") != "":
 		weapon_pref = StringName(OS.get_environment("WEAPON"))
 	seed(rng_seed)
+	expedition_on = OS.get_environment("EXPEDITION") != "0"
 	main = load("res://scenes/main.tscn").instantiate()
 	add_child(main)
 	await get_tree().process_frame
@@ -157,6 +167,13 @@ func _ready() -> void:
 		float(mil_hurt) / maxi(mil_hunts, 1), mil_knocked, GameState.material3, "%d일" % barn_site_day if barn_site_day > 0 else "없음",
 		"%d일" % barn_restore_day if barn_restore_day > 0 else "없음", GameState.hens, GameState.chicks.size(), hen_eggs_sold, lunches_eaten, weasel_nights, tigers_got,
 		feed_creature.describe() if feed_creature else "없음"])
+	var crowd := []
+	for d in [20, 40, 60, 80]:
+		if crowd_by_day.has(d):
+			var c: Array = crowd_by_day[d]
+			crowd.append("%d일 전체 %d · 놀고 있는 %d · 원정 %d · 입양 %d" % [d, c[0], c[1], c[2], c[3]])
+	_log("\n크리처 원정 · 입양 (%s): %s · 원정 돈 합 %d원 · 원정 장비 %d · 입양 %d마리 %s" % ["켬" if expedition_on else "끔", " / ".join(crowd), expedition_money, expedition_gear, adopted_n,
+		GameState.adopted.map(func(a: Dictionary) -> String: return "%s→%s" % [load(a.species).display_name, a.who])])
 	_log("무기 (봇이 즐겨 듦: %s): 처음 든 날 %s · 쏜 화살 · 구슬 %d" % [weapon_pref, "%d일" % weapon_day if weapon_day > 0 else "없음", shots_fired])
 	_log("입은 장비: 농부 %s · 사냥꾼 %s" % [_worn_text(&"farmer"), _worn_text(&"hunter")])
 	_log("\n최종: %d일째, 돈 %d원, 씨앗 %d, 크리처 %d (훈련 단계 합 %d), 밭 구역 %d, 웨이포인트 %s" % [GameState.day, GameState.money, GameState.seeds, main.creatures.size(), trained, GameState.open_plots, GameState.waypoints])
@@ -197,6 +214,8 @@ func play_day() -> void:
 	_log("\n## %d일째 (시작 돈 %d, 씨앗 %d, 작물 %d)" % [GameState.day, GameState.money, GameState.seeds, GameState.crops])
 	main._set_active(main.farmer)
 	await place_new_creatures()
+	if expedition_on:
+		manage_expeditions()
 	await let_creatures_work()
 	var farm_counts := farm_by_hand()
 	await let_creatures_work()
@@ -248,7 +267,12 @@ func play_day() -> void:
 	var human_end := GameState.clock_text(minf(Config.DAY_START_MINUTE + human_sec * Config.CLOCK_MINUTES_PER_SECOND, Config.CLOCK_MAX_MINUTE))
 	clock_ends.append("%d일 %s · %s" % [GameState.day, bot_end.split(" ")[1] if bot_end.begins_with("오전") else bot_end, human_end])
 	_log("시간: 손일 약 %.0f초 · 크리처 일 %.0f초 · 사냥 %.0f초 → 잠자리 시각 %s (사람 어림 %s)" % [hand_sec, creature_sec, hunt_sec, bot_end, human_end])
+	var stash0 := GameState.stash.size()
 	var lines: Array[String] = main.next_day()
+	expedition_gear += GameState.stash.size() - stash0
+	var idle_n: int = main.creatures.filter(func(c: Creature) -> bool: return c.expedition_zone < 0 and (c.job == CreatureJobs.REST or c.job == CreatureJobs.FORAGE)).size()
+	crowd_by_day[GameState.day - 1] = [main.creatures.size() + GameState.adopted.size(), idle_n, Expedition.away_count(main), GameState.adopted.size()]
+	_log("크리처 무리: 전체 %d · 놀고 있는(쉬는 · 채집) %d · 원정 중 %d · 입양 %d" % crowd_by_day[GameState.day - 1])
 	var cap := OS.get_environment("CAPTURE")
 	if cap != "":
 		# 아침 카드를 실제 게임처럼 띄워 찍는다
@@ -261,6 +285,10 @@ func play_day() -> void:
 	for l in lines:
 		if l.contains("족제비가"):
 			weasel_nights += 1
+		if l.begins_with("원정대"):
+			var m := RegEx.create_from_string("\\+(\\d+)원").search(l)
+			if m:
+				expedition_money += m.get_string(1).to_int()
 	total_water_bonus += main.forage.bonus_today
 	gross.append(GameState.money - money0 + spent_today)
 	money_by_day[GameState.day - 1] = GameState.money
@@ -294,7 +322,7 @@ func place_new_creatures() -> void:
 	if GameState.forge_state >= 2 and scrap_creature == null and not main.creatures.is_empty():
 		var pick: Creature = null
 		for s: Creature in main.creatures:
-			if s.home == main.HATCH_CELL or s.job != CreatureJobs.FORAGE or s.data.species == CreatureCatalog.SPARROW:
+			if s.home == main.HATCH_CELL or s.job != CreatureJobs.FORAGE or s.data.species == CreatureCatalog.SPARROW or s.expedition_zone >= 0:
 				continue
 			if pick == null or (s.has_element(&"earth") and not pick.has_element(&"earth")):
 				pick = s
@@ -309,11 +337,11 @@ func place_new_creatures() -> void:
 			pick.next_job()
 		_log("크리처 배치: %s → 고철 줍기" % pick.describe())
 	# 약방을 고쳤으면 크리처 하나에게 도라지밭 (아기 도깨비불 먼저, 없으면 땅속성 채집 전담 · 아무 채집 전담)
-	var want_herb: bool = GameState.yak_state >= 2 and (herb_creature == null or (herb_creature.data.species != CreatureCatalog.WILL_O and main.creatures.any(func(c: Creature) -> bool: return c.data.species == CreatureCatalog.WILL_O and c.home != main.HATCH_CELL)))
+	var want_herb: bool = GameState.yak_state >= 2 and (herb_creature == null or (herb_creature.data.species != CreatureCatalog.WILL_O and main.creatures.any(func(c: Creature) -> bool: return c.data.species == CreatureCatalog.WILL_O and c.home != main.HATCH_CELL and c.expedition_zone < 0)))
 	if want_herb:
 		var pick: Creature = null
 		for s: Creature in main.creatures:
-			if s.home == main.HATCH_CELL or s == scrap_creature or s.job == CreatureJobs.FARM or s.data.species == CreatureCatalog.SPARROW:
+			if s.home == main.HATCH_CELL or s == scrap_creature or s.job == CreatureJobs.FARM or s.data.species == CreatureCatalog.SPARROW or s.expedition_zone >= 0:
 				continue
 			if pick == null or s.data.species == CreatureCatalog.WILL_O or (s.has_element(&"earth") and pick.data.species != CreatureCatalog.WILL_O and not pick.has_element(&"earth")):
 				pick = s
@@ -332,7 +360,7 @@ func place_new_creatures() -> void:
 	if GameState.barn_state >= 2 and (feed_creature == null or not feed_creature.data.species.guards_coop):
 		var pick: Creature = null
 		for s: Creature in main.creatures:
-			if s.home == main.HATCH_CELL or s == scrap_creature or s == herb_creature or s.job == CreatureJobs.FARM:
+			if s.home == main.HATCH_CELL or s == scrap_creature or s == herb_creature or s.job == CreatureJobs.FARM or s.expedition_zone >= 0:
 				continue
 			if pick == null or (s.data.species.guards_coop and not pick.data.species.guards_coop):
 				pick = s
@@ -349,6 +377,34 @@ func place_new_creatures() -> void:
 			_log("크리처 배치: %s → 모이 주기 (칸 %s)" % [pick.describe(), pick.home])
 	if farmers >= Config.FIELD_PLOTS.size() and full_day < 0:
 		full_day = GameState.day
+
+
+## 원정 · 입양 (2026-10-01): 대장을 잡은 구역마다 원정대를 보내고 (채집 KEEP_FORAGERS 마리는 마을에 남김),
+## 모든 구역에 원정대가 있는데도 남는 크리처는 주민에게 입양 (일 속도가 낮은 크리처부터). 플레이어가 할 법한 배치.
+func manage_expeditions() -> void:
+	var zones := Expedition.zones()
+	zones.reverse()
+	for z in zones:
+		if not Expedition.team(main, z).is_empty():
+			continue
+		var spare := Expedition.idle(main).size() - KEEP_FORAGERS
+		if spare < Config.EXPEDITION_TEAM_MIN:
+			break
+		var n := Expedition.send(main, z, spare)
+		if n > 0:
+			_log("원정대: %s로 %d마리 (%s)" % [Config.HUNT_ZONES[z].name, n, ", ".join(Expedition.team(main, z).map(func(c: Creature) -> String: return "%s %s" % [c.data.element_names(), c.data.species.display_name]))])
+	if zones.any(func(z: int) -> bool: return Expedition.team(main, z).is_empty()):
+		return
+	var spare_list := Expedition.idle(main)
+	spare_list.sort_custom(func(a: Creature, b: Creature) -> bool: return a.data.base_work_speed < b.data.base_work_speed)
+	while spare_list.size() > KEEP_FORAGERS and Expedition.next_villager() != &"":
+		var c: Creature = spare_list.pop_front()
+		var desc := c.describe()
+		var who := Expedition.adopt(main, c)
+		if who == &"":
+			break
+		adopted_n += 1
+		_log("입양: %s → %s" % [desc, who])
 
 
 ## 크리처를 들어 옮기고 (F 두 번) 일을 R로 바꾼다. 농사면 plot_i 구역 가운데, 채집이면 풀밭.
@@ -712,7 +768,8 @@ func _cleared(zone: int) -> void:
 func hunt_day() -> void:
 	main._set_active(main.hunter)
 	var pick: Creature = null
-	for s: Creature in main.creatures:
+	var pool: Array[Creature] = main.companion_candidates()
+	for s: Creature in pool:
 		# 동행: 금두꺼비 > 땅 슬라임 > 아무나 (플레이어가 할 법한 선택)
 		if pick == null or s.data.species.id == &"gold_toad" or (s.data.elements[0].id == &"earth" and pick.data.species.id != &"gold_toad"):
 			pick = s
@@ -726,26 +783,26 @@ func hunt_day() -> void:
 		zone = Config.FORGE_ZONE
 	# 광동리 까마귀는 날아다녀서 혀 · 박치기가 안 닿는다: 광동리로 가면 아기 까마귀를 데려간다
 	if GameState.waypoints.max() >= 2 or zone >= 1:
-		for s: Creature in main.creatures:
+		for s: Creature in pool:
 			if s.data.species == CreatureCatalog.SPARROW and (pick == null or pick.data.species != CreatureCatalog.SPARROW):
 				pick = s
 	# 도마리 고목 그루터기는 땅 몬스터: 아기 나무 정령(덩굴 묶기)이 있으면 데려가고, 없으면 금두꺼비 · 땅 슬라임
 	if zone >= DOMA:
 		var best: Creature = null
-		for s: Creature in main.creatures:
+		for s: Creature in pool:
 			if s.data.species == CreatureCatalog.TREE_SPIRIT or (best == null and s.data.species == CreatureCatalog.GOLD_TOAD):
 				best = s if best == null or best.data.species != CreatureCatalog.TREE_SPIRIT else best
 		if best != null:
 			pick = best
 	# 번천은 캄캄하다: 아기 도깨비불(불빛 + 불씨)이 있으면 데려간다
 	if zone >= BUNJEON or (zone == DOMA and GameState.yak_state >= 2):
-		for s: Creature in main.creatures:
+		for s: Creature in pool:
 			if s.data.species == CreatureCatalog.WILL_O and s != herb_creature:
 				pick = s
 				break
 	# 밀목은 그늘일 뿐 밤이 아니다: 아기 백호 > 아기 호랑이 (포효로 늑대를 멈춘다), 없으면 위에서 고른 그대로
 	if zone >= MILMOK:
-		for s: Creature in main.creatures:
+		for s: Creature in pool:
 			if s.data.species == CreatureCatalog.WHITE_TIGER or (s.data.species == CreatureCatalog.TIGER and (pick == null or pick.data.species != CreatureCatalog.WHITE_TIGER)):
 				pick = s
 	pick_weapon()

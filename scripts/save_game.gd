@@ -98,6 +98,7 @@ static func snapshot(main: Node2D) -> Dictionary:
 			speed_level = data.speed_level,
 			job = s.job,
 			home = home,
+			expedition = s.expedition_zone,
 		})
 	var people := {}
 	for c: Character in [main.farmer, main.hunter, main.smith, main.alchemist, main.rancher]:
@@ -207,7 +208,12 @@ static func apply(main: Node2D, d: Dictionary) -> void:
 		data.base_radius = cd.radius
 		data.radius_level = cd.radius_level
 		data.speed_level = cd.speed_level
-		main.add_creature(data, cd.home, cd.job)
+		var s := main.add_creature(data, cd.home, cd.job) as Creature
+		# 원정 중이던 크리처는 다시 원정 중으로 (Expedition)
+		if cd.get("expedition", -1) >= 0:
+			Expedition.depart(s, cd.expedition)
+	# 입양 보낸 크리처는 GameState.adopted 로 담겨 있으니 주민 곁에 다시 그린다
+	Expedition.rebuild_adopted(main)
 
 	main.incubating_days = d.get("incubating_days", -1)
 	var inc: String = d.get("incubating_species", "")

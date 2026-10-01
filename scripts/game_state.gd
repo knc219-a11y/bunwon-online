@@ -94,6 +94,8 @@ var fed := 0
 var hen_eggs := 0
 var displayed_hen_eggs := 0
 var lunches := 0
+## 주민에게 입양 보낸 크리처 (2026-10-01 사용자 선택 D). {species, elements (리소스 경로), who (&"smith" 등)}
+var adopted: Array = []
 
 
 func _ready() -> void:
@@ -188,6 +190,7 @@ func reset() -> void:
 	hen_eggs = 0
 	displayed_hen_eggs = 0
 	lunches = 0
+	adopted = []
 	changed.emit()
 
 
