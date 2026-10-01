@@ -1693,7 +1693,7 @@ func _ready() -> void:
 	_check(not fs.work_once(), "제자리에서 쉼")
 	main.next_day()
 	_check(GameState.scrap_pile == Config.SCRAP_PER_DAY, "아침마다 고물 더미가 다시 쌓임")
-	main.farmer.position = Farm.center_of(Creature.scrap_spot())
+	main.farmer.position = Farm.center_of(Config.SCRAP_RECT.position + Vector2i(Config.SCRAP_RECT.size.x, 0))
 	main.interact()
 	_check(GameState.scrap == 2, "농부가 F로 고철을 손으로 주움")
 	# 제작: 대장장이만 모루에서

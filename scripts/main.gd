@@ -1168,7 +1168,6 @@ func show_yak_site() -> void:
 	GameState.yak_state = maxi(GameState.yak_state, 1)
 	if yak == null:
 		yak = _add_prop("약방 터", preload("res://assets/props/yak_ruin.png"), Config.YAK_RECT)
-		yak.badge_side = true
 		forage.block(Config.YAK_RECT)
 		forage.block(Config.HERB_BED_RECT)
 	_refresh_props()

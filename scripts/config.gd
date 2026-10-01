@@ -67,7 +67,7 @@ const HERB_PRICE := 20
 ## 하루에 돋는 포기 수 [최소, 최대]
 const HERBS_PER_DAY := Vector2i(5, 6)
 ## 돋을 수 있는 풀밭 칸 (울타리·흙길·집·나무·마을 오브젝트를 피한 자리, 화면 위아래 글 띠에 가리지 않게 1~12줄)
-const HERB_SPOTS: Array[Vector2i] = [Vector2i(39, 15), Vector2i(11, 21), Vector2i(35, 13), Vector2i(31, 11), Vector2i(32, 20), Vector2i(35, 8), Vector2i(24, 21), Vector2i(15, 13), Vector2i(39, 5), Vector2i(28, 18), Vector2i(31, 6), Vector2i(4, 21), Vector2i(31, 1), Vector2i(0, 19), Vector2i(17, 21), Vector2i(8, 13), Vector2i(25, 15), Vector2i(37, 11), Vector2i(38, 20)]
+const HERB_SPOTS: Array[Vector2i] = [Vector2i(39, 15), Vector2i(11, 21), Vector2i(35, 13), Vector2i(31, 11), Vector2i(32, 20), Vector2i(35, 8), Vector2i(24, 21), Vector2i(15, 13), Vector2i(39, 5), Vector2i(31, 6), Vector2i(4, 21), Vector2i(31, 1), Vector2i(0, 19), Vector2i(17, 21), Vector2i(8, 13), Vector2i(25, 15), Vector2i(37, 11), Vector2i(38, 20), Vector2i(21, 13), Vector2i(21, 3)]
 
 ## 크리처 채집 (2026-09-29 사용자 선택 B 속성별 채집): 채집을 맡긴 크리처는 밭 범위와 상관없이 마을 풀밭을 돌며
 ## 돋은 들나물을 캐서 공급함에 바로 진열한다. 땅속성은 손으로 못 캐는 땅속 도라지 뿌리도 캐고,
@@ -77,7 +77,7 @@ const ROOT_PRICE := 60
 ## 하루에 땅속에 드는 뿌리 수 [최소, 최대]
 const ROOTS_PER_DAY := Vector2i(2, 3)
 ## 뿌리가 들 수 있는 풀밭 칸 (들나물 자리와 겹치지 않게)
-const ROOT_SPOTS: Array[Vector2i] = [Vector2i(21, 13), Vector2i(22, 17), Vector2i(21, 3), Vector2i(29, 21), Vector2i(1, 16), Vector2i(4, 13)]
+const ROOT_SPOTS: Array[Vector2i] = [Vector2i(16, 16), Vector2i(29, 21), Vector2i(1, 16), Vector2i(4, 13), Vector2i(29, 9), Vector2i(30, 18)]
 ## 물속성이 물 준 풀밭 한 칸마다 다음 날 들나물 +1포기, 최대 이만큼
 const HERB_WATER_BONUS_MAX := 3
 
@@ -540,9 +540,9 @@ const WILD_PACK_DISTANCE := 110.0
 ## 대장장이는 모루에서 고철 + 돈으로 현대풍 장비를 만든다. 만들 때마다 디아블로2 제작처럼 옵션을 무작위로 굴린다.
 ## 자리: 왼쪽 감나무 두 그루 사이 풀밭 (3칸 x 2칸). 고물 더미는 오른쪽 (2칸 x 1칸).
 const FORGE_RECT := Rect2i(4, 16, 3, 2)
-const SCRAP_RECT := Rect2i(10, 17, 2, 1)
+const SCRAP_RECT := Rect2i(11, 17, 2, 1)
 ## 대장장이가 처음 서는 칸 (대장간 오른쪽 앞)
-const SMITH_CELL := Vector2i(7, 17)
+const SMITH_CELL := Vector2i(8, 17)
 ## 대장 재료를 주는 구역 (Config.HUNT_ZONES 번호) = 대장간 터를 여는 구역
 const FORGE_ZONE := 1
 const BOSS_MATERIAL_NAME := "사금 덩이"
@@ -572,10 +572,10 @@ const CRAFT_AFFIX_WEIGHTS := {1: 50, 2: 35, 3: 15}
 ## 2막 대장 재료를 주는 구역 (Config.HUNT_ZONES 번호) = 약방 터를 여는 구역 = 번천 길이 캄캄한 구역
 const YAK_ZONE := 3
 const BOSS_MATERIAL2_NAME := "장승 조각"
-const YAK_RECT := Rect2i(16, 17, 3, 2)
-const HERB_BED_RECT := Rect2i(19, 18, 1, 1)
+const YAK_RECT := Rect2i(19, 17, 3, 2)
+const HERB_BED_RECT := Rect2i(22, 18, 1, 1)
 ## 연금술사가 처음 서는 칸 (약방 오른쪽 위, 공급함 아래)
-const ALCHEMIST_CELL := Vector2i(19, 16)
+const ALCHEMIST_CELL := Vector2i(17, 18)
 ## 복구에 드는 것 (로드맵: 약방 ≈ 4.5시간 ≈ 45일째). 장승 조각(장승 한 쌍을 잡을 때마다 1개)이 속도를 정한다.
 const YAK_COST_MONEY := 4000
 const YAK_COST_ROOTS := 20
@@ -659,7 +659,7 @@ const ADOPT_GIFTS := {
 	&"alchemist": {name = "연금술사", text = "빨간 물약 2병", count = 2},
 	&"rancher": {name = "목축인", text = "사냥 도시락 1개", count = 1},
 }
-const ADOPT_SPOTS := {&"smith": [Vector2i(7, 16), Vector2i(9, 16), Vector2i(8, 16), Vector2i(9, 17)], &"alchemist": [Vector2i(20, 17), Vector2i(20, 16), Vector2i(16, 16), Vector2i(15, 16)], &"rancher": [Vector2i(21, 6), Vector2i(22, 6), Vector2i(21, 5), Vector2i(21, 7)]}
+const ADOPT_SPOTS := {&"smith": [Vector2i(3, 17), Vector2i(2, 17), Vector2i(3, 18), Vector2i(2, 18)], &"alchemist": [Vector2i(18, 19), Vector2i(17, 19), Vector2i(16, 18), Vector2i(16, 19)], &"rancher": [Vector2i(21, 6), Vector2i(22, 6), Vector2i(21, 5), Vector2i(21, 7)]}
 
 ## 농사가 아닌 크리처 (채집 · 고철 · 도라지밭 · 모이) 의 일 이름표는 조작 중인 캐릭터가 이 거리 (px) 안일 때만 보인다
 const CREATURE_TAG_DISTANCE := 56.0
