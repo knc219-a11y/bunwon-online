@@ -160,9 +160,9 @@ func _herb_once() -> bool:
 	return true
 
 
-## 도라지밭 위 칸 (크리처가 서서 캐는 자리)
+## 도라지밭 오른쪽 칸 (크리처가 서서 캐는 자리. 2026-10-01 마을 넓히기: 약방 배지 · 밭 이름표와 안 겹치게)
 static func herb_spot() -> Vector2i:
-	return Config.HERB_BED_RECT.position + Vector2i.UP
+	return Config.HERB_BED_RECT.position + Vector2i.RIGHT
 
 
 ## 고철 줍기 한 번 (2026-09-29 대장간 복구 A): 고물 더미까지 건너가 고철 하나를 주워 대장간에 둔다 (GameState.scrap).
@@ -185,9 +185,9 @@ func _scrap_once() -> bool:
 	return true
 
 
-## 고물 더미 왼쪽 칸 (크리처가 서서 줍는 자리)
+## 고물 더미 오른쪽 한 칸 띄운 자리 (크리처가 서서 줍는 자리. 2026-10-01 마을 넓히기: 더미 배지와 일 이름표가 안 겹치게)
 static func scrap_spot() -> Vector2i:
-	return Config.SCRAP_RECT.position + Vector2i.LEFT
+	return Config.SCRAP_RECT.position + Vector2i(Config.SCRAP_RECT.size.x + 1, 0)
 
 
 ## 농사 한 번 (2026-09-29 사용자 선택 A+B): 범위 안 밭에서 수확 → 파종 → 급수 순으로 할 일을 찾는다.

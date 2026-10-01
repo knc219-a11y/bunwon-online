@@ -117,8 +117,7 @@ const ELEMENTS := {
 	&"water": "res://data/creatures/elements/water.tres",
 	&"earth": "res://data/creatures/elements/earth.tres",
 }
-## 채집 크리처를 놓는 풀밭 칸 (공급함 옆, 봇이 쓰는 (15, 7) 둘레)
-const FORAGE_CELLS: Array[Vector2i] = [Vector2i(15, 7), Vector2i(14, 7), Vector2i(15, 8), Vector2i(14, 8), Vector2i(13, 7), Vector2i(13, 8), Vector2i(16, 7), Vector2i(16, 8)]
+const FORAGE_CELLS := Config.FORAGE_CELLS
 
 
 static func ids() -> Array[StringName]:

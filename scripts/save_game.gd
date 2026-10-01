@@ -7,8 +7,17 @@ extends RefCounted
 ## GameState 변수는 이름으로 모두 담는다. 나중에 변수가 늘어도 옛 파일은 그 변수만 처음 값으로 읽힌다.
 ## 알 · 크리처의 종 · 속성 · Trait 같은 리소스는 파일 경로로 담는다.
 
-const VERSION := 1
+## 2 = 마을 넓히기 (2026-10-01). 1 은 옛 26x15칸 마을 좌표라 읽을 때 새 배치로 옮긴다 (_migrate_v1).
+const VERSION := 2
 const SLOTS := 3
+
+## 옛 마을 (VERSION 1, 26x15칸) 좌표. 옛 저장 파일의 칸을 새 배치로 옮길 때만 쓴다.
+const V1_FIELD_PLOTS: Array[Rect2i] = [Rect2i(1, 2, 6, 4), Rect2i(7, 2, 6, 4), Rect2i(1, 6, 6, 4), Rect2i(7, 6, 6, 4)]
+const V1_HATCH_CELL := Vector2i(16, 5)
+## 옛 시설 앞 일하는 칸 (Creature.scrap_spot · herb_spot · feed_spot)
+const V1_SCRAP_SPOT := Vector2i(8, 12)
+const V1_HERB_SPOT := Vector2i(18, 11)
+const V1_FEED_SPOT := Vector2i(17, 3)
 
 ## 저장 폴더 (테스트는 따로 쓴다)
 static var dir := "user://"
@@ -155,6 +164,8 @@ static func _unpack_into(name: String, v: Variant) -> void:
 # --- 되살리기 ----------------------------------------------------------------
 
 static func apply(main: Node2D, d: Dictionary) -> void:
+	if d.get("version", 1) < 2:
+		d = _migrate_v1(d)
 	var gs: Dictionary = d.get("gs", {})
 	for name in _state_vars():
 		if gs.has(name):
@@ -190,12 +201,12 @@ static func apply(main: Node2D, d: Dictionary) -> void:
 	# 들나물 자리 (시설 터를 놓은 뒤에 넣어야 막힌 칸에서 지워지지 않는다)
 	var forage: Forage = main.forage
 	var fd: Dictionary = d.get("forage", {})
-	forage.herbs.assign(fd.get("herbs", {}))
-	forage.roots.assign(fd.get("roots", {}))
-	forage.watered.assign(fd.get("watered", {}))
-	forage.claimed.clear()
-	forage.bonus_today = fd.get("bonus_today", 0)
-	forage.queue_redraw()
+	if fd.is_empty():
+		# 옛 마을 저장: 들나물 자리가 바뀌어서 오늘 것을 새 풀밭에 다시 돋운다
+		forage.watered.clear()
+		forage.sprout(main._rng)
+	else:
+		_apply_forage(forage, fd)
 
 	for cd: Dictionary in d.get("creatures", []):
 		var data := CreatureData.new()
@@ -232,3 +243,56 @@ static func apply(main: Node2D, d: Dictionary) -> void:
 	main.tool_index = d.get("tool_index", 0)
 	main._update_dusk()
 	main._refresh_props()
+
+
+static func _apply_forage(forage: Forage, fd: Dictionary) -> void:
+	forage.herbs.assign(fd.get("herbs", {}))
+	forage.roots.assign(fd.get("roots", {}))
+	forage.watered.assign(fd.get("watered", {}))
+	forage.claimed.clear()
+	forage.bonus_today = fd.get("bonus_today", 0)
+	forage.queue_redraw()
+
+
+# --- 옛 저장 파일 (VERSION 1) ---------------------------------------------------
+
+## 옛 26x15칸 마을의 칸을 새 배치의 칸으로. 밭 칸은 같은 구역 같은 자리로, 시설 앞 일하는 칸 · 부화 칸은 새 자리로,
+## 나머지 풀밭은 새 마을 공급함 옆 풀밭 칸으로 (채집 크리처는 어디서든 마을 풀밭을 돈다).
+static func v1_cell(cell: Vector2i, spare_index := 0) -> Vector2i:
+	for i in V1_FIELD_PLOTS.size():
+		if V1_FIELD_PLOTS[i].has_point(cell):
+			return cell - V1_FIELD_PLOTS[i].position + Config.FIELD_PLOTS[i].position
+	match cell:
+		V1_HATCH_CELL:
+			return Config.HATCH_CELL
+		V1_SCRAP_SPOT:
+			return Creature.scrap_spot()
+		V1_HERB_SPOT:
+			return Creature.herb_spot()
+		V1_FEED_SPOT:
+			return Creature.feed_spot()
+	return Config.FORAGE_CELLS[spare_index % Config.FORAGE_CELLS.size()]
+
+
+## 옛 저장 Dictionary 를 새 배치 좌표로 바꾼 사본. 들나물은 비워서 다시 돋게 하고, 사람은 새 마을 처음 자리에 세운다.
+static func _migrate_v1(d: Dictionary) -> Dictionary:
+	var out := d.duplicate(true)
+	var cells := {}
+	for cell: Vector2i in d.get("farm", {}):
+		cells[v1_cell(cell)] = d.farm[cell]
+	out.farm = cells
+	out.forage = {}
+	var spare := 0
+	for cd: Dictionary in out.get("creatures", []):
+		var home: Vector2i = cd.home
+		var moved := v1_cell(home, spare)
+		if moved == Config.FORAGE_CELLS[spare % Config.FORAGE_CELLS.size()] and not _v1_special(home):
+			spare += 1
+		cd.home = moved
+	out.people = {}
+	out.version = VERSION
+	return out
+
+
+static func _v1_special(cell: Vector2i) -> bool:
+	return V1_FIELD_PLOTS.any(func(r: Rect2i) -> bool: return r.has_point(cell)) or cell in [V1_HATCH_CELL, V1_SCRAP_SPOT, V1_HERB_SPOT, V1_FEED_SPOT]

@@ -1220,8 +1220,8 @@ func _draw_ground(n: Node2D) -> void:
 		_draw_waypoint(n)
 		return
 	var tiles: Texture2D = preload("res://assets/tiles/farm_tiles.png")
-	for x in Config.MAP_SIZE.x + 1:
-		for y in Config.MAP_SIZE.y:
+	for x in Config.SCREEN_CELLS.x + 1:
+		for y in Config.SCREEN_CELLS.y:
 			var h := (x * 73856093) ^ (y * 19349663)
 			var v := [0, 0, 0, 1, 1, 2, 3][absi(h) % 7] as int
 			n.draw_texture_rect_region(tiles, Rect2(x * T, y * T, T, T), Rect2(v * T, 0, T, T), Config.HUNT_ZONES[zone].ground_tint)
