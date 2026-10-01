@@ -325,7 +325,7 @@ const HUNT_ZONES: Array[Dictionary] = [
 		name = "금사리", junk_name = "모래게 껍데기", monster = "요괴 모래게", boss_monster = "금두꺼비", waypoint = true,
 		## 화면보다 넓은 맵 (2026-09-28 사용자 선택 C): data/hunt_maps/geumsa.txt, 카메라가 사냥꾼을 따라간다
 		map = "geumsa",
-		sheet = "res://assets/creatures/wild_sand_crab.png", boss_sheet = "res://assets/creatures/wild_gold_toad.png", burrow = true,
+		sheet = "res://assets/creatures/wild_sand_crab.png", boss_sheet = "res://assets/creatures/wild_gold_toad_hd.png", burrow = true,
 		sign = "금사리(구터)",
 		## 대장을 쓰러뜨리면 boss_egg_chance 확률로 떨어지는 알 (예전엔 반드시 → 2026-09-29 낮춤)
 		boss_egg = "res://data/creatures/species/gold_toad.tres",
@@ -351,7 +351,7 @@ const HUNT_ZONES: Array[Dictionary] = [
 		name = "광동리", junk_name = "까마귀 깃털", monster = "요괴 까마귀", boss_monster = "허수아비 장수", waypoint = true,
 		map = "gwangdong",
 		labels = [[Vector2(26, 4.3), "군량 곳간"]],
-		sheet = "res://assets/creatures/wild_sparrow.png", boss_sheet = "res://assets/creatures/wild_scarecrow.png", burrow = false,
+		sheet = "res://assets/creatures/wild_sparrow.png", boss_sheet = "res://assets/creatures/wild_scarecrow_hd.png", burrow = false,
 		## 까마귀는 날아다닌다 (flyer): 나는 동안 칼·몸이 닿지 않고, 내려꽂기(그림자 원 예고) 뒤 땅에서 낟알을 쪼는 동안만 칼에 맞는다
 		flyer = true,
 		## 알 (구역마다 일반 알 종): 까마귀 → 아기 까마귀. 대장도 가끔 같은 알.
@@ -377,8 +377,8 @@ const HUNT_ZONES: Array[Dictionary] = [
 		## 천하대장군 = 통나무 굴리기 (긴 띠 예고 → 통나무가 굴러감), 지하여장군 (partner) = 쿵 내려찍고 그루터기 새끼를 깨움.
 		name = "도마리", junk_name = "고목 옹이", monster = "고목 그루터기", boss_monster = "천하대장군", waypoint = true,
 		map = "doma",
-		sheet = "res://assets/creatures/wild_old_stump.png", boss_sheet = "res://assets/creatures/wild_cheonha.png", burrow = true,
-		partner = {name = "지하여장군", sheet = "res://assets/creatures/wild_jiha.png", pattern = &"slam"},
+		sheet = "res://assets/creatures/wild_old_stump.png", boss_sheet = "res://assets/creatures/wild_cheonha_hd.png", burrow = true,
+		partner = {name = "지하여장군", sheet = "res://assets/creatures/wild_jiha_hd.png", pattern = &"slam"},
 		## 알: 2막 일반 알 = 아기 까마귀 (광동리와 같음), 2막 대장 알 = 아기 나무 정령 (사용자: "알은 나무정령알")
 		egg = "res://data/creatures/species/sparrow.tres", boss_egg = "res://data/creatures/species/tree_spirit.tres",
 		egg_chance = 0.03, boss_egg_chance = 0.2,
@@ -648,3 +648,6 @@ const ADOPT_SPOTS := {
 	&"alchemist": [Vector2i(19, 11), Vector2i(19, 10), Vector2i(15, 10), Vector2i(14, 10)],
 	&"rancher": [Vector2i(14, 4), Vector2i(15, 4), Vector2i(14, 3), Vector2i(14, 5)],
 }
+
+## 농사가 아닌 크리처 (채집 · 고철 · 도라지밭 · 모이) 의 일 이름표는 조작 중인 캐릭터가 이 거리 (px) 안일 때만 보인다
+const CREATURE_TAG_DISTANCE := 56.0

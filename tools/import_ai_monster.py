@@ -61,6 +61,8 @@
 import argparse
 import os
 
+import make_slime_sheet
+
 from PIL import Image
 
 from import_ai_character import pixelize, white_to_alpha
@@ -565,6 +567,29 @@ def build(src, kind, width=None, colors=20, redraw_eyes=False, sand_src=None, mo
     return sheet
 
 
+# 대장 고해상 시트 (2026-10-01 사용자: "보스몬스터의 도트가 너무 깨져보이는 현상"): 게임이 32칸 시트를 1.8배로 키우면
+# 원본 1px 이 화면 1px · 2px 로 들쭉날쭉 늘어 깨져 보인다. --hd 는 같은 AI 그림을 1.8배 크기 (58칸) 로 바로 픽셀화해서
+# 게임이 늘리지 않고 1:1 로 그리게 한다 (<이름>_hd.png). 몸 가로 · 키 · 뜬 높이 · 옆 밀기 · 눈 크기를 같은 배율로.
+# --mini 는 반대로 대장이 불러내는 새끼 (게임에서 0.65배) 용 21칸 시트 <이름>_mini.png.
+HD = 1.8
+HD_CELL = 58
+MINI = 0.65
+MINI_CELL = 21
+
+
+def use_scale(kind, k, cell, suffix):
+    global CELL
+    CELL = cell
+    make_slime_sheet.CELL = cell
+    spec = dict(KINDS[kind])
+    spec["width"] = round(spec["width"] * k)
+    if spec.get("max_h"):
+        spec["max_h"] = round(spec["max_h"] * k)
+    spec["frames"] = [dict(f, lift=round(f.get("lift", 0) * k), dx=round(f.get("dx", 0) * k)) for f in spec["frames"]]
+    spec["out"] = spec["out"] + suffix
+    KINDS[kind] = spec
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("src")
@@ -591,7 +616,17 @@ def main():
     ap.add_argument("--alpha", type=int, default=225, help="bus: 반쯤 비치는 정도 (0-255)")
     ap.add_argument("--out", help="기본: assets/creatures/<규격 이름>.png")
     ap.add_argument("--preview", help="4배 확대 미리보기 PNG")
+    ap.add_argument("--hd", action="store_true", help="대장용 1.8배 (58칸) 시트 <이름>_hd.png. 게임은 늘리지 않고 그린다")
+    ap.add_argument("--mini", action="store_true", help="새끼용 0.65배 (21칸) 시트 <이름>_mini.png. 게임은 줄이지 않고 그린다")
     a = ap.parse_args()
+    if a.hd:
+        use_scale(a.kind, HD, HD_CELL, "_hd")
+        a.width = round(a.width * HD) if a.width else None
+        a.eye_size = max(a.eye_size + 1, round(a.eye_size * HD))
+    elif a.mini:
+        use_scale(a.kind, MINI, MINI_CELL, "_mini")
+        a.width = round(a.width * MINI) if a.width else None
+        a.eye_size = max(1, round(a.eye_size * MINI))
     mouth = tuple(float(v) for v in a.mouth.split(","))
     pairs = lambda t: [tuple(v) for v in zip(*[iter(float(x) for x in t.split(","))] * 2)] if t else []
     if a.kind == "bus":

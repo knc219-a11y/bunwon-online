@@ -199,3 +199,11 @@ python3 tools/make_wear_sheets.py   # 이 캐릭터의 장비 덧그림을 새 �
 | `assets/fonts/Galmuri9.ttf` | | 게임 전체 글씨 (크기 10이 제 크기) |
 
 조명 · 날씨는 그림 파일 없이 `scripts/ambience.gd` 가 그린다 (시각별 색표 `DAY_COLORS`, 불빛은 `add_light`).
+
+## 대장 · 새끼 크기 (2026-10-01 도트 깨짐 고침)
+
+게임은 그림을 늘이거나 줄이지 않고 원본 1px = 화면 1px (또는 정수 2px) 로 그린다. 32칸 시트를 1.8배 · 0.65배로 그리면 픽셀이 1px · 2px 로 들쭉날쭉해서 깨져 보인다.
+
+- 대장 (구역 데이터 `boss_sheet`, 게임 배율 `Config.BOSS_SCALE`): AI 그림이 있는 대장은 `tools/import_ai_monster.py --hd` 로 58칸 시트 `<이름>_hd.png` 를 만들어 1:1. 코드 그림 대장 (대장 슬라임 · 산군 백호) 은 32칸 시트를 정수 2배.
+- 새끼 (`Config.MINION_SCALE`): `--mini` 로 21칸 시트 `<이름>_mini.png` (슬라임은 `import_ai_slime.py --mini`). 있으면 `WildSlime.make_minion` 이 그걸 1:1 로 쓴다.
+- 칸 크기는 시트 높이로 정한다 (`WildSlime._apply_sheet`). 대장 웅크림은 배율 대신 2px 내려앉는다.

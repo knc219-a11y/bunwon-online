@@ -135,7 +135,7 @@ func _ready() -> void:
 		_add_prop("", preload("res://assets/props/tree_persimmon.png"), Rect2i(cell, Vector2i.ONE), PERSIMMON_BLOCK, true)
 	# 부화기·공급함·사냥터 입구는 키가 낮아 차지하는 칸 전체를 막는다
 	incubator = _add_prop("부화기", preload("res://assets/props/incubator.png"), INCUBATOR_RECT)
-	supply_box = _add_prop("마을 공급함", preload("res://assets/props/supply_box.png"), SUPPLY_RECT)
+	supply_box = _add_prop("공급함", preload("res://assets/props/supply_box.png"), SUPPLY_RECT)
 	hunt_gate = _add_prop("사냥터 입구", preload("res://assets/props/hunt_gate.png"), HUNT_GATE_RECT)
 	stash_box = _add_prop("창고", preload("res://assets/props/stash.png"), STASH_RECT)
 
@@ -207,6 +207,7 @@ func _set_active(c: Character) -> void:
 func _process(delta: float) -> void:
 	if hunt == null:
 		update_fading()
+		Creature.focus = active.position
 	if clock_running and not sleeping and not menu_open and not inventory.visible:
 		advance_clock(delta * Config.CLOCK_MINUTES_PER_SECOND)
 
@@ -2162,9 +2163,10 @@ func _refresh_props() -> void:
 	if scrap_heap:
 		scrap_heap.set_badge("고철 %d" % GameState.scrap_pile if GameState.scrap_pile > 0 else "비었음")
 	if yak:
-		yak.set_badge("%s %d/%d" % [Config.BOSS_MATERIAL2_NAME, GameState.material2, Config.YAK_COST_MATERIAL] if GameState.yak_state == 1 else ("%s %d" % [Config.ROOT_NAME, GameState.roots]))
+		# 고친 뒤엔 도라지밭 남은 수도 여기 함께 (도라지밭 배지가 약방 옆 배지와 겹쳐서, 2026-10-01)
+		yak.set_badge("%s %d/%d" % [Config.BOSS_MATERIAL2_NAME, GameState.material2, Config.YAK_COST_MATERIAL] if GameState.yak_state == 1 else ("%s %d · 밭 %d" % [Config.ROOT_NAME, GameState.roots, GameState.herb_bed]))
 	if herb_bed:
-		herb_bed.set_badge("%s %d" % [Config.ROOT_NAME, GameState.herb_bed] if GameState.herb_bed > 0 else "비었음")
+		herb_bed.set_badge("")
 	if barn:
 		barn.set_badge("%s %d/%d" % [Config.BOSS_MATERIAL3_NAME, GameState.material3, Config.BARN_COST_MATERIAL] if GameState.barn_state == 1 else ("둥지 달걀 %d" % GameState.nest if GameState.nest > 0 else ""))
 		_flock.queue_redraw()
