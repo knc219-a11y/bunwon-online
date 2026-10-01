@@ -11,6 +11,7 @@
 script = ExtResource("1")
 id = &"white_tiger"
 display_name = "아기 백호"
+faces = 1
 possible_elements = Array[Resource]([ExtResource("5")])
 job_aptitude = {
 &"feed": 2.0

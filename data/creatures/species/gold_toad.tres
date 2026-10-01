@@ -11,6 +11,7 @@
 script = ExtResource("1")
 id = &"gold_toad"
 display_name = "아기 금두꺼비"
+faces = 1
 possible_elements = Array[Resource]([ExtResource("5")])
 work_speed_range = Vector2(0.8, 1.2)
 radius_range = Vector2i(1, 2)
