@@ -28,13 +28,21 @@ func _ready() -> void:
 	GameState.day = 6
 	GameState.hunter_unlocked = true
 	GameState.first_egg_done = true
-	GameState.worn[&"hunter"][&"weapon"] = &"long_sword"
+	# WEAPON (2026-10-02 활 몰아잡기 후보): 든 무기 id, BOW = pierce · spread · volley (비우면 지금)
+	var wid := OS.get_environment("WEAPON")
+	GameState.worn[&"hunter"][&"weapon"] = StringName(wid) if wid != "" else &"long_sword"
+	HuntGround.bow_style = StringName(OS.get_environment("BOW"))
 	main._set_active(main.hunter)
 	main.hunter.refresh_wear()
-	main.enter_hunt(null, 0)
+	# ZONE · SEED (2026-10-02 활 몰아잡기 겨루기): 들어갈 구역 번호와 난수
+	var zone := int(OS.get_environment("ZONE")) if OS.get_environment("ZONE") != "" else 0
+	var sd := int(OS.get_environment("SEED")) if OS.get_environment("SEED") != "" else 7
+	GameState.waypoints.assign(range(zone + 1))
+	seed(sd)
+	main.enter_hunt(null, zone)
 	var h: HuntGround = main.hunt
-	h.loot_rng.seed = 7
-	seed(7)
+	h.loot_rng.seed = sd
+	seed(sd)
 	if mode == "C":
 		# 습격 터 목업: 떼를 치우고, 사냥꾼이 들어선 자리 둘레에 물결로 솟게 한다
 		for o: WildSlime in h.slimes.duplicate():
@@ -55,12 +63,24 @@ var hunt: HuntGround
 var ready_done := false
 var t := 0.0
 var spawned := 0
+## 몬스터가 ENGAGE px 안에 있던 시간 (떼 사이를 걷는 시간을 빼고 싸움 빠르기만 보려고)
+var engaged := 0.0
+const ENGAGE := 160.0
 
 
 ## Movie Maker (--write-movie --fixed-fps 30) 로 찍는다: 게임은 그대로 돌고, 봇은 키를 누른 것처럼 움직인다
 func _process(delta: float) -> void:
 	if not ready_done:
 		return
+	if not is_instance_valid(hunt) or main.hunt != hunt:
+		# 쓰러져서 사냥터를 나왔다
+		ready_done = false
+		print("MODE %s kills %d in %.0fs engaged %.1f hurt %d knocked true" % [mode, kills, t, engaged, Config.HUNTER_HEARTS])
+		get_tree().quit()
+		return
+	var near: WildSlime = hunt._nearest_slime(main.hunter.feet())
+	if near != null and near.position.distance_to(main.hunter.feet()) <= ENGAGE:
+		engaged += delta
 	_bot(hunt)
 	if mode == "C":
 		_tick_ring(hunt)
@@ -72,7 +92,7 @@ func _process(delta: float) -> void:
 		var f := FileAccess.open("%s/kills.txt" % S, FileAccess.WRITE)
 		f.store_string("\n".join(log_lines))
 		f.close()
-		print("MODE %s kills %d in %.0fs" % [mode, kills, sec])
+		print("MODE %s kills %d in %.0fs engaged %.1f hurt %d knocked %s" % [mode, kills, sec, engaged, Config.HUNTER_HEARTS - hunt.hearts, hunt.knocked])
 		get_tree().quit()
 
 
@@ -143,6 +163,9 @@ func _bot(h: HuntGround) -> void:
 					escape += d.normalized() if d != Vector2.ZERO else Vector2.DOWN
 	var w := Wearables.weapon()
 	var hand := feet + Vector2(0, -8)
+	if w.kind != &"melee":
+		_bot_ranged(h, feet, hand, w, escape)
+		return
 	# 닿는 몬스터가 있으면 그 무리 가운데로 벤다 (예고가 떠도 구르기가 안 되면 베기부터)
 	var in_reach := h.slimes.filter(func(o: WildSlime) -> bool: return not o.airborne() and o.position.distance_to(hand) <= w.reach + w.radius - 2)
 	if escape != Vector2.ZERO and h.dash(escape.normalized()):
@@ -167,6 +190,38 @@ func _bot(h: HuntGround) -> void:
 	if target.position.distance_to(feet) > 100.0 and h.dash(dir):
 		return
 	_walk(dir)
+
+
+## 활 · 지팡이 봇: 사거리 안이면 서서 가장 몰린 쪽으로 쏘고, 너무 가까우면 물러서거나 구르고, 멀면 다가간다
+func _bot_ranged(h: HuntGround, feet: Vector2, hand: Vector2, w: Dictionary, escape: Vector2) -> void:
+	if escape != Vector2.ZERO:
+		if not h.dash(escape.normalized()):
+			_walk(escape.normalized())
+		return
+	var target: WildSlime = h._nearest_slime(feet)
+	if target == null:
+		_walk(Vector2.ZERO)
+		return
+	if target.buried and not target.disguise:
+		# 모래에 숨은 모래게: 다가가 깨운다
+		_walk(_path_dir(h, feet, target.position))
+		return
+	var body := target.position + Vector2(0, -8 * target.scale.y)
+	var d := hand.distance_to(body)
+	if d < 46.0:
+		var away := (feet - target.position).normalized()
+		if d < 26.0 and h.dash(away):
+			return
+		_walk(away)
+		if h._cooldown <= 0.0:
+			h.swing(body - hand)
+		return
+	if d <= w.range * 0.85:
+		_walk(Vector2.ZERO)
+		if h._cooldown <= 0.0:
+			h.swing(body - hand)
+		return
+	_walk(_path_dir(h, feet, target.position))
 
 
 func _walk(dir: Vector2) -> void:

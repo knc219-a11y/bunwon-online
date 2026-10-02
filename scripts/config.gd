@@ -170,6 +170,16 @@ const SWARM_ALERT_REST := 0.45
 ## 한꺼번에 달려들기 예고를 할 수 있는 몬스터 수 (떼가 한 번에 덮치지 않게, 하데스처럼 차례로)
 const MAX_ATTACKERS := 2
 
+## 활 몰아잡기 (2026-10-02 후보 비교, 떼가 생긴 뒤 활 사냥이 길어져서). 값은 전부 임시.
+## pierce 관통: 화살이 BOW_PIERCE 마리까지 꿰뚫는다 (마리마다 같은 피해).
+const BOW_PIERCE := 3
+## spread 부채살: 화살 3발을 이 각도(도)로 벌려 쏜다. 쿨이 이 배율로 길어진다.
+const BOW_SPREAD_DEG := 14.0
+const BOW_SPREAD_COOLDOWN := 1.3
+## volley 3연사: 한 번 쏘면 3발이 BOW_VOLLEY_GAP 초 간격으로 나간다. 쿨이 이 배율로 길어진다.
+const BOW_VOLLEY_GAP := 0.08
+const BOW_VOLLEY_COOLDOWN := 1.6
+
 ## 부딪히면 하트 -1, 그 뒤 이 시간 동안은 다시 맞지 않는다 (초)
 const HURT_INVULNERABLE_TIME := 1.0
 const WILD_SLIME_TOUCH_DISTANCE := 14.0

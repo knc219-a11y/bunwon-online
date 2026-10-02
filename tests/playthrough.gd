@@ -1,6 +1,6 @@
 extends Node
 ## 핵심 루프 점검용 자동 플레이 (2026-09-28). 새 게임에서 며칠을 "보통 플레이어"처럼 돌리고 숫자를 남긴다.
-## 실행: godot --headless --path . res://tests/playthrough.tscn   (환경변수 DAYS=10 SEED=1 OUT=경로 WEAPON=bow)
+## 실행: godot --headless --path . res://tests/playthrough.tscn   (환경변수 DAYS=10 SEED=1 OUT=경로 WEAPON=bow BOW=pierce|spread|volley|plain)
 ## WEAPON (2026-09-29 무기): 봇이 즐겨 드는 무기 종류. bow (기본) · staff · melee (근거리 무기) · knife (무기 없이 사냥칼만).
 ## 그 종류 무기가 없으면 사냥칼로 싸운다. DEBUG_KO=1 이면 하트가 줄 때 · 쓰러질 때 까닭을 적는다.
 ## 농사는 칸마다 도구를 쓰는 횟수를 세고, 사냥은 길찾기 봇이 실제 사냥터(실시간 AI)에서 싸운다.
@@ -115,6 +115,9 @@ func _ready() -> void:
 	var rng_seed := int(OS.get_environment("SEED")) if OS.get_environment("SEED") != "" else 1
 	if OS.get_environment("WEAPON") != "":
 		weapon_pref = StringName(OS.get_environment("WEAPON"))
+	# BOW (2026-10-02 활 몰아잡기 후보): pierce · spread · volley. 비우면 게임 기본
+	if OS.get_environment("BOW") != "":
+		HuntGround.bow_style = StringName(OS.get_environment("BOW")) if OS.get_environment("BOW") != "plain" else &""
 	seed(rng_seed)
 	expedition_on = OS.get_environment("EXPEDITION") != "0"
 	main = load("res://scenes/main.tscn").instantiate()
@@ -827,6 +830,8 @@ func hunt_day() -> void:
 	var zone_t := 0.0
 	var seen := {}
 	var dodges := 0
+	## 몬스터가 남아 있는 동안 흐른 시간 (2026-10-02 활 몰아잡기: 걷기 · 줍기 빼고 싸움 빠르기만 보려고)
+	var fight_t := 0.0
 	var gwang_hurt0 := -1
 	var doma_hurt0 := -1
 	var bun_hurt0 := -1
@@ -882,6 +887,8 @@ func hunt_day() -> void:
 			elif not full_at.has(d.at):
 				pickups.append(d.at)
 		var nearest_s: WildSlime = h._nearest_slime(feet)
+		if nearest_s != null:
+			fight_t += DT
 		# 번천 유령: 불빛 안(맞힐 수 있는) 것부터, 없으면 가장 가까운 것에 다가가 호롱으로 비춘다
 		var lit_s: WildSlime = h._nearest_slime(feet, true)
 		if lit_s != null and h.is_night():
@@ -1051,8 +1058,8 @@ func hunt_day() -> void:
 		eggs.append(sp.display_name)
 		if sp == CreatureCatalog.TIGER or sp == CreatureCatalog.WHITE_TIGER:
 			tigers_got[sp.display_name] = tigers_got.get(sp.display_name, 0) + 1
-	_log("사냥: 시작 %s · 동행 %s · %s · 처치 %d · 맞은 횟수 %d · 비킨 틱 %d · 남은 하트 %d%s · 알 %s · 돈 %+d · 물약 %+d · 젤리 %+d · 장비 %+d" % [
-		Config.HUNT_ZONES[zone].name, comp, " → ".join(zone_times), kills, hurt, dodges, hearts_left, " (쓰러짐)" if knocked else "",
+	_log("사냥: 시작 %s · 동행 %s · %s · 싸움 %.0f초 · 처치 %d · 맞은 횟수 %d · 비킨 틱 %d · 남은 하트 %d%s · 알 %s · 돈 %+d · 물약 %+d · 젤리 %+d · 장비 %+d" % [
+		Config.HUNT_ZONES[zone].name, comp, " → ".join(zone_times), fight_t, kills, hurt, dodges, hearts_left, " (쓰러짐)" if knocked else "",
 		eggs, GameState.money - money0, GameState.potions - potions0, GameState.junk - junk0, GameState.gear.size() + GameState.owned_wear.size() - gear0])
 	if t >= 900.0:
 		_log("  ! 사냥 봇이 15분 안에 끝내지 못함 (막힘?)")
