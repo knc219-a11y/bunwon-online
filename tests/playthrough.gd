@@ -914,6 +914,15 @@ func hunt_day() -> void:
 						escape += d.normalized() if d != Vector2.ZERO else Vector2.DOWN
 		if escape != Vector2.ZERO:
 			dodges += 1
+			# 구르기 (2026-10-02 손맛): 쓸 수 있으면 비킬 쪽으로 구른다 (사람도 그럴 것)
+			if h.dash(escape.normalized()):
+				h.tick(DT)
+				if h.hearts < last_hearts:
+					hurt += last_hearts - h.hearts
+				last_hearts = h.hearts
+				t += DT
+				zone_t += DT
+				continue
 			var mult: float = (h.map.speed_at(feet) if h.map else 1.0) * Wearables.speed_mult(&"hunter") * hunter.slow_mult
 			var p0 := hunter.position
 			hunter.step(escape.normalized() * Config.CHARACTER_SPEED * mult * DT)

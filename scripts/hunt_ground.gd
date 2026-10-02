@@ -19,6 +19,11 @@ signal knocked_out
 static var loot_enabled := true
 ## 0 이상이면 알 확률 굴림 대신 이 값을 쓴다 (0 = 늘 나옴, 1 = 안 나옴). 테스트에서 쓴다.
 static var egg_roll := -1.0
+## 사냥 손맛 (2026-10-02 사용자: "요즘 로그라이크 액션게임처럼 좀 스피드하고 더 몰아잡는 느낌", "하데스2같은 느낌").
+## feel = 구르기 · 꾹 눌러 연속 베기 · 3타 · 타격 멈춤 · 덜 밀려남, swarm = 몬스터 자리마다 떼 (체력 낮고 드롭 몫 나눔) · 한꺼번에 달려드는 수 제한.
+## 후보 비교 화면을 찍을 때 끄고 켠다.
+static var feel := true
+static var swarm := true
 
 const T := Config.TILE
 ## 사냥꾼이 걸을 수 있는 공터 (캐릭터 위치 기준, px)
@@ -69,6 +74,21 @@ var companion_ai := true
 
 var _cooldown := 0.0
 var _invulnerable := 0.0
+## 구르기: 남은 시간 (-1 = 아님) · 방향 · 다시 구를 수 있을 때까지
+var dash_t := -1.0
+var dash_cd := 0.0
+var _dash_dir := Vector2.DOWN
+## 지나간 자리 잔상 {at, t}
+var _trail: Array[Dictionary] = []
+## 연속 베기: 지금 몇 타째 (0 1 2) · 마지막 벤 뒤 흐른 시간 · 이번이 3타째였는지 (그리기용)
+var combo := 0
+var _since_swing := 99.0
+var _finisher := false
+## 타격 멈춤 남은 시간 · 화면 흔들림 남은 시간
+var _hitstop := 0.0
+var _shake := 0.0
+## 맞힌 자리에 뜨는 피해 숫자 {at, text, t}
+var _pops: Array[Dictionary] = []
 var _swing_time := 0.0
 var _swing_dir := Vector2.DOWN
 ## 이번 휘두르기 반지름 (그리기용, 무기마다 다름)
@@ -177,17 +197,30 @@ func _fill_zone() -> void:
 	var spots: Array[Vector2] = []
 	if map:
 		spots = map.find("c")
+	var pack := swarm_size()
 	for i in z.count:
-		var s := WildSlime.new()
-		s.setup_zone(zone)
-		s.area = monster_area()
-		s.terrain = map
-		s.position = spots[i % spots.size()] if map else Farm.center_of(SLIME_CELLS[i % SLIME_CELLS.size()])
-		s.ai_enabled = _ai_on
-		s.swooped.connect(_on_swooped.bind(s))
-		s.burst.connect(_on_burst.bind(s))
-		add_child(s)
-		slimes.append(s)
+		var at: Vector2 = spots[i % spots.size()] if map else Farm.center_of(SLIME_CELLS[i % SLIME_CELLS.size()])
+		for k in pack:
+			var s := WildSlime.new()
+			s.setup_zone(zone)
+			if pack > 1:
+				s.make_swarm(pack)
+			s.knock_mult = Config.HIT_KNOCKBACK_MULT if feel else 1.0
+			s.area = monster_area()
+			s.terrain = map
+			s.position = at
+			if pack > 1:
+				s.pack_id = i
+				s.home = at
+			if k > 0:
+				# 떼: 자리 둘레에 고르게 (막힌 칸이면 자리 그대로)
+				var p := at + Vector2.from_angle(TAU * k / (pack - 1) + i) * Config.SWARM_SPREAD * Vector2(1.0, 0.7)
+				s.position = p if map == null or map.monster_ok(p + Vector2(0, WildSlime.BOTTOM_Y - 2)) else at
+			s.ai_enabled = _ai_on
+			s.swooped.connect(_on_swooped.bind(s))
+			s.burst.connect(_on_burst.bind(s))
+			add_child(s)
+			slimes.append(s)
 	for tree in _trees + _map_trees:
 		tree.modulate = z.tree_tint
 	for tree in _trees:
@@ -327,6 +360,11 @@ func power() -> int:
 	return 2 if strong else 1
 
 
+## 몬스터 자리 하나에 모여 있는 수 (몰아잡기 떼가 꺼져 있으면 1)
+func swarm_size() -> int:
+	return Config.HUNT_ZONES[zone].get("swarm", Config.SWARM_SIZE) if swarm else 1
+
+
 ## 무기 · 동행이 이 몬스터를 맞힐 수 있는지. 유령(ghost 구역)은 불빛 밖에서 반쯤 비쳐 다 지나간다.
 func hittable(s: WildSlime) -> bool:
 	return not (Config.HUNT_ZONES[zone].get("ghost", false) and not s.boss and not in_light(s.position))
@@ -341,6 +379,8 @@ func start(h: Character, start_zone := 0) -> void:
 		_fill_zone()
 	loot_rng.randomize()
 	hearts = max_hearts()
+	dash_t = -1.0
+	hunter.dashing = false
 	hunter.show_facing_cell = false
 	hunter.queue_redraw()
 	_place_hunter()
@@ -522,9 +562,20 @@ func _process(delta: float) -> void:
 func tick(delta: float) -> void:
 	if hunter == null or knocked:
 		return
+	_shake = maxf(_shake - delta, 0.0)
+	camera.offset = Vector2(randf_range(-1, 1), randf_range(-1, 1)).round() * Config.SHAKE if _shake > 0.0 else Vector2.ZERO
+	if _hitstop > 0.0:
+		# 타격 멈춤: 맞은 순간 세상이 아주 잠깐 멈춘다 (손맛)
+		_hitstop -= delta
+		queue_redraw()
+		_fx.queue_redraw()
+		return
 	_cooldown = maxf(_cooldown - delta, 0.0)
 	_invulnerable = maxf(_invulnerable - delta, 0.0)
 	_swing_time = maxf(_swing_time - delta, 0.0)
+	_since_swing += delta
+	dash_cd = maxf(dash_cd - delta, 0.0)
+	_tick_dash(delta)
 	if frozen > 0.0:
 		frozen -= delta
 		if frozen <= 0.0:
@@ -542,19 +593,30 @@ func tick(delta: float) -> void:
 		if b:
 			_bus_light.position = b.position + Vector2(-40.0 if b._sprite.flip_h else 40.0, -12)
 	var popped := false
+	# 한꺼번에 덮치는 수 제한 (떼가 있을 때): 이미 Config.MAX_ATTACKERS 마리가 예고 · 돌진 중이면 다른 몬스터는 기다린다
+	var attackers := slimes.filter(func(o: WildSlime) -> bool: return not o.boss and o.attacking()).size()
+	# 떼: 하나가 사냥꾼을 알아채면 (또는 맞으면) 떼 모두 몰려온다
+	var woke := {}
+	for s: WildSlime in slimes:
+		if s.pack_id >= 0 and not s.alert and not s.buried and (s.position.distance_to(feet) <= Config.WILD_SLIME_CHASE_DISTANCE or s.hp < s.max_hp):
+			woke[s.pack_id] = true
+	if not woke.is_empty():
+		for s: WildSlime in slimes:
+			if woke.has(s.pack_id):
+				s.alert = true
 	for s: WildSlime in slimes.duplicate():
 		var was_buried := s.buried
+		var was_attacking := s.attacking()
+		s.may_attack = not swarm or s.boss or was_attacking or attackers < Config.MAX_ATTACKERS
 		s.lit = in_light(s.position)
 		s.tick(delta, feet)
+		if not s.boss and not was_attacking and s.attacking():
+			attackers += 1
 		popped = popped or (was_buried and not s.buried)
 		s.modulate.a = 1.0 if hittable(s) else Config.GHOST_FADE
 		if knocked:
 			return
-		# 대장은 몸에 닿아도 안 다친다 (2026-09-29 사용자: "보스몬스터에 부딪히기만 해도 체력이 감소하는건 근거리를 좋아하는 유저에겐 힘들거같아").
-		# 대장은 예고가 있는 패턴(내려찍기 · 혀 · 짚단 · 통나무)으로만 다치게 한다.
-		# 어둠 속 유령은 몸도 닿지 않는다 (불빛 안에서만 서로 닿음)
-		if _invulnerable <= 0.0 and not s.boss and not s.buried and not s.flyer and not s.stunned() and not s.airborne() and hittable(s) and s.position.distance_to(feet) <= Config.WILD_SLIME_TOUCH_DISTANCE * s.scale.x:
-			_hurt(s.position, s.damage, s.title)
+		_touch(s, feet)
 	if popped:
 		_pack_pop()
 	_tick_dust(delta)
@@ -579,10 +641,55 @@ func tick(delta: float) -> void:
 	_hud.queue_redraw()
 
 
+## 몸에 닿으면 다친다.
+## 대장은 몸에 닿아도 안 다친다 (2026-09-29 사용자: "보스몬스터에 부딪히기만 해도 체력이 감소하는건 근거리를 좋아하는 유저에겐 힘들거같아").
+## 대장은 예고가 있는 패턴(내려찍기 · 혀 · 짚단 · 통나무)으로만 다치게 한다.
+## 어둠 속 유령은 몸도 닿지 않는다 (불빛 안에서만 서로 닿음)
+func _touch(s: WildSlime, feet: Vector2) -> void:
+	if _invulnerable <= 0.0 and not s.boss and not s.buried and not s.flyer and not s.stunned() and not s.airborne() and hittable(s) and s.position.distance_to(feet) <= Config.WILD_SLIME_TOUCH_DISTANCE * s.scale.x:
+		_hurt(s.position, s.damage, s.title)
+
+
+## 구른다 (Space, 2026-10-02 손맛): dir 쪽으로 (비어 있으면 바라보는 쪽) 휙. 구르는 동안과 조금 뒤까지 안 맞는다.
+func dash(dir := Vector2.ZERO) -> bool:
+	if not feel or knocked or frozen > 0.0 or dash_cd > 0.0 or dash_t >= 0.0:
+		return false
+	if dir == Vector2.ZERO:
+		dir = Vector2(hunter.facing)
+	_dash_dir = dir.normalized()
+	hunter.facing = Vector2i(int(signf(dir.x)), 0) if absf(dir.x) > absf(dir.y) else Vector2i(0, int(signf(dir.y)))
+	dash_t = 0.0
+	dash_cd = Config.DASH_COOLDOWN
+	_invulnerable = maxf(_invulnerable, Config.DASH_IFRAMES)
+	hunter.dashing = true
+	Sound.sfx(&"swing", 0.0, 1.4)
+	return true
+
+
+func _tick_dash(delta: float) -> void:
+	for i in range(_trail.size() - 1, -1, -1):
+		_trail[i].t -= delta
+		if _trail[i].t <= 0.0:
+			_trail.remove_at(i)
+	for i in range(_pops.size() - 1, -1, -1):
+		_pops[i].t -= delta
+		if _pops[i].t <= 0.0:
+			_pops.remove_at(i)
+	if dash_t < 0.0:
+		return
+	_trail.append({at = hunter.position, t = 0.18})
+	var mult := Wearables.speed_mult(&"hunter") * (Config.SPEED_POTION_MULT if quick else 1.0)
+	hunter.step(_dash_dir * Config.DASH_DISTANCE * mult / Config.DASH_TIME * delta)
+	dash_t += delta
+	if dash_t >= Config.DASH_TIME:
+		dash_t = -1.0
+		hunter.dashing = false
+
+
 ## 공격한다 (클릭). 든 무기에 따라 휘두르기 · 화살 · 지팡이 구슬 (2026-09-29 무기). 무기가 없으면 사냥칼.
 ## dir 이 비어 있으면 바라보는 쪽으로. 휘두르기는 맞힌 수, 쏘기는 쏘았으면 1 (맞았는지는 날아간 뒤).
 func swing(dir := Vector2.ZERO) -> int:
-	if knocked or _cooldown > 0.0 or frozen > 0.0:
+	if knocked or _cooldown > 0.0 or frozen > 0.0 or dash_t >= 0.0:
 		return 0
 	if dir != Vector2.ZERO:
 		# 마우스로 누른 쪽을 바라보게 한다 (4방향)
@@ -600,15 +707,44 @@ func swing(dir := Vector2.ZERO) -> int:
 		shots.append({kind = &"orb", at = hand, dir = _swing_dir, left = w.range, blast = w.blast, element = w.element})
 		return 1
 	_swing_time = 0.15
-	_swing_radius = w.radius
+	var radius: float = w.radius
+	var bonus := 0
+	_finisher = false
+	if feel:
+		# 연속 베기 (2026-10-02 손맛): 빨리 이어 베면 1 → 2 → 3타. 3타째는 앞으로 내딛으며 넓고 세게.
+		combo = (combo + 1) % 3 if _since_swing <= Config.COMBO_WINDOW else 0
+		_since_swing = 0.0
+		_cooldown = w.cooldown * Config.COMBO_SPEED
+		if combo == 2:
+			_finisher = true
+			radius *= Config.COMBO_FINISH_RADIUS
+			bonus = 1
+			_cooldown *= 1.6
+			hunter.step(_swing_dir * Config.COMBO_FINISH_STEP)
+			hand = hunter.feet() + Vector2(0, -8)
+	_swing_radius = radius
 	var center: Vector2 = hand + _swing_dir * w.reach
 	var hits := 0
+	var kills := 0
 	for s in slimes.duplicate():
-		if not s.airborne() and hittable(s) and s.position.distance_to(center) <= w.radius:
+		if not s.airborne() and hittable(s) and s.position.distance_to(center) <= radius:
 			hits += 1
-			if s.hit(hunter.feet(), power()):
-				_defeat(s)
+			if _strike(s, hunter.feet(), power() + bonus):
+				kills += 1
+	if feel and hits > 0:
+		_hitstop = Config.HITSTOP_KILL if kills > 0 else Config.HITSTOP
+		_shake = 0.12 if kills > 1 or _finisher else (0.06 if kills > 0 else 0.0)
 	return hits
+
+
+## 한 번 맞힌다 (피해 숫자를 띄우고, 쓰러지면 처치). 쓰러뜨렸으면 true.
+func _strike(s: WildSlime, from: Vector2, amount: int) -> bool:
+	if feel:
+		_pops.append({at = s.position + Vector2(randf_range(-4, 4), -18 * s.scale.y), text = str(amount), t = 0.5, big = amount > 1})
+	if s.hit(from, amount):
+		_defeat(s)
+		return true
+	return false
 
 
 ## 화살 · 구슬을 날리고 맞힌다. 화살은 첫 몬스터에 박히고 (나는 까마귀도 맞힘, 모래에 숨은 모래게는 지나감.
@@ -649,8 +785,8 @@ func _tick_shots(delta: float) -> void:
 			continue
 		shots.remove_at(i)
 		if sh.kind == &"arrow":
-			if target != null and target.hit(sh.at - sh.dir * 10.0, power()):
-				_defeat(target)
+			if target != null and _strike(target, sh.at - sh.dir * 10.0, power()) and feel:
+				_hitstop = Config.HITSTOP
 		else:
 			_burst(sh.at, sh.blast, sh.element)
 
@@ -661,8 +797,7 @@ func _burst(at: Vector2, radius: float, element: StringName) -> void:
 	for s in slimes.duplicate():
 		if s.airborne() or not hittable(s) or (s.position + Vector2(0, -6)).distance_to(at) > radius + 8.0 * s.scale.x:
 			continue
-		if s.hit(at, power()):
-			_defeat(s)
+		if _strike(s, at, power()):
 			continue
 		match element:
 			&"water":
@@ -784,7 +919,8 @@ func _defeat(s: WildSlime) -> void:
 		for o in slimes:
 			if o.wolf and o.position.distance_to(s.position) <= Config.WOLF_FLINCH_RANGE:
 				o.stun(Config.WOLF_FLINCH)
-	if not s.boss and (not GameState.first_egg_done or _egg_roll() < z.get("egg_chance", 0.0)):
+	# 몰아잡기 떼 (2026-10-02): 떼 한 마리의 알 · 드롭 확률은 s.share 몫 (사냥 한 번 합은 예전과 같게)
+	if not s.boss and (not GameState.first_egg_done or _egg_roll() < z.get("egg_chance", 0.0) * s.share):
 		# 게임 전체 첫 처치는 알을 반드시 떨어뜨린다 (첫 사냥에서 막히지 않게). 그 뒤로는 드물게.
 		GameState.first_egg_done = true
 		# 구역마다 일반 알 종 (광동리 = 아기 까마귀). 없으면 슬라임 알.
@@ -824,7 +960,7 @@ func _defeat(s: WildSlime) -> void:
 		path_open = true
 		_ground.queue_redraw()
 	if loot_enabled:
-		var d := HuntLoot.roll_for_boss(loot_rng, zone) if s.boss else HuntLoot.roll_for_kill(loot_rng, zone)
+		var d := HuntLoot.roll_for_boss(loot_rng, zone) if s.boss else HuntLoot.roll_for_kill(loot_rng, zone, s.share)
 		if not d.is_empty():
 			# 알과 겹치지 않게 살짝 옆에 떨어뜨린다
 			d.at = _reachable(s.position + Vector2(10, 4))
@@ -1063,6 +1199,7 @@ func _hurt(from: Vector2, damage := 1, who := "야생 슬라임", what := "") ->
 	hunter.step(away * 16.0)
 	if hearts <= 0:
 		knocked = true
+		hunter.dashing = false
 		GameState.notify("사냥꾼이 쓰러졌다... 마을 입구로 돌아왔다. 주운 것은 그대로 있다.")
 		knocked_out.emit()
 	else:
@@ -1160,7 +1297,14 @@ func _draw() -> void:
 	if _swing_time > 0.0 and hunter:
 		var c := hunter.feet() + Vector2(0, -12)
 		var a := _swing_dir.angle()
-		draw_arc(c, _swing_radius + 2.0, a - 1.0, a + 1.0, 10, Color(1, 1, 1, 0.85), 2.5)
+		if _finisher:
+			# 3타째: 넓고 굵은 금빛 반원
+			draw_arc(c, _swing_radius + 2.0, a - 1.5, a + 1.5, 16, Color(1, 0.9, 0.5, 0.9), 4.0)
+			draw_arc(c, _swing_radius - 3.0, a - 1.3, a + 1.3, 14, Color(1, 1, 1, 0.7), 1.5)
+		else:
+			# 1 · 2타는 번갈아 반대쪽으로 쓸어 벤다
+			var tilt := 0.25 if combo == 1 else -0.25
+			draw_arc(c, _swing_radius + 2.0, a - 1.0 + tilt, a + 1.0 + tilt, 10, Color(1, 1, 1, 0.85), 2.5)
 
 
 const SHOT_BLOCK := "THGP"
@@ -1169,6 +1313,23 @@ const ELEMENT_COLORS := {&"water": Color(0.4, 0.65, 1.0), &"earth": Color(0.7, 0
 
 ## 화살 · 구슬 · 터짐 (몬스터 위에 그린다)
 func _draw_fx() -> void:
+	# 구르기 잔상 (사냥꾼 그림을 옅은 하늘색으로)
+	if hunter and not _trail.is_empty():
+		var f := hunter.frame_coords()
+		var size := Vector2(Character.FRAME_SIZE, Character.FRAME_SIZE)
+		for tr in _trail:
+			var at: Vector2 = tr.at + Vector2(-size.x / 2.0, Character.FEET_Y - size.y)
+			var rect := Rect2(at + Vector2(size.x, 0), Vector2(-size.x, size.y)) if f.z == 1 else Rect2(at, size)
+			_fx.draw_texture_rect_region(hunter.sheet, rect, Rect2(Vector2(f.x, f.y) * size, size), Color(0.6, 0.85, 1.0, 0.45 * tr.t / 0.18))
+	# 피해 숫자 (위로 떠오르며 사라짐)
+	var font := ThemeDB.fallback_font
+	for pp in _pops:
+		var k: float = 1.0 - pp.t / 0.5
+		var at: Vector2 = pp.at + Vector2(-10, -12.0 * k)
+		var size := 12 if pp.big else 9
+		var col := Color(1, 0.85, 0.3, 1.0 - k * k) if pp.big else Color(1, 1, 1, 1.0 - k * k)
+		_fx.draw_string_outline(font, at, pp.text, HORIZONTAL_ALIGNMENT_CENTER, 20, size, 3, Color(0.15, 0.05, 0.1, col.a))
+		_fx.draw_string(font, at, pp.text, HORIZONTAL_ALIGNMENT_CENTER, 20, size, col)
 	for sh in shots:
 		if sh.kind == &"arrow":
 			# 어두운 테두리 위에 밝은 화살 (풀밭 · 흙길 어디서나 보이게)
