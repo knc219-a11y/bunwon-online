@@ -22,6 +22,9 @@ const WHITE_TIGER: CreatureSpecies = preload("res://data/creatures/species/white
 ## 역동(7구역, 4막 첫 구역) 켄타우로스 창기병 · 역마 장군을 쓰러뜨리면 가끔 나오는 알 (2026-10-02 사용자 선택 A).
 ## 땅 속성. 농사를 맡으면 밭 갈기 (깊이 간 칸은 거둘 때 무 하나 더), 사냥 동행 = 뒷발차기 (멀리 밀어내고 잠깐 멈춤).
 const FOAL: CreatureSpecies = preload("res://data/creatures/species/foal.tres")
+## 곤지암(8구역, 4막 대장 구역) 뿔 악귀 · 마왕을 쓰러뜨리면 가끔 나오는 알 (2026-10-02 사용자 선택 A).
+## 불 속성. 밤일: 밤사이 맡은 일 (농사 · 고철 · 도라지 · 모이) 을 한 바퀴 더 해 둔다. 사냥 동행 = 불 할퀴기 + 겁주기.
+const IMP: CreatureSpecies = preload("res://data/creatures/species/imp.tres")
 
 ## 게임 시작 시 마을 공급함에 들어 있는 알
 const STARTER_EGG := SLIME

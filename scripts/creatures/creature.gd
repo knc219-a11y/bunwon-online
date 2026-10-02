@@ -113,7 +113,33 @@ func work_once() -> bool:
 		return _herb_once()
 	if job == CreatureJobs.FEED:
 		return _feed_once()
+	if job == CreatureJobs.FISH:
+		return _fish_once()
 	return false
+
+
+## 물고기 몰기 한 번 (2026-10-02 나루터 통발): 물가까지 건너가 물고기를 통발 쪽으로 몬다 (GameState.fish_drive = 내일 아침 물고기 +1).
+## 통발이 없거나 오늘 FISH_DRIVE_CAP 번을 다 했으면 제자리로 돌아가 쉰다. 아침마다 새로 센다.
+func _fish_once() -> bool:
+	if GameState.naru_state < 2:
+		return false
+	if GameState.traps <= 0 or GameState.fish_drive >= Config.FISH_DRIVE_CAP:
+		if position.distance_to(Farm.center_of(home)) > 1.0:
+			_hop_to(Farm.center_of(home), func() -> void: pass)
+			return true
+		return false
+	var at := Farm.center_of(fish_spot()) + Vector2(0, (scraps % 3 - 1) * 5)
+	_hop_to(at, func() -> void:
+		if GameState.traps > 0 and GameState.fish_drive < Config.FISH_DRIVE_CAP:
+			GameState.fish_drive += 1
+			scraps += 1
+			GameState.touch())
+	return true
+
+
+## 나룻집 오른쪽 아래 대각선 물가 칸 (크리처가 서서 물고기를 모는 자리)
+static func fish_spot() -> Vector2i:
+	return Config.NARU_RECT.position + Config.NARU_RECT.size
 
 
 ## 모이 주기 한 번 (2026-09-30 축사 닭장): 닭장 앞까지 건너가 오늘 아직 못 먹은 암탉 하나에게 모이를 준다 (GameState.fed).
@@ -188,6 +214,48 @@ func _scrap_once() -> bool:
 ## 고물 더미 오른쪽 한 칸 띄운 자리 (크리처가 서서 줍는 자리. 2026-10-01 마을 넓히기: 더미 배지와 일 이름표가 안 겹치게)
 static func scrap_spot() -> Vector2i:
 	return Config.SCRAP_RECT.position + Vector2i(Config.SCRAP_RECT.size.x + 1, 0)
+
+
+## 밤일 (2026-10-02 곤지암 아기 악귀): 밤사이 맡은 일을 걷지 않고 바로 해 둔다 (농사: 범위 안 수확 → 심기 → 물,
+## 고철 · 도라지 · 모이: 아침에 다시 쌓인 것을 먼저). 한 일 수를 돌려준다. 밤일을 하는 종이 아니면 0.
+func night_work() -> int:
+	if not data.species.job_aptitude.has(CreatureJobs.NIGHT) or carried_by != null or expedition_zone >= 0:
+		return 0
+	var done := 0
+	while done < Config.NIGHT_WORK_MAX:
+		var did := false
+		match job:
+			CreatureJobs.FARM:
+				for t in CreatureJobs.FARM_ORDER:
+					var work: Farm.Work = CreatureJobs.FARM_WORK[t]
+					var target: Variant = _farm.find_work(work, home, data.work_radius(), [], Farm.center_of(home))
+					if target != null and _farm.do_work(work, target):
+						did = true
+						break
+			CreatureJobs.SCRAP:
+				if GameState.forge_state >= 2 and GameState.scrap_pile > 0:
+					GameState.scrap_pile -= 1
+					GameState.scrap += 1
+					did = true
+			CreatureJobs.HERB:
+				if GameState.yak_state >= 2 and GameState.herb_bed > 0:
+					GameState.herb_bed -= 1
+					GameState.roots += 1
+					did = true
+			CreatureJobs.FEED:
+				if GameState.barn_state >= 2 and GameState.fed < GameState.hens:
+					GameState.fed += 1
+					did = true
+			CreatureJobs.FISH:
+				if GameState.naru_state >= 2 and GameState.traps > 0 and GameState.fish_drive < Config.FISH_DRIVE_CAP:
+					GameState.fish_drive += 1
+					did = true
+		if not did:
+			break
+		done += 1
+	if done > 0:
+		GameState.touch()
+	return done
 
 
 ## 농사 한 번 (2026-09-29 사용자 선택 A+B): 범위 안 밭에서 수확 → 파종 → 급수 순으로 할 일을 찾는다.
@@ -358,7 +426,7 @@ func _draw() -> void:
 		label += " ★%d" % data.train_total()
 	UiSkin.draw_tag(self, Vector2(-30, -26), label, 60, Color(0.85, 1.0, 0.95))
 	# 채집은 범위 없이 마을 풀밭 전체를 돌므로 범위 네모를 그리지 않는다
-	if carried_by == null and job != CreatureJobs.FORAGE and job != CreatureJobs.SCRAP and job != CreatureJobs.HERB and job != CreatureJobs.FEED:
+	if carried_by == null and job != CreatureJobs.FORAGE and job != CreatureJobs.SCRAP and job != CreatureJobs.HERB and job != CreatureJobs.FEED and job != CreatureJobs.FISH:
 		# 작업 범위 표시
 		var radius := data.work_radius()
 		var r := Rect2(Vector2((home - Vector2i(radius, radius)) * Config.TILE), Vector2.ONE * (radius * 2 + 1) * Config.TILE)

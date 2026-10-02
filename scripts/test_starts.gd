@@ -9,7 +9,7 @@ extends RefCounted
 ## 농사 크리처는 열린 밭 구역 가운데에 차례로, 채집은 공급함 옆 풀밭, 고철 줍기는 고물 더미 옆에 놓는다.
 ## 무기: 앞의 것부터 얻어 첫 무기를 든다. 사냥꾼 방어구: [기본 장비, 등급]. 농부 제작품: 대장간 기본 장비.
 ## 시작 지점마다 사냥꾼 레벨
-const LEVELS := {&"hunter": 1, &"day5": 7, &"forge_ready": 10, &"forge_done": 13, &"doma": 15, &"act3": 18, &"milmok": 20, &"barn": 22, &"yeokdong": 23}
+const LEVELS := {&"hunter": 1, &"day5": 7, &"forge_ready": 10, &"forge_done": 13, &"doma": 15, &"act3": 18, &"milmok": 20, &"barn": 22, &"yeokdong": 23, &"gonjiam": 25, &"naru": 27}
 
 const STARTS: Array[Dictionary] = [
 	{id = &"fresh", name = "처음부터", note = "지금과 똑같이 1일째"},
@@ -121,6 +121,36 @@ const STARTS: Array[Dictionary] = [
 		armor = [[&"leather_hood", &"rare"], [&"hunter_jerkin", &"rare"], [&"leather_shoes", &"rare"]],
 		crafted = [&"work_cap", &"rain_suit", &"work_boots"],
 	},
+	{
+		## 2026-10-02 곤지암 스레드: 4막 대장 구역을 바로 해 보는 자리 (역마 장군을 잡아 곤지암 웨이포인트가 켜진 뒤)
+		id = &"gonjiam", name = "곤지암 앞", note = "88일 · 곤지암 웨이포인트 · 아기 망아지 · 도시락 3",
+		day = 88, money = 6500, seeds = 24, crops = 14, plots = 4, planted = true, scrap = 8, roots = 10, junk = 12, potions = 8, lamp_oil = 1, strength = 3,
+		creatures = [
+			[&"slime", &"farm", &"water", 2, 2], [&"slime", &"farm", &"", 2, 2], [&"foal", &"farm", &"", 1, 1], [&"tree_spirit", &"farm", &"", 2, 1],
+			[&"slime", &"forage", &"earth", 1, 1], [&"slime", &"forage", &"water", 0, 0], [&"gold_toad", &"forage", &"", 1, 0],
+			[&"gold_toad", &"forage", &"", 0, 0], [&"sparrow", &"forage", &"", 0, 0], [&"will_o", &"herb", &"", 1, 0],
+			[&"tiger", &"feed", &"", 1, 0], [&"tiger", &"forage", &"", 0, 0], [&"slime", &"scrap", &"earth", 1, 1], [&"foal", &"forage", &"", 0, 0],
+		],
+		waypoints = [0, 1, 2, 3, 4, 5, 6, 7], forge = 2, yak = 2, barn = 2, hens = 5, lunches = 3, tools = true, knife = true,
+		weapons = [&"hunting_bow", &"water_staff", &"long_sword", &"crossbow", &"long_bow"], shop = [&"straw_hat", &"ball_cap"],
+		armor = [[&"leather_hood", &"rare"], [&"hunter_jerkin", &"rare"], [&"leather_shoes", &"rare"]],
+		crafted = [&"work_cap", &"rain_suit", &"work_boots"],
+	},
+	{
+		## 2026-10-02 나루터 스레드: 마왕을 잡아 나루터를 고친 뒤 (뱃사공 · 통발 · 물고기 몰기 · 아기 악귀 밤일)
+		id = &"naru", name = "나루터 복구 뒤", note = "96일 · 뱃사공 · 통발 · 물고기 4 · 아기 악귀",
+		day = 96, money = 5200, seeds = 26, crops = 18, plots = 4, planted = true, scrap = 8, roots = 10, junk = 12, potions = 8, lamp_oil = 1, strength = 3,
+		creatures = [
+			[&"slime", &"farm", &"water", 2, 2], [&"imp", &"farm", &"", 1, 1], [&"foal", &"farm", &"", 1, 1], [&"tree_spirit", &"farm", &"", 2, 1],
+			[&"slime", &"forage", &"earth", 1, 1], [&"slime", &"fish", &"water", 1, 1], [&"gold_toad", &"forage", &"", 1, 0],
+			[&"gold_toad", &"forage", &"", 0, 0], [&"sparrow", &"forage", &"", 0, 0], [&"will_o", &"herb", &"", 1, 0],
+			[&"tiger", &"feed", &"", 1, 0], [&"tiger", &"forage", &"", 0, 0], [&"slime", &"scrap", &"earth", 1, 1], [&"imp", &"forage", &"", 0, 0],
+		],
+		waypoints = [0, 1, 2, 3, 4, 5, 6, 7], forge = 2, yak = 2, barn = 2, naru = 2, hens = 5, lunches = 2, fish = 4, tools = true, knife = true,
+		weapons = [&"hunting_bow", &"water_staff", &"long_sword", &"crossbow", &"long_bow"], shop = [&"straw_hat", &"ball_cap"],
+		armor = [[&"leather_hood", &"rare"], [&"hunter_jerkin", &"rare"], [&"leather_shoes", &"rare"]],
+		crafted = [&"work_cap", &"rain_suit", &"work_boots"],
+	},
 ]
 
 const SPECIES := {
@@ -131,6 +161,7 @@ const SPECIES := {
 	&"will_o": "res://data/creatures/species/will_o.tres",
 	&"tiger": "res://data/creatures/species/tiger.tres",
 	&"foal": "res://data/creatures/species/foal.tres",
+	&"imp": "res://data/creatures/species/imp.tres",
 }
 const ELEMENTS := {
 	&"water": "res://data/creatures/elements/water.tres",
@@ -210,6 +241,8 @@ static func apply(main: Node2D, id: StringName) -> bool:
 				at = Creature.herb_spot()
 			CreatureJobs.FEED:
 				at = Creature.feed_spot()
+			CreatureJobs.FISH:
+				at = Creature.fish_spot() + Vector2i.LEFT
 			_:
 				at = FORAGE_CELLS[forage_i % FORAGE_CELLS.size()]
 				forage_i += 1
@@ -254,6 +287,18 @@ static func apply(main: Node2D, id: StringName) -> bool:
 		GameState.material3 += Config.BARN_COST_MATERIAL
 		main.restore_barn()
 		GameState.hens = s.get("hens", Config.START_HENS)
+	var naru_state: int = s.get("naru", 0)
+	if naru_state >= 1:
+		GameState.naru_boss_down = true
+		if not Config.NARU_ZONE in GameState.bosses_beaten:
+			GameState.bosses_beaten.append(Config.NARU_ZONE)
+		main.show_naru_site()
+	if naru_state >= 2:
+		GameState.money += Config.NARU_COST_MONEY
+		GameState.crops += Config.NARU_COST_CROPS
+		GameState.material4 += Config.NARU_COST_MATERIAL
+		main.restore_naru()
+	GameState.fish = s.get("fish", 0)
 	GameState.lunches = s.get("lunches", 0)
 	GameState.strength = s.get("strength", 0)
 	GameState.roots = s.get("roots", 0)

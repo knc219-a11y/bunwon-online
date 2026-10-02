@@ -145,8 +145,13 @@ var strong := false
 var quick := false
 ## 목축인 사냥 도시락을 먹고 들어왔는지 (2026-09-30 축사 닭장): 이번 사냥 동안 하트 칸 +Config.LUNCH_HEARTS
 var lunch := false
+## 뱃사공 매운탕 (2026-10-02 나루터): 이 사냥 동안 하트 +STEW_HEARTS · 경험치 xSTEW_XP_MULT
+var stew := false
 ## 산군 백호 포효에 굳은 남은 시간 (그동안 사냥꾼이 못 움직이고 못 휘두름)
 var frozen := 0.0
+## 정전 남은 시간 (곤지암 마왕, 2026-10-02): 그동안 화면은 사냥꾼 둘레만 보이고, 뿔 악귀는 바라봐도 움직인다
+var blackout_t := 0.0
+var _dark: Node2D
 ## 가로등 자리 (불빛 가운데, px)
 var lamps: Array[Vector2] = []
 
@@ -181,6 +186,14 @@ func _ready() -> void:
 	_fx.z_index = 4000
 	_fx.draw.connect(_draw_fx)
 	add_child(_fx)
+	# 정전 어둠 (곤지암 마왕): 세상 위 · HUD 아래, 사냥꾼 둘레만 뚫린 어둠
+	var dark_layer := CanvasLayer.new()
+	dark_layer.layer = 1
+	dark_layer.follow_viewport_enabled = true
+	add_child(dark_layer)
+	_dark = Node2D.new()
+	_dark.draw.connect(_draw_dark)
+	dark_layer.add_child(_dark)
 	var layer := CanvasLayer.new()
 	layer.layer = 2
 	add_child(layer)
@@ -192,6 +205,7 @@ func _ready() -> void:
 
 ## 지금 구역의 몬스터를 새로 놓고 풍경 색을 바꾼다.
 func _fill_zone() -> void:
+	blackout_t = 0.0
 	for s in slimes:
 		s.queue_free()
 	slimes.clear()
@@ -486,7 +500,7 @@ func companions() -> Array[HuntCompanion]:
 
 ## 입은 장비와 세트 보너스까지 더한 하트 칸 수
 func max_hearts() -> int:
-	return Config.HUNTER_HEARTS + Wearables.bonus_hearts(&"hunter") + (Config.LUNCH_HEARTS if lunch else 0)
+	return Config.HUNTER_HEARTS + Wearables.bonus_hearts(&"hunter") + (Config.LUNCH_HEARTS if lunch else 0) + (Config.STEW_HEARTS if stew else 0)
 
 
 ## 사냥 도시락을 먹는다: 하트 칸이 늘고 늘어난 만큼 찬다.
@@ -495,6 +509,14 @@ func eat_lunch() -> void:
 		return
 	lunch = true
 	hearts = mini(hearts + Config.LUNCH_HEARTS, max_hearts())
+
+
+## 매운탕을 먹는다: 하트 칸이 늘고 늘어난 만큼 찬다. 경험치는 _give_xp 에서 곱한다.
+func eat_stew() -> void:
+	if stew:
+		return
+	stew = true
+	hearts = mini(hearts + Config.STEW_HEARTS, max_hearts())
 
 
 ## 빨간 물약을 마신다 (1 키). 하트가 가득이면 아끼고 마시지 않는다.
@@ -619,6 +641,9 @@ func tick(delta: float) -> void:
 	order_cd = maxf(order_cd - delta, 0.0)
 	guard_cd = maxf(guard_cd - delta, 0.0)
 	_tick_dash(delta)
+	if blackout_t > 0.0:
+		blackout_t = maxf(blackout_t - delta, 0.0)
+		_dark.queue_redraw()
 	if frozen > 0.0:
 		frozen -= delta
 		if frozen <= 0.0:
@@ -652,6 +677,9 @@ func tick(delta: float) -> void:
 		var was_attacking := s.attacking()
 		s.may_attack = not swarm or s.boss or was_attacking or attackers < Config.MAX_ATTACKERS
 		s.lit = in_light(s.position)
+		if s.demon:
+			s.watched = gazes(s.position)
+			s.blackout = blackout_t > 0.0
 		s.tick(delta, feet)
 		if not s.boss and not was_attacking and s.attacking():
 			attackers += 1
@@ -922,7 +950,7 @@ func _tick_companion(companion: HuntCompanion, delta: float) -> void:
 		return
 	var target := _nearest_slime(companion.position, true)
 	if companion_ai:
-		var chase := companion.style in [HuntCompanion.Style.BUMP, HuntCompanion.Style.ROAR, HuntCompanion.Style.SPIRIT, HuntCompanion.Style.KICK] and target != null \
+		var chase := companion.style in [HuntCompanion.Style.BUMP, HuntCompanion.Style.ROAR, HuntCompanion.Style.SPIRIT, HuntCompanion.Style.KICK, HuntCompanion.Style.SCARE] and target != null \
 			and target.position.distance_to(hunter.feet()) <= Config.COMPANION_CHASE_DISTANCE
 		if chase:
 			companion.move_toward_point(target.position, delta)
@@ -985,6 +1013,10 @@ func companion_attack(target: WildSlime, companion: HuntCompanion = null) -> voi
 				away = Vector2.UP
 			target.pull_to(target._stand(target.position + away * Config.COMPANION_KICK_PUSH))
 			target.stun(Config.COMPANION_KICK_STUN)
+	elif companion.style == HuntCompanion.Style.SCARE:
+		# 아기 악귀 불 할퀴기 + 겁주기 (2026-10-02 곤지암): 불씨가 한 번 더 붙고, 맞은 몬스터는 잠깐 사냥꾼에게서 달아난다 (대장은 안 겁먹음)
+		_burns.append({slime = target, t = Config.STAFF_BURN_DELAY})
+		target.scare(Config.IMP_FEAR)
 	elif companion.style == HuntCompanion.Style.BUMP:
 		# 박치기는 더 멀리 밀쳐낸다
 		var away := (target.position - companion.position).normalized()
@@ -1184,6 +1216,13 @@ func _defeat(s: WildSlime) -> void:
 		if not GameState.barn_boss_down:
 			GameState.barn_boss_down = true
 			material_text += " 마을 쪽에서 닭 우는 소리가 희미하게 들렸다..."
+	# 4막 대장 재료 (2026-10-02 나루터): 마왕을 잡을 때마다 마왕 뿔 하나, 처음 잡으면 다음 날 마을 물가에 나루터 터
+	if last_boss and z.get("boss_material4", false):
+		GameState.material4 += 1
+		material_text += " %s을(를) 얻었다 (%d개)." % [Config.BOSS_MATERIAL4_NAME, GameState.material4]
+		if not GameState.naru_boss_down:
+			GameState.naru_boss_down = true
+			material_text += " 마을 쪽 물가에서 뱃노래가 희미하게 들렸다..."
 	# 그림자 늑대 (밀목): 하나가 쓰러지면 둘레 늑대가 멈칫한다 (칠 틈)
 	if s.wolf:
 		for o in slimes:
@@ -1246,7 +1285,7 @@ func _defeat(s: WildSlime) -> void:
 
 ## 경험치를 준다 (레벨 차 벌칙 적용). 레벨이 오르면 가운데 띠와 알림.
 func _give_xp(base: int) -> void:
-	var amount := maxi(1, roundi(base * HunterSkills.gap_mult(zone))) if base > 0 else 0
+	var amount := maxi(1, roundi(base * HunterSkills.gap_mult(zone) * (Config.STEW_XP_MULT if stew else 1.0))) if base > 0 else 0
 	if GameState.hunter_level >= Config.LEVEL_CAP:
 		return
 	var ups := HunterSkills.gain(amount)
@@ -1294,6 +1333,7 @@ func _new_boss(at: Vector2) -> WildSlime:
 	b.rolled.connect(_on_rolled.bind(b))
 	b.rammed.connect(_on_rammed.bind(b))
 	b.roared.connect(_on_roared.bind(b))
+	b.dimmed.connect(_on_dimmed.bind(b))
 	add_child(b)
 	slimes.append(b)
 	return b
@@ -1360,10 +1400,64 @@ func _on_rolled(at: Vector2, boss: WildSlime) -> void:
 		_hurt(at, boss.damage, boss.title, "%s이(가) 굴린 통나무에 치였다!" % boss.title)
 
 
-## 도깨비불이 불똥을 튀겼다: 원 안이면 다친다.
+## 도깨비불이 불똥을 튀겼다 (뿔 악귀는 둘레를 내려찍었다): 원 안이면 다친다.
 func _on_burst(at: Vector2, s: WildSlime) -> void:
-	if _in_circle(at, Config.WISP_BURST_RADIUS) and _invulnerable <= 0.0 and not knocked:
-		_hurt(at, s.damage, s.title, "%s이(가) 불똥을 튀겼다!" % s.title)
+	if _in_circle(at, Config.DEMON_SLAM_RADIUS if s.demon else Config.WISP_BURST_RADIUS) and _invulnerable <= 0.0 and not knocked:
+		_hurt(at, s.damage, s.title, ("%s이(가) 두 팔로 내려찍었다!" if s.demon else "%s이(가) 불똥을 튀겼다!") % s.title)
+
+
+## 사냥꾼이 이 자리를 바라보는지 (곤지암 뿔 악귀): 바라보는 쪽에서 Config.DEMON_GAZE 라디안 안, DEMON_GAZE_RANGE 안
+func gazes(p: Vector2) -> bool:
+	var v := p - hunter.feet()
+	var d := v.length()
+	if d > Config.DEMON_GAZE_RANGE:
+		return false
+	if d < 6.0:
+		return true
+	return v.normalized().dot(Vector2(hunter.facing).normalized()) >= cos(Config.DEMON_GAZE)
+
+
+## 마왕 등불이 꺼졌다 (곤지암, 2026-10-02): 정전 + 사냥꾼 등 뒤에 뿔 악귀 (원래 크기, 체력 낮음, 드롭 · 알 없음)
+func _on_dimmed(_at: Vector2, boss: WildSlime) -> void:
+	if knocked:
+		return
+	blackout_t = Config.ARCH_BLACKOUT_ENRAGED if boss.enraged() else Config.ARCH_BLACKOUT
+	_dark.queue_redraw()
+	var feet := hunter.feet()
+	var back := -Vector2(hunter.facing).normalized()
+	if back == Vector2.ZERO:
+		back = Vector2.DOWN
+	var minions := slimes.filter(func(o: WildSlime) -> bool: return o.minion).size()
+	for i in mini(Config.ARCH_CALL, Config.SLAM_MINION_MAX - minions):
+		var m := WildSlime.new()
+		m.setup_zone(zone)
+		m.minion = true
+		m.title = "소환된 " + m.title
+		m.hp = Config.ARCH_MINION_HP
+		m.max_hp = m.hp
+		m.area = monster_area()
+		m.terrain = map
+		m.position = m._stand(feet + back * 56.0 + back.orthogonal() * (-28.0 if i == 0 else 28.0))
+		m.ai_enabled = _ai_on
+		m.alert = true
+		m._lunge_cd = 0.6 + i * 0.5
+		m.burst.connect(_on_burst.bind(m))
+		add_child(m)
+		slimes.append(m)
+	GameState.notify("%s의 지옥불 등불이 꺼졌다! 어둠 속 등 뒤에서 뿔 악귀가 나타났다." % boss.title)
+	GameState.touch()
+
+
+## 정전 어둠: 사냥꾼 둘레 Config.ARCH_DARK_RADIUS 만 보인다 (두꺼운 고리로 바깥을 덮음). 꺼지고 켜질 때 잠깐 옅다.
+func _draw_dark() -> void:
+	if blackout_t <= 0.0 or hunter == null:
+		return
+	var a := clampf(blackout_t / 0.25, 0.0, 1.0) * 0.86
+	var at := hunter.feet() + Vector2(0, -10)
+	_dark.draw_set_transform(at, 0.0, Vector2(1.0, 0.8))
+	_dark.draw_arc(Vector2.ZERO, Config.ARCH_DARK_RADIUS + 600.0, 0, TAU, 96, Color(0.03, 0.02, 0.06, a), 1200.0)
+	_dark.draw_arc(Vector2.ZERO, Config.ARCH_DARK_RADIUS + 6.0, 0, TAU, 64, Color(0.03, 0.02, 0.06, a * 0.5), 12.0)
+	_dark.draw_set_transform(Vector2.ZERO)
 
 
 ## 유령 막차가 달린다: 버스에 닿으면 다친다 (다친 뒤 잠깐 무적이라 한 번만).
@@ -1382,6 +1476,11 @@ func _on_rammed(at: Vector2, boss: WildSlime) -> void:
 ## 허수아비 장수의 짚단이 떨어졌다: 원 안이면 다친다.
 func _on_bale_landed(at: Vector2) -> void:
 	var boss := _boss()
+	if boss and boss.pattern == &"archdemon":
+		# 마왕 지옥불 기둥 (곤지암)
+		if _in_circle(at, Config.ARCH_PILLAR_RADIUS) and _invulnerable <= 0.0 and not knocked:
+			_hurt(at, boss.damage, boss.title, "%s의 지옥불 기둥에 휩싸였다!" % boss.title)
+		return
 	if boss and _in_circle(at, Config.STRAW_RADIUS) and _invulnerable <= 0.0 and not knocked:
 		_hurt(at, boss.damage, boss.title, "%s이(가) 던진 짚단에 맞았다!" % boss.title)
 
@@ -1568,6 +1667,13 @@ func _draw() -> void:
 				draw_arc(Vector2.ZERO, tg.radius, 0, TAU, 40, edge, 1.5)
 				draw_arc(Vector2.ZERO, tg.radius * tg.progress, 0, TAU, 40, Color(1, 0.35, 0.3, 0.6), 1.0)
 				draw_set_transform(Vector2.ZERO)
+			if tg.get("pillar", false):
+				# 지옥불 기둥: 찰수록 원 안에서 불꽃이 솟는다
+				var k: float = tg.progress
+				for i in 5:
+					var off := Vector2(cos(i * 1.3) * 10.0, sin(i * 2.1) * 4.0)
+					var h := 6.0 + 18.0 * k * (0.6 + 0.4 * sin(i * 3.7))
+					draw_line(tg.at + off, tg.at + off + Vector2(0, -h), Color(0.4, 1.0, 0.45, 0.35 + 0.5 * k), 3.0)
 			if tg.get("bale", false):
 				# 날아오는 짚단: 떨어질수록 낮아진다
 				var p: Vector2 = tg.at + Vector2(0, -60.0 * (1.0 - tg.progress))

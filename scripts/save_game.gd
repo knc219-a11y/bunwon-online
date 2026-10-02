@@ -110,7 +110,7 @@ static func snapshot(main: Node2D) -> Dictionary:
 			expedition = s.expedition_zone,
 		})
 	var people := {}
-	for c: Character in [main.farmer, main.hunter, main.smith, main.alchemist, main.rancher]:
+	for c: Character in [main.farmer, main.hunter, main.smith, main.alchemist, main.rancher, main.ferryman]:
 		people[c.who] = [c.position, c.facing]
 	# 사냥터 안이면 사냥꾼은 사냥터 입구 앞에 선 것으로 (돌아온 채로 저장)
 	if main.hunt:
@@ -199,6 +199,10 @@ static func apply(main: Node2D, d: Dictionary) -> void:
 		main.show_barn_restored()
 	elif GameState.barn_state == 1:
 		main.show_barn_site()
+	if GameState.naru_state >= 2:
+		main.show_naru_restored()
+	elif GameState.naru_state == 1:
+		main.show_naru_site()
 
 	# 들나물 자리 (시설 터를 놓은 뒤에 넣어야 막힌 칸에서 지워지지 않는다)
 	var forage: Forage = main.forage
@@ -233,13 +237,13 @@ static func apply(main: Node2D, d: Dictionary) -> void:
 	main.incubating_species = load(inc) if inc != "" else null
 
 	var people: Dictionary = d.get("people", {})
-	for c: Character in [main.farmer, main.hunter, main.smith, main.alchemist, main.rancher]:
+	for c: Character in [main.farmer, main.hunter, main.smith, main.alchemist, main.rancher, main.ferryman]:
 		if people.has(c.who):
 			c.position = people[c.who][0]
 			c.facing = people[c.who][1]
 		c.refresh_wear()
 	var who: StringName = d.get("active", &"farmer")
-	for c: Character in [main.farmer, main.hunter, main.smith, main.alchemist, main.rancher]:
+	for c: Character in [main.farmer, main.hunter, main.smith, main.alchemist, main.rancher, main.ferryman]:
 		if c.who == who and c.visible:
 			main._set_active(c)
 	main.tool_index = d.get("tool_index", 0)

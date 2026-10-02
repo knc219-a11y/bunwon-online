@@ -58,6 +58,11 @@ var herb_bed: Prop
 var rancher: Character
 ## 축사 (터 → 고친 축사). 나타나기 전에는 null. 닭장 앞 암탉 · 병아리 그림.
 var barn: Prop
+## 뱃사공 (2026-10-02 나루터): 여섯째 캐릭터. 나루터를 고치면 나타나고 Tab 으로 바꾼다.
+var ferryman: Character
+## 나루터 (터 → 나룻집). 나타나기 전에는 null. 잔교 · 나룻배 · 통발은 물가 그림(_lake)이 함께 그린다.
+var naru: Prop
+var _lake: Node2D
 var _flock: Node2D
 var incubator: Prop
 var supply_box: Prop
@@ -140,6 +145,7 @@ func _ready() -> void:
 	supply_box = _add_prop("공급함", preload("res://assets/props/supply_box.png"), SUPPLY_RECT)
 	hunt_gate = _add_prop("사냥터 입구", preload("res://assets/props/hunt_gate.png"), HUNT_GATE_RECT)
 	stash_box = _add_prop("창고", preload("res://assets/props/stash.png"), STASH_RECT)
+	_build_lake()
 
 	ambience = Ambience.new()
 	ambience.area = world_size()
@@ -158,6 +164,8 @@ func _ready() -> void:
 	alchemist.visible = false
 	rancher = _add_character("목축인", preload("res://assets/characters/rancher.png"), Config.RANCHER_CELL, &"rancher")
 	rancher.visible = false
+	ferryman = _add_character("뱃사공", preload("res://assets/characters/ferryman.png"), Config.FERRYMAN_CELL, &"ferryman")
+	ferryman.visible = false
 	camera = Camera2D.new()
 	camera.limit_left = 0
 	camera.limit_top = 0
@@ -280,7 +288,7 @@ func update_fading() -> void:
 			continue
 		var pic := Rect2(p.picture_rect().position + p.position, p.picture_rect().size)
 		var hidden := false
-		for c: Character in [farmer, hunter, smith, alchemist, rancher]:
+		for c: Character in [farmer, hunter, smith, alchemist, rancher, ferryman]:
 			if not c.visible:
 				continue
 			hidden = hidden or (c.sort_y() < p.sort_y() and pic.intersects(Rect2(c.position + Vector2(-8, -30), Vector2(16, 40))))
@@ -397,6 +405,8 @@ func switch_character() -> void:
 		order.append(alchemist)
 	if GameState.barn_state >= 2:
 		order.append(rancher)
+	if GameState.naru_state >= 2:
+		order.append(ferryman)
 	_set_active(order[(order.find(active) + 1) % order.size()])
 	if active == smith:
 		GameState.notify("대장장이로 전환했다. 대장간 모루에서 F로 장비를 만든다.")
@@ -404,6 +414,8 @@ func switch_character() -> void:
 		GameState.notify("연금술사로 전환했다. 약방에서 F로 물약 · 크리처 보약을 만든다.")
 	elif active == rancher:
 		GameState.notify("목축인으로 전환했다. 축사에서 F로 달걀 꺼내기 · 모이 주기 · 사냥 도시락 싸기.")
+	elif active == ferryman:
+		GameState.notify("뱃사공으로 전환했다. 나루터에서 F로 통발 놓기 · 물고기 꺼내기 · 매운탕 끓이기.")
 	else:
 		GameState.notify("%s(으)로 전환했다." % active.display_name)
 
@@ -482,6 +494,8 @@ func interact() -> void:
 		_yak_interact()
 	elif barn and _near(barn) and _carried_creature() == null and active != hunter:
 		_barn_interact()
+	elif naru and _near(naru) and _carried_creature() == null and active != hunter:
+		open_menu(&"naru" if GameState.naru_state == 1 else &"dock")
 	elif scrap_heap and _near(scrap_heap) and _carried_creature() == null and active != hunter:
 		pick_scrap()
 	elif herb_bed and _near(herb_bed) and _carried_creature() == null and active != hunter:
@@ -492,6 +506,8 @@ func interact() -> void:
 		_hunter_interact()
 	elif active == rancher:
 		GameState.notify("목축인은 축사에서 F로 달걀 꺼내기 · 모이 주기 · 사냥 도시락 싸기를 한다.")
+	elif active == ferryman:
+		GameState.notify("뱃사공은 나루터에서 F로 통발 놓기 · 물고기 꺼내기 · 매운탕 끓이기를 한다.")
 	elif active == alchemist:
 		GameState.notify("연금술사는 약방에서 F로 물약 · 크리처 보약을 만든다. 도라지는 도라지밭에서 F로 캐거나 크리처에게 맡긴다.")
 	else:
@@ -641,6 +657,11 @@ func enter_hunt(companion: Creature = null, zone := 0) -> bool:
 		GameState.lunches -= 1
 		hunt.eat_lunch()
 		drank.append("사냥 도시락")
+	# 뱃사공 매운탕 (2026-10-02 나루터): 들어갈 때 하나 먹고 그 사냥 동안 하트 +1 · 경험치 +50%
+	if GameState.stews > 0:
+		GameState.stews -= 1
+		hunt.eat_stew()
+		drank.append("매운탕")
 	hunt.knocked_out.connect(leave_hunt)
 	var drank_text := (" %s을(를) 먹었다." % " · ".join(drank)) if not drank.is_empty() else ""
 	if companion:
@@ -730,6 +751,8 @@ func supply_options() -> Array[StringName]:
 		options.append(&"display_herbs")
 	if GameState.hen_eggs > 0:
 		options.append(&"display_hen_eggs")
+	if GameState.fish > 0:
+		options.append(&"display_fish")
 	options.append(&"buy_seeds")
 	if not creatures.is_empty():
 		options.append(&"train")
@@ -757,6 +780,8 @@ func supply_option_text(id: StringName) -> String:
 			return "무 진열하기 (%d개, 밤사이 %d원)" % [GameState.crops, GameState.crops * Config.CROP_PRICE]
 		&"display_herbs":
 			return "들나물 진열하기 (%d포기, 밤사이 %d원)" % [GameState.herbs, GameState.herbs * Config.HERB_PRICE]
+		&"display_fish":
+			return "물고기 진열하기 (%d마리, 밤사이 %d원)" % [GameState.fish, GameState.fish * Config.FISH_PRICE]
 		&"display_hen_eggs":
 			return "달걀 진열하기 (%d개, 밤사이 %d원)" % [GameState.hen_eggs, GameState.hen_eggs * Config.HEN_EGG_PRICE]
 		&"buy_seeds":
@@ -850,6 +875,19 @@ func menu_confirm() -> void:
 		else:
 			brew(id)
 		_rebuild_menu()
+		return
+	if menu_kind == &"naru" or menu_kind == &"dock":
+		if id == &"close":
+			close_menu()
+			return
+		if id == &"restore":
+			if restore_naru():
+				close_menu()
+				return
+		else:
+			dock_action(id)
+		_rebuild_menu()
+		_refresh_props()
 		return
 	if menu_kind == &"barn" or menu_kind == &"coop":
 		if id == &"close":
@@ -956,6 +994,14 @@ func supply_action(id: StringName) -> bool:
 			GameState.displayed_herbs += n
 			GameState.herbs = 0
 			GameState.notify("들나물 %d포기를 공급함에 진열했다. 밤사이 팔리면 아침에 돈통에 들어온다." % n)
+		&"display_fish":
+			if GameState.fish <= 0:
+				GameState.notify("진열할 물고기가 없다.")
+				return false
+			var n := GameState.fish
+			GameState.displayed_fish += n
+			GameState.fish = 0
+			GameState.notify("물고기 %d마리를 공급함에 진열했다. 밤사이 팔리면 아침에 돈통에 들어온다." % n)
 		&"display_hen_eggs":
 			if GameState.hen_eggs <= 0:
 				GameState.notify("진열할 달걀이 없다.")
@@ -1040,7 +1086,7 @@ func buy_wear(id: StringName) -> bool:
 ## 가방 창을 연다. stash 면 창고 칸도 옆에 붙인다 (마을 창고 궤짝에서 F).
 ## sell 이면 공급함 장비 팔기 창 (가방 칸 클릭 = 팔기).
 func open_inventory(stash := false, sell := false) -> void:
-	if active == smith or active == alchemist or active == rancher:
+	if active == smith or active == alchemist or active == rancher or active == ferryman:
 		GameState.notify("%s는 가방이 없다. 가방은 농부 · 사냥꾼만 든다." % active.display_name)
 		return
 	close_menu()
@@ -1627,6 +1673,202 @@ func coop_action(id: StringName) -> bool:
 	return true
 
 
+# --- 팔당호 물가 · 나루터 · 뱃사공 (2026-10-02 시설 4, 사용자 선택 A 나루터 + B 통발) ---
+
+const LAKE_TEX: Texture2D = preload("res://assets/props/lake.png")
+const LAKE_RUIN_TEX: Texture2D = preload("res://assets/props/lake_ruin.png")
+const LAKE_NARU_TEX: Texture2D = preload("res://assets/props/lake_naru.png")
+const TRAP_TEX: Texture2D = preload("res://assets/props/trap.png")
+
+
+## 마을 오른쪽 아래 팔당호 물가 (처음부터 있음): 물 칸은 막고 들나물 · 풀 장식을 안 놓는다.
+## 바닥 바로 위에 그려서 잔교 · 배 · 통발도 캐릭터보다 늘 뒤.
+func _build_lake() -> void:
+	for row: int in Config.LAKE_ROWS:
+		var r := Rect2i(Config.LAKE_ROWS[row], row, Config.MAP_SIZE.x - Config.LAKE_ROWS[row], 1)
+		farm.add_blocker(Rect2(Vector2(r.position * Config.TILE), Vector2(r.size * Config.TILE)))
+		farm.deco_skip.append(r)
+		forage.block(r)
+	farm.queue_redraw()
+	_lake = Node2D.new()
+	_lake.z_index = -999
+	_lake.position = Vector2(Config.LAKE_ORIGIN * Config.TILE)
+	_lake.draw.connect(_draw_lake)
+	add_child(_lake)
+
+
+func _draw_lake() -> void:
+	_lake.draw_texture(LAKE_TEX, Vector2.ZERO)
+	if GameState.naru_state == 1:
+		_lake.draw_texture(LAKE_RUIN_TEX, Vector2.ZERO)
+	elif GameState.naru_state >= 2:
+		_lake.draw_texture(LAKE_NARU_TEX, Vector2.ZERO)
+		for i in mini(GameState.traps, Config.TRAP_CELLS.size()):
+			var at := Farm.center_of(Config.TRAP_CELLS[i]) - _lake.position
+			_lake.draw_texture(TRAP_TEX, at - Vector2(8, 6) + Vector2(0, (GameState.day + i) % 2))
+
+
+## 아침에 나루터 쪽에서 생긴 일 (아침 카드 한 줄, 없으면 ""). 4막 대장을 처음 잡은 다음 날 터가 드러나고,
+## 고친 뒤로는 밤사이 통발에 물고기가 든다.
+func _naru_morning() -> String:
+	if GameState.naru_state == 0 and GameState.naru_boss_down:
+		show_naru_site()
+		return "%s 대장이 쓰러진 뒤, 마을 오른쪽 아래 팔당호 물가에 무너진 나루터 터가 드러났다. 터에서 F." % Config.HUNT_ZONES[Config.NARU_ZONE].name
+	if GameState.naru_state < 2:
+		return ""
+	var r := traps_night(_rng)
+	if r.traps == 0:
+		return ""
+	var text := "나루터: 통발 %d개를 걷어 물고기 %d마리 (바구니 %d)" % [r.traps, r.caught, GameState.basket]
+	if r.driven > 0:
+		text += " · 크리처가 몰아 준 것 %d" % r.driven
+	return text
+
+
+## 통발의 하룻밤 (아침 카드와 테스트가 함께 쓴다): 통발마다 물고기 0~2마리 (TRAP_CATCH_WEIGHTS) + 어제 물고기 몰기 수를
+## 바구니에 담고, 통발은 걷힌다 (다시 놓아야 함). 몰기 수는 새로 센다.
+static func traps_night(rng: RandomNumberGenerator) -> Dictionary:
+	var traps := GameState.traps
+	var caught := 0
+	for i in traps:
+		caught += rng.rand_weighted(PackedFloat32Array(Config.TRAP_CATCH_WEIGHTS))
+	var driven := GameState.fish_drive if traps > 0 else 0
+	caught += driven
+	GameState.basket += caught
+	GameState.traps = 0
+	GameState.fish_drive = 0
+	return {traps = traps, caught = caught, driven = driven}
+
+
+## 무너진 나루터 터를 물가에 놓는다. 그 자리의 들나물 · 도라지 자리는 쓰지 않는다.
+func show_naru_site() -> void:
+	GameState.naru_state = maxi(GameState.naru_state, 1)
+	if naru == null:
+		naru = _add_prop("나루터 터", preload("res://assets/props/naru_ruin.png"), Config.NARU_RECT)
+		naru.badge_side = true
+		forage.block(Config.NARU_RECT)
+	_lake.queue_redraw()
+	_refresh_props()
+
+
+## 고친 나루터를 놓는다 (복구와 불러오기가 함께 쓴다): 나룻집 · 잔교 · 나룻배 · 뱃사공
+func show_naru_restored() -> void:
+	show_naru_site()
+	naru.label = "나루터"
+	naru.texture = preload("res://assets/props/naru.png")
+	naru.queue_redraw()
+	ferryman.visible = true
+	ferryman.position = Farm.center_of(Config.FERRYMAN_CELL)
+	_lake.queue_redraw()
+	_refresh_props()
+
+
+## 복구에 드는 것: [이름, 가진 것, 필요한 것]
+func naru_costs() -> Array:
+	return [
+		["돈", GameState.money, Config.NARU_COST_MONEY],
+		["무 (수확해서 들고 있는 것)", GameState.crops, Config.NARU_COST_CROPS],
+		[Config.BOSS_MATERIAL4_NAME + " (%s 대장)" % Config.HUNT_ZONES[Config.NARU_ZONE].name, GameState.material4, Config.NARU_COST_MATERIAL],
+	]
+
+
+func can_restore_naru() -> bool:
+	return GameState.naru_state == 1 and naru_costs().all(func(c: Array) -> bool: return c[1] >= c[2])
+
+
+func naru_cost_lines() -> Array[String]:
+	var out: Array[String] = []
+	for c: Array in naru_costs():
+		out.append("  %s  %d / %d %s" % [c[0], mini(c[1], c[2]), c[2], "✔" if c[1] >= c[2] else ""])
+	out.append("다 모으면 한 번에 고친다 → 뱃사공 (Tab) · 통발 · 나룻배")
+	return out
+
+
+## 한 번에 고친다 (선택창과 테스트가 함께 쓴다). 모자라면 무엇이 모자란지 알린다.
+func restore_naru() -> bool:
+	if GameState.naru_state != 1:
+		return false
+	if not can_restore_naru():
+		var short: Array[String] = []
+		for c: Array in naru_costs():
+			if c[1] < c[2]:
+				short.append("%s %d" % [String(c[0]).split(" ")[0], c[2] - c[1]])
+		GameState.notify("아직 모자라다: %s." % ", ".join(short))
+		return false
+	GameState.money -= Config.NARU_COST_MONEY
+	GameState.crops -= Config.NARU_COST_CROPS
+	GameState.material4 -= Config.NARU_COST_MATERIAL
+	GameState.naru_state = 2
+	show_naru_restored()
+	GameState.notify("나루터를 고쳤다! 뱃사공이 왔다 (Tab). 통발에 미끼(무)를 넣어 놓으면 아침에 물고기가 든다. 크리처에게 물고기 몰기(R)도 맡길 수 있다.")
+	return true
+
+
+func naru_options() -> Array[StringName]:
+	var out: Array[StringName] = [&"restore", &"close"]
+	return out
+
+
+## 고친 나루터 창: 통발 놓기 · 물고기 꺼내기는 농부 · 뱃사공, 매운탕은 뱃사공만
+func dock_options() -> Array[StringName]:
+	var out: Array[StringName] = []
+	if GameState.traps < Config.TRAP_MAX:
+		out.append(&"set_traps")
+	if GameState.basket > 0:
+		out.append(&"take_fish")
+	if active == ferryman:
+		out.append(&"stew")
+	out.append(&"close")
+	return out
+
+
+func dock_option_text(id: StringName) -> String:
+	match id:
+		&"restore":
+			return "고치기" if can_restore_naru() else "고치기 (아직 모자람)"
+		&"set_traps":
+			var n := Config.TRAP_MAX - GameState.traps
+			return "통발 놓기 (%d개, 미끼 무 %d씩)" % [n, Config.TRAP_BAIT]
+		&"take_fish":
+			return "바구니 물고기 꺼내기 (%d마리)" % GameState.basket
+		&"stew":
+			return "매운탕 끓이기 (물고기 %d · 무 %d, 다음 사냥 하트 +%d · 경험치 +%d%%)" % [Config.STEW_FISH, Config.STEW_CROPS, Config.STEW_HEARTS, roundi((Config.STEW_XP_MULT - 1.0) * 100)]
+	return "닫기"
+
+
+## 나루터에서 한 가지 일 (선택창 · 테스트 · 봇이 함께 쓴다).
+func dock_action(id: StringName) -> bool:
+	match id:
+		&"set_traps":
+			var n := mini(Config.TRAP_MAX - GameState.traps, GameState.crops / Config.TRAP_BAIT)
+			if n <= 0:
+				GameState.notify("통발이 다 놓였거나 미끼로 넣을 무가 없다." if GameState.traps < Config.TRAP_MAX else "통발이 다 놓여 있다.")
+				return false
+			GameState.crops -= n * Config.TRAP_BAIT
+			GameState.traps += n
+			GameState.notify("통발 %d개를 물에 놓았다 (놓인 통발 %d). 내일 아침 물고기가 들어 있을 것이다." % [n, GameState.traps])
+		&"take_fish":
+			if GameState.basket <= 0:
+				return false
+			GameState.fish += GameState.basket
+			GameState.notify("바구니에서 물고기 %d마리를 꺼냈다 (든 물고기 %d). 공급함에 진열하거나 뱃사공이 매운탕을 끓인다." % [GameState.basket, GameState.fish])
+			GameState.basket = 0
+		&"stew":
+			if active != ferryman:
+				return false
+			if GameState.fish < Config.STEW_FISH or GameState.crops < Config.STEW_CROPS:
+				GameState.notify("모자라다. 매운탕: 물고기 %d · 무 %d (든 물고기 %d · 무 %d)." % [Config.STEW_FISH, Config.STEW_CROPS, GameState.fish, GameState.crops])
+				return false
+			GameState.fish -= Config.STEW_FISH
+			GameState.crops -= Config.STEW_CROPS
+			GameState.stews += 1
+			GameState.notify("매운탕을 끓였다 (%d그릇). 사냥꾼이 다음 사냥에 들어갈 때 먹는다." % GameState.stews)
+		_:
+			return false
+	_lake.queue_redraw()
+	return true
+
+
 # --- 크리처 훈련 (2026-09-29 사용자 선택 A, 돈 쓸 곳 2단계) ---------------
 
 const TRAIN_STATS: Array[StringName] = [&"radius", &"speed"]
@@ -1801,6 +2043,7 @@ func _rebuild_menu() -> void:
 	var brewing := menu_kind == &"yak" or menu_kind == &"brew"
 	var starting := menu_kind == &"start"
 	var ranching := menu_kind == &"barn" or menu_kind == &"coop"
+	var docking := menu_kind == &"naru" or menu_kind == &"dock"
 	var expedition := menu_kind == &"expedition"
 	var adopting := menu_kind == &"adopt"
 	var saving := menu_kind == &"title" or menu_kind == &"delete" or menu_kind == &"pause"
@@ -1812,6 +2055,8 @@ func _rebuild_menu() -> void:
 		_menu_options = yak_options() if menu_kind == &"yak" else brew_options()
 	elif ranching:
 		_menu_options = barn_options() if menu_kind == &"barn" else coop_options()
+	elif docking:
+		_menu_options = naru_options() if menu_kind == &"naru" else dock_options()
 	elif forging:
 		_menu_options = forge_options() if menu_kind == &"forge" else craft_options()
 	elif training:
@@ -1849,6 +2094,10 @@ func _rebuild_menu() -> void:
 		head = "무너진 축사 터"
 	elif menu_kind == &"coop":
 		head = "축사 닭장   암탉 %d · 병아리 %d · 둥지 달걀 %d" % [GameState.hens, GameState.chicks.size(), GameState.nest]
+	elif menu_kind == &"naru":
+		head = "무너진 나루터 터"
+	elif menu_kind == &"dock":
+		head = "분원나루   통발 %d/%d · 바구니 물고기 %d" % [GameState.traps, Config.TRAP_MAX, GameState.basket]
 	elif menu_kind == &"brew":
 		head = "약방   나물 %d · %s %d · 잡템 %d · 무 %d" % [GameState.herbs, Config.ROOT_NAME, GameState.roots, GameState.junk, GameState.crops]
 	var lines: Array[String] = [head]
@@ -1876,6 +2125,8 @@ func _rebuild_menu() -> void:
 			text = brew_option_text(o)
 		elif ranching:
 			text = coop_option_text(o)
+		elif docking:
+			text = dock_option_text(o)
 		else:
 			text = companion_option_text(o) if companion else (waypoint_option_text(o) if waypoint else supply_option_text(o))
 		lines.append(("▶ " if i == menu_index else "   ") + text)
@@ -1889,6 +2140,13 @@ func _rebuild_menu() -> void:
 		lines.append_array(yak_cost_lines())
 	elif menu_kind == &"barn":
 		lines.append_array(barn_cost_lines())
+	elif menu_kind == &"naru":
+		lines.append_array(naru_cost_lines())
+	elif menu_kind == &"dock":
+		lines.append("든 물고기 %d · 무 %d · 매운탕 %d · 오늘 물고기 몰기 %d/%d" % [GameState.fish, GameState.crops, GameState.stews, GameState.fish_drive, Config.FISH_DRIVE_CAP])
+		lines.append("놓은 통발은 다음 날 아침 하나에 물고기 0~2마리 (걷히면 다시 놓기)")
+		lines.append("물고기 몰기 크리처: 통발이 있으면 한 번에 내일 물고기 +1")
+		lines.append("나룻배: 5막 팔당호 섬 뱃길 (아직 물길을 모른다)")
 	elif menu_kind == &"coop":
 		lines.append("든 달걀 %d · 무 %d · 사냥 도시락 %d · 오늘 모이 %d/%d" % [GameState.hen_eggs, GameState.crops, GameState.lunches, mini(GameState.fed, GameState.hens), GameState.hens])
 		lines.append("모이를 먹은 암탉은 아침마다 달걀 하나 (굶으면 반쯤)")
@@ -1930,6 +2188,8 @@ func _rebuild_menu() -> void:
 		at = yak.position + Vector2(-260, -150)
 	if ranching:
 		at = barn.position + Vector2(-300, 20)
+	if docking:
+		at = naru.position + Vector2(-320, -170)
 	# 오브젝트 자리(월드)를 화면 자리로 (마을 카메라가 움직여도 오브젝트 옆에 뜨게)
 	at = to_screen(at)
 	if starting or saving:
@@ -2099,6 +2359,14 @@ func near_door() -> bool:
 	return active.position.distance_to(Farm.center_of(DOOR_CELL)) <= Config.PROP_INTERACT_DISTANCE
 
 
+## 밤일 (2026-10-02 곤지암 아기 악귀): 밤일을 하는 크리처가 맡은 일을 한 바퀴 더 해 둔다. 모두 한 일 수.
+func night_work() -> int:
+	var done := 0
+	for c: Creature in creatures:
+		done += c.night_work()
+	return done
+
+
 ## 하루를 넘기고 밤사이 일어난 일을 줄마다 돌려준다 (아침 카드에 쓴다).
 func next_day() -> Array[String]:
 	GameState.day += 1
@@ -2120,6 +2388,11 @@ func next_day() -> Array[String]:
 		GameState.money += earned
 		lines.append("공급함의 %s %d뿌리가 팔렸다. 돈통에 +%d원" % [Config.ROOT_NAME, GameState.displayed_roots, earned])
 		GameState.displayed_roots = 0
+	if GameState.displayed_fish > 0:
+		var earned := GameState.displayed_fish * Config.FISH_PRICE
+		GameState.money += earned
+		lines.append("공급함의 물고기 %d마리가 팔렸다. 돈통에 +%d원" % [GameState.displayed_fish, earned])
+		GameState.displayed_fish = 0
 	if GameState.displayed_hen_eggs > 0:
 		var earned := GameState.displayed_hen_eggs * Config.HEN_EGG_PRICE
 		GameState.money += earned
@@ -2134,6 +2407,9 @@ func next_day() -> Array[String]:
 	var barn_line := _barn_morning()
 	if barn_line != "":
 		lines.append(barn_line)
+	var naru_line := _naru_morning()
+	if naru_line != "":
+		lines.append(naru_line)
 	forage.sprout(_rng)
 	var herb_line := "밭 밖 풀밭에 들나물 %d포기가 돋았다." % forage.herbs.size()
 	if forage.bonus_today > 0:
@@ -2145,6 +2421,9 @@ func next_day() -> Array[String]:
 		lines.append("아기 나무 정령이 밭을 돌봐 작물 %d개가 하루 더 자랐다." % boosted)
 	if grown > 0:
 		lines.append("밤사이 작물 %d개가 자랐다." % grown)
+	var night_done := night_work()
+	if night_done > 0:
+		lines.append("아기 악귀가 밤새 맡은 일을 %d번 해 두었다." % night_done)
 	var ripe := farm.ripe_count()
 	if ripe > 0:
 		lines.append("수확할 수 있는 작물 %d개." % ripe)
@@ -2306,6 +2585,10 @@ func _refresh_props() -> void:
 	if barn:
 		barn.set_badge("%s %d/%d" % [Config.BOSS_MATERIAL3_NAME, GameState.material3, Config.BARN_COST_MATERIAL] if GameState.barn_state == 1 else ("둥지 달걀 %d" % GameState.nest if GameState.nest > 0 else ""))
 		_flock.queue_redraw()
+	if naru:
+		naru.set_badge("%s %d/%d" % [Config.BOSS_MATERIAL4_NAME, GameState.material4, Config.NARU_COST_MATERIAL] if GameState.naru_state == 1 else ("물고기 %d" % GameState.basket if GameState.basket > 0 else ""))
+	if _lake:
+		_lake.queue_redraw()
 
 
 func _build_hud() -> void:
@@ -2406,6 +2689,8 @@ func _refresh_hud() -> void:
 		tool_text = "약탕기"
 	if active == rancher:
 		tool_text = "모이 바가지"
+	if active == ferryman:
+		tool_text = "삿대"
 	if hunt:
 		var buddy := hunt.companion.display_name() if hunt.companion else "혼자"
 		_status.text = "%d일째 %s | %s | 도구: %s | 동행: %s | 남은 몬스터 %d | 주운 알 %d | 돈 %d원 · 잡템 %d" % [GameState.day, GameState.clock_text(GameState.minutes), Config.HUNT_ZONES[hunt.zone].name, tool_text, buddy, hunt.slimes.size(), hunt.picked.size(), GameState.money, GameState.junk]
@@ -2442,6 +2727,10 @@ func _refresh_hud() -> void:
 		_status.text += " | %s %d/%d" % [Config.BOSS_MATERIAL3_NAME, GameState.material3, Config.BARN_COST_MATERIAL]
 	elif GameState.barn_state >= 2:
 		_status.text += " | 달걀 %d" % GameState.hen_eggs
+	if GameState.naru_state == 1 or (GameState.naru_state == 0 and GameState.material4 > 0):
+		_status.text += " | %s %d/%d" % [Config.BOSS_MATERIAL4_NAME, GameState.material4, Config.NARU_COST_MATERIAL]
+	elif GameState.naru_state >= 2:
+		_status.text += " | 물고기 %d" % GameState.fish
 	# 대장간 · 약방 · 축사 단계에 붙은 것은 잡템 알약 하나로 모은다
 	var extra := _status.text.substr(status_before.length()).trim_prefix(" | ").replace(" | ", " · ")
 	if extra != "":

@@ -19,7 +19,7 @@ const STASH_RECT := Rect2i(17, 10, 1, 1)
 ## 배경 오브젝트 (2026-09-27 결정: 집 B 양옥, 나무 감나무 + 당산나무 하나)
 const HOUSE_RECT := Rect2i(23, 9, 5, 4)
 const DANGSAN_RECT := Rect2i(29, 15, 2, 2)
-const PERSIMMON_CELLS: Array[Vector2i] = [Vector2i(1, 13), Vector2i(13, 13), Vector2i(15, 4), Vector2i(38, 9), Vector2i(36, 20), Vector2i(9, 21), Vector2i(26, 21), Vector2i(31, 4)]
+const PERSIMMON_CELLS: Array[Vector2i] = [Vector2i(1, 13), Vector2i(13, 13), Vector2i(15, 4), Vector2i(38, 9), Vector2i(31, 23), Vector2i(9, 21), Vector2i(26, 21), Vector2i(31, 4)]
 ## 알이 부화하면 크리처가 나타나는 칸 (부화기 왼쪽 아래)
 const HATCH_CELL := Vector2i(16, 5)
 ## 농부 집 현관 앞 흙길 칸. 여기서 F를 누르면 잔다 (2026-09-27 결정 A②).
@@ -69,9 +69,9 @@ const HERBS_PER_DAY := Vector2i(5, 6)
 ## 돋을 수 있는 풀밭 칸 (울타리·흙길·집·나무·마을 오브젝트를 피한 자리. F로 쓰는 오브젝트 둘레 2칸 밖이라 캐기가 오브젝트보다 먼저 잡히지 않음.
 ## 맵 맨 위 줄 · 아래 두 줄은 비움. 마을 넓히기 배치 도구 design/village-wide/mock/layouts.py 가 고른 자리)
 const HERB_SPOTS: Array[Vector2i] = [
-	Vector2i(39, 15), Vector2i(11, 21), Vector2i(35, 13), Vector2i(31, 11), Vector2i(32, 20), Vector2i(35, 8),
+	Vector2i(39, 15), Vector2i(11, 21), Vector2i(35, 13), Vector2i(31, 11), Vector2i(27, 18), Vector2i(35, 8),
 	Vector2i(24, 21), Vector2i(15, 13), Vector2i(39, 5), Vector2i(31, 6), Vector2i(4, 21), Vector2i(31, 1),
-	Vector2i(0, 19), Vector2i(17, 21), Vector2i(8, 13), Vector2i(25, 15), Vector2i(37, 11), Vector2i(38, 20),
+	Vector2i(0, 19), Vector2i(17, 21), Vector2i(8, 13), Vector2i(25, 15), Vector2i(37, 11), Vector2i(37, 16),
 	Vector2i(21, 13), Vector2i(21, 3),
 ]
 
@@ -598,6 +598,36 @@ const HUNT_ZONES: Array[Dictionary] = [
 		money = [50, 95], boss_money = [150, 240],
 		monster_tint = Color.WHITE, boss_tint = Color.WHITE, ground_tint = Color(0.86, 0.9, 0.7), tree_tint = Color(0.66, 0.82, 0.6),
 	},
+	{
+		## 4막 둘째 구역 = 4막 대장 (2026-10-02 사용자: "곤지암 정신병원 메타로 너가 추천해서 정해줘 고르는건 내가 고를게",
+		## 첫 후보를 보고 "몬스터 더 강해보이는걸로하자 4막인만큼 악마타입으로" → 악마형 후보 A 뿔 악귀 + 마왕 선택).
+		## 광주시 유래: 신립 장군 묘 가까이 고양이 바위, 말을 타고 지나면 말굽이 안 떨어졌고 장군이 꾸짖자 천둥에 바위가 갈라졌다는 설화.
+		## 아래 입구 → 곤지천 (나무 다리 · 여울) → 신립 장군 묘 · 두 쪽 난 고양이 바위 → 가로등 선 진입로 → 무너진 철망 → 위 폐병원
+		## (본관 + 양쪽 병동, 시멘트 앞마당, 대장은 본관 문 앞). 괴물은 악마 · 요괴로만 (병원에 있던 사람을 괴물로 그리지 않음).
+		## 뿔 악귀 (demon): 사냥꾼이 바라보는 쪽 (DEMON_GAZE 부채꼴) 에선 얼어붙고, 등 뒤 · 옆에선 걸어서 다가온다.
+		## 붙으면 두 팔을 치켜들어 (구역 windup) 둘레 내려찍기 (DEMON_SLAM_RADIUS). 정전 동안엔 바라봐도 움직인다.
+		## 대장 마왕 (archdemon): 지옥불 등불이 깜빡이다 (ARCH_DIM_WINDUP) 꺼지면 정전 (ARCH_BLACKOUT) + 사냥꾼 등 뒤에 악귀 ARCH_CALL 마리,
+		## 다음 차례엔 지옥불 기둥 (원 ARCH_PILLARS 개). 체력 절반부터 정전이 길고 (ARCH_BLACKOUT_ENRAGED) 기둥이 늘어남.
+		name = "곤지암", junk_name = "악귀 뿔", monster = "뿔 악귀", boss_monster = "마왕", waypoint = true,
+		map = "gonjiam",
+		labels = [[Vector2(25.5, 1.3), "폐병원"]],
+		sheet = "res://assets/creatures/wild_horn_demon.png", boss_sheet = "res://assets/creatures/wild_archdemon.png", burrow = false,
+		demon = true, shade = Color(0.7, 0.66, 0.8),
+		## 알: 4막 대장 알 = 아기 악귀 (불, 밤일). 일반 몬스터도 가끔 같은 알.
+		egg = "res://data/creatures/species/imp.tres", boss_egg = "res://data/creatures/species/imp.tres",
+		egg_chance = 0.012, boss_egg_chance = 0.2,
+		## 역동보다 한 계단 (임시, 봇으로 맞춤). 악귀는 넷씩 떼 (등 뒤를 노려 둘러쌈).
+		count = 9, hp = 14, speed = 1.3, boss_hp = 100,
+		swarm = 4,
+		damage = 3, knockback = 3.0, windup = 0.35, pack = false, boss_pattern = &"archdemon",
+		## 4막 대장 재료 (2026-10-02 나루터): 마왕을 쓰러뜨릴 때마다 마왕 뿔 하나, 처음 잡으면 다음 날 마을 팔당호 물가에 나루터 터
+		boss_material4 = true,
+		advice = "권장: 하트 14 · 사냥 도시락",
+		loot = {&"money": 32, &"potion": 26, &"junk": 20, &"gear": 22},
+		rarity = {&"normal": 20, &"magic": 46, &"rare": 34}, boss_rarity = {&"normal": 0, &"magic": 45, &"rare": 55},
+		money = [55, 105], boss_money = [180, 280],
+		monster_tint = Color.WHITE, boss_tint = Color.WHITE, ground_tint = Color(0.62, 0.66, 0.6), tree_tint = Color(0.42, 0.5, 0.44),
+	},
 ]
 ## 켄타우로스 창기병 (역동 lancer, 2026-10-02): 사냥꾼이 LANCER_TRIGGER 안이면 발을 구르며 (구역 windup) 긴 띠 예고 →
 ## LANCER_TIME 동안 LANCER_DISTANCE 만큼 돌격 (나무 · 바위에 막히면 거기서 멈춤). 돌격 뒤 LANCER_RECOVER 초 돌아섬 = 칠 틈.
@@ -629,6 +659,43 @@ const COMPANION_KICK_RANGE := 18.0
 ## 아기 망아지 밭 갈기 (plow, 2026-10-02): 농사를 맡으면 수확한 빈 칸을 깊이 갈아 둔다 (안 간 칸이면 갈기까지).
 ## 깊이 간 칸에서 거둔 무는 PLOW_BONUS 개 더 (거두면 다시 보통 칸).
 const PLOW_BONUS := 1
+## 뿔 악귀 (곤지암 demon, 2026-10-02): 사냥꾼이 바라보는 쪽 (바라보는 방향에서 DEMON_GAZE 라디안 안, DEMON_GAZE_RANGE 거리 안) 에선
+## 얼어붙는다 (예고 중이어도 멈춤). 아니면 DEMON_NOTICE 안에서 DEMON_WALK 빠르기로 걸어 다가와, DEMON_TRIGGER 안이면 팔을 치켜들고
+## (구역 windup) 둘레 DEMON_SLAM_RADIUS 를 내려찍는다. 찍은 뒤 DEMON_RECOVER 초 숨 고름 = 칠 틈.
+const DEMON_GAZE := 1.0
+const DEMON_GAZE_RANGE := 220.0
+const DEMON_NOTICE := 200.0
+const DEMON_WALK := 60.0
+const DEMON_TRIGGER := 30.0
+const DEMON_SLAM_RADIUS := 34.0
+const DEMON_RECOVER := 1.1
+const DEMON_COOLDOWN := 1.6
+## 마왕 (곤지암 대장 archdemon): ARCH_RANGE 안이면 등불 깜빡임 (ARCH_DIM_WINDUP) → 정전 ARCH_BLACKOUT 초 (절반 아래 ARCH_BLACKOUT_ENRAGED)
+## + 사냥꾼 등 뒤에 악귀 ARCH_CALL 마리 (원래 크기, 체력 ARCH_MINION_HP, 드롭 · 알 없음, 최대 SLAM_MINION_MAX).
+## 다음 차례는 지옥불 기둥: 사냥꾼 발밑 + 둘레에 원 ARCH_PILLARS 개 (절반 아래 ARCH_PILLARS_ENRAGED), 예고 ARCH_PILLAR_WINDUP, 원 안이면 하트 -피해.
+## 정전 동안 화면은 사냥꾼 둘레 ARCH_DARK_RADIUS 만 보인다.
+const ARCH_RANGE := 260.0
+const ARCH_DIM_WINDUP := 0.9
+const ARCH_BLACKOUT := 1.4
+const ARCH_BLACKOUT_ENRAGED := 2.6
+const ARCH_CALL := 2
+const ARCH_MINION_HP := 4
+const ARCH_PILLARS := 2
+const ARCH_PILLARS_ENRAGED := 4
+const ARCH_PILLAR_WINDUP := 0.8
+const ARCH_PILLAR_GAP := 0.25
+const ARCH_PILLAR_RADIUS := 22.0
+const ARCH_PILLAR_SPREAD := 40.0
+const ARCH_RECOVER := 1.4
+const ARCH_COOLDOWN := 2.4
+const ARCH_DARK_RADIUS := 70.0
+## 아기 악귀 동행 불 할퀴기 + 겁주기 (scare, 2026-10-02 곤지암): 맞은 몬스터가 IMP_FEAR 초 동안 사냥꾼에게서 달아난다 (공격 안 함, 대장은 안 겁먹음)
+const COMPANION_IMP_INTERVAL := 1.2
+const COMPANION_IMP_RANGE := 18.0
+const IMP_FEAR := 1.2
+const IMP_FLEE_SPEED := 60.0
+## 아기 악귀 밤일 (night, 2026-10-02): 밤사이 맡은 일 (농사 · 고철 · 도라지 · 모이) 을 한 바퀴 더 해 둔다. 한 마리가 하룻밤에 하는 일 최대 NIGHT_WORK_MAX 번.
+const NIGHT_WORK_MAX := 12
 ## 그림자 늑대 (밀목 wolf, 2026-09-30): 사냥꾼이 WOLF_NOTICE 안이면 사냥꾼 둘레 WOLF_RING 거리에 둘러서서 천천히 돈다.
 ## 돌다가 달려들기 쿨이 끝나면 (첫 쿨은 늑대마다 어긋나게) 보통 달려들기 (구역 windup 예고 → 돌진). 달려든 뒤 WOLF_LUNGE_COOLDOWN.
 ## 하나가 쓰러지면 WOLF_FLINCH_RANGE 안의 늑대가 WOLF_FLINCH 초 멈칫 (칠 틈).
@@ -798,6 +865,41 @@ const LUNCH_EGGS := 2
 const LUNCH_CROPS := 1
 const LUNCH_HEARTS := 2
 
+## 팔당호 물가 (2026-10-02 나루터): 마을 오른쪽 아래 구석은 처음부터 물이다 (분원리는 팔당호 옆 마을). 줄 번호: 그 줄에서 물이 시작하는 칸.
+## 물 칸은 아무도 못 들어가고 들나물도 안 돋는다. 그림 assets/props/lake.png (칸 31~39 · 16~23, tools/make_naru_sheets.py).
+const LAKE_ORIGIN := Vector2i(31, 16)
+const LAKE_ROWS := {16: 39, 17: 38, 18: 37, 19: 36, 20: 35, 21: 34, 22: 33, 23: 33}
+
+## 나루터 복구 · 뱃사공 (2026-10-02 시설 4, 사용자 선택 A 나루터 + 낚시 B 통발). 본편 넷째 시설. 값·자리·그림 전부 임시.
+## 4막 대장(곤지암 마왕)을 처음 쓰러뜨린 다음 날 아침, 팔당호 물가에 무너진 나루터 터가 드러난다.
+## 터에서 F → 돈 · 무 · 4막 대장 재료를 다 모았으면 한 번에 고친다 (대장간 · 약방 · 축사처럼).
+## 고치면 뱃사공(여섯째 캐릭터, Tab)이 오고 잔교 · 나룻배가 놓인다. 나룻배는 5막 팔당호 섬 뱃길 (그때 엶).
+## 통발 (사용자 선택 B): 나루터에서 F로 통발 놓기 (미끼 무 하나, TRAP_MAX 개까지) → 다음 날 아침 통발마다 물고기 0~2마리가
+## 나루터 바구니에 (통발은 걷혀서 다시 놓아야 함). 바구니에서 꺼낸 물고기는 공급함에 진열해 팔거나 뱃사공이 매운탕을 끓인다.
+const NARU_ZONE := 7
+const BOSS_MATERIAL4_NAME := "마왕 뿔"
+const NARU_RECT := Rect2i(32, 17, 3, 2)
+## 뱃사공이 처음 서는 칸 (나룻집 왼쪽 아래)
+const FERRYMAN_CELL := Vector2i(31, 19)
+## 복구에 드는 것 (로드맵: 시설 4 ≈ 9.5시간 ≈ 95일째). 4막 대장 재료 (대장을 잡을 때마다 1개) 가 속도를 정한다.
+const NARU_COST_MONEY := 12000
+const NARU_COST_CROPS := 80
+const NARU_COST_MATERIAL := 25
+## 통발: 한 번에 놓을 수 있는 수 · 미끼 (무) · 통발 하나가 아침에 거두는 물고기 [0, 1, 2] 무게
+const TRAP_MAX := 3
+const TRAP_BAIT := 1
+const TRAP_CATCH_WEIGHTS := [1, 2, 1]
+## 통발을 놓는 물 칸 (그림 자리, 놓은 순서대로)
+const TRAP_CELLS: Array[Vector2i] = [Vector2i(37, 19), Vector2i(36, 21), Vector2i(38, 21)]
+const FISH_PRICE := 45
+## 물고기 몰기 (크리처 일): 통발이 놓여 있으면 한 번 할 때마다 내일 아침 물고기 +1 (하루 FISH_DRIVE_CAP 번까지). 물속성이 두 배 빠르다.
+const FISH_DRIVE_CAP := 4
+## 뱃사공 매운탕 (나루터에서 뱃사공 F): 다음 사냥 한 번 하트 +STEW_HEARTS · 경험치 xSTEW_XP_MULT (들어갈 때 먹음)
+const STEW_FISH := 2
+const STEW_CROPS := 1
+const STEW_HEARTS := 1
+const STEW_XP_MULT := 1.5
+
 ## 크리처 원정 + 입양 (2026-10-01 사용자 선택 B + D, Expedition). 값은 전부 임시.
 ## 원정대 크기 (쉬는 · 채집 크리처 중 잘 맞는 크리처부터)
 const EXPEDITION_TEAM_MIN := 3
@@ -815,6 +917,7 @@ const EXPEDITION_ZONES: Array[Dictionary] = [
 	{money = [75, 125], elements = [&"fire"], species = [&"will_o"], hint = "불 · 아기 도깨비불"},
 	{money = [55, 100], elements = [&"spirit"], species = [&"tiger", &"white_tiger"], hint = "신령 · 아기 호랑이"},
 	{money = [60, 110], elements = [&"earth"], species = [&"foal"], hint = "땅 · 아기 망아지"},
+	{money = [70, 125], elements = [&"fire"], species = [&"imp"], hint = "불 · 아기 악귀"},
 ]
 ## 원정대 하나가 하룻밤에 가져오는 잡템 (그 구역 잡템, 공급함에서 사냥꾼 잡템처럼 판다)
 const EXPEDITION_JUNK := [1, 2]
@@ -827,11 +930,13 @@ const ADOPT_GIFTS := {
 	&"smith": {name = "대장장이", text = "고철 5개", count = 5},
 	&"alchemist": {name = "연금술사", text = "빨간 물약 2병", count = 2},
 	&"rancher": {name = "목축인", text = "사냥 도시락 1개", count = 1},
+	&"ferryman": {name = "뱃사공", text = "물고기 4마리", count = 4},
 }
 const ADOPT_SPOTS := {
 	&"smith": [Vector2i(3, 17), Vector2i(2, 17), Vector2i(3, 18), Vector2i(2, 18)],
 	&"alchemist": [Vector2i(18, 19), Vector2i(17, 19), Vector2i(16, 18), Vector2i(16, 19)],
-	&"rancher": [Vector2i(21, 6), Vector2i(22, 6), Vector2i(21, 5), Vector2i(21, 7)]}
+	&"rancher": [Vector2i(21, 6), Vector2i(22, 6), Vector2i(21, 5), Vector2i(21, 7)],
+	&"ferryman": [Vector2i(30, 19), Vector2i(30, 20), Vector2i(31, 20), Vector2i(29, 20)]}
 
 ## 농사가 아닌 크리처 (채집 · 고철 · 도라지밭 · 모이) 의 일 이름표는 조작 중인 캐릭터가 이 거리 (px) 안일 때만 보인다
 const CREATURE_TAG_DISTANCE := 56.0

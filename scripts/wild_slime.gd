@@ -120,6 +120,17 @@ var _lunge_time := Config.LUNGE_TIME
 var _charges_left := 0
 var _stomped := false
 var _circling := false
+## 뿔 악귀 (곤지암 demon, 2026-10-02): 사냥꾼이 바라보는 동안 얼어붙고 (watched, HuntGround 가 틱마다 알려 줌), 아니면 걸어서 다가와 내려찍는다.
+## 정전 (blackout, 마왕) 동안엔 바라봐도 움직인다.
+var demon := false
+var watched := false
+var blackout := false
+var _walking := false
+## 겁먹은 남은 시간 (아기 악귀 동행 겁주기): 그동안 사냥꾼에게서 달아나고 공격하지 않는다
+var _fear := 0.0
+## 마왕 (곤지암 대장 archdemon): 등불 깜빡임 예고 남은 시간 (-1 = 아님), 다음 패턴 차례 (짝수 정전 · 홀수 지옥불 기둥)
+var _dim := -1.0
+var _arch_step := 0
 ## 산군 백호 (밀목 대장 tiger): 다음 패턴 차례 (0 도약 · 1 쓰러지는 나무 · 2 포효), 포효 예고 남은 시간(-1 = 아님)
 var _tiger_step := 0
 var _roar := -1.0
@@ -156,6 +167,8 @@ signal rammed(at: Vector2)
 signal roared(at: Vector2)
 ## 대장이 혀를 뻗었다 (입 → 혀끝). HuntGround 가 받아 선 위의 사냥꾼을 다치게 하고 금가루를 뿌린다.
 signal lashed(from: Vector2, to: Vector2)
+## 마왕 등불이 꺼졌다 (정전 + 등 뒤에 악귀)
+signal dimmed(at: Vector2)
 
 
 func _ready() -> void:
@@ -185,6 +198,7 @@ func setup_zone(zone: int) -> void:
 	wisp = z.get("wisp", false)
 	wolf = z.get("wolf", false)
 	lancer = z.get("lancer", false)
+	demon = z.get("demon", false)
 	_angle = randf() * TAU
 	if lancer:
 		_lunge_len = Config.LANCER_DISTANCE
@@ -213,6 +227,7 @@ func make_boss(zone := 0) -> void:
 	wisp = false
 	wolf = false
 	lancer = false
+	demon = false
 	_lunge_len = Config.LUNGE_DISTANCE
 	_lunge_time = Config.LUNGE_TIME
 	sheet = load(z.boss_sheet)
@@ -249,6 +264,33 @@ func make_partner(zone := 0) -> void:
 	_pattern_cd = 3.0
 	if _sprite:
 		_apply_sheet()
+
+
+## 바라보는 동안 얼어붙은 뿔 악귀 (정전 · 겁먹음 · 대장은 아님)
+func gazed_frozen() -> bool:
+	return demon and watched and not blackout and not boss and _fear <= 0.0
+
+
+## 마왕 체력 절반 아래 (정전이 길고 지옥불 기둥이 늘어남)
+func enraged() -> bool:
+	return hp * 2 < max_hp
+
+
+## 겁먹는다 (아기 악귀 동행): seconds 동안 사냥꾼에게서 달아나고, 하던 예고는 멈춘다. 대장은 겁먹지 않는다.
+func scare(seconds: float) -> void:
+	if boss:
+		return
+	_fear = maxf(_fear, seconds)
+	_windup = -1.0
+	_burst = -1.0
+	_hop_t = -1.0
+
+
+func _flee(delta: float, target: Vector2) -> void:
+	var away := (position - target).normalized()
+	if away == Vector2.ZERO:
+		away = Vector2.UP
+	position = _stand(position + away * Config.IMP_FLEE_SPEED * delta)
 
 
 ## 오른쪽을 보는 네발 짐승 그림 (늑대 · 백호 · 창기병 · 역마 장군)
@@ -355,7 +397,8 @@ func telegraphs() -> Array[Dictionary]:
 	if _swoop >= 0.0:
 		out.append({kind = &"circle", at = _dive_to, radius = Config.SWOOP_RADIUS, progress = 1.0 - _swoop / windup_time})
 	for b in _bales:
-		out.append({kind = &"circle", at = b.at, radius = Config.STRAW_RADIUS, progress = clampf(1.0 - b.t / Config.STRAW_WINDUP, 0.0, 1.0), bale = true})
+		var w: float = b.get("w", Config.STRAW_WINDUP)
+		out.append({kind = &"circle", at = b.at, radius = b.get("r", Config.STRAW_RADIUS), progress = clampf(1.0 - b.t / w, 0.0, 1.0), bale = not b.get("pillar", false), pillar = b.get("pillar", false)})
 	var one := _telegraph_one()
 	if not one.is_empty():
 		out.append(one)
@@ -372,7 +415,7 @@ func _telegraph_one() -> Dictionary:
 	if _log_aim >= 0.0:
 		return {kind = &"lane", from = _log_from, to = _log_to, width = Config.LOG_WIDTH, progress = 1.0 - _log_aim / Config.LOG_WINDUP}
 	if _burst >= 0.0:
-		return {kind = &"circle", at = position, radius = Config.WISP_BURST_RADIUS, progress = 1.0 - _burst / windup_time}
+		return {kind = &"circle", at = position, radius = Config.DEMON_SLAM_RADIUS if demon else Config.WISP_BURST_RADIUS, progress = 1.0 - _burst / windup_time}
 	if _roar >= 0.0:
 		return {kind = &"circle", at = position, radius = Config.TIGER_ROAR_RADIUS, progress = 1.0 - _roar / Config.TIGER_ROAR_WINDUP, roar = true}
 	if _bus_aim >= 0.0 and pattern == &"general":
@@ -449,9 +492,13 @@ func tick(delta: float, target: Vector2) -> void:
 	if _slow > 0.0:
 		_slow = maxf(_slow - delta, 0.0)
 		delta *= Config.STAFF_SLOW_MULT
-	_anim_time += delta
+	var gazed := gazed_frozen()
+	if not gazed:
+		# 바라보는 동안 얼어붙은 악귀는 그림도 멈춘다
+		_anim_time += delta
 	_flash = maxf(_flash - delta, 0.0)
 	_stun = maxf(_stun - delta, 0.0)
+	_fear = maxf(_fear - delta, 0.0)
 	if buried and position.distance_to(target) <= Config.WILD_BURROW_POP_DISTANCE:
 		# 사냥꾼이 다가오면 모래에서 튀어나온다
 		buried = false
@@ -463,6 +510,10 @@ func tick(delta: float, target: Vector2) -> void:
 			_pull_t = -1.0
 	if buried or _stun > 0.0:
 		pass
+	elif ai_enabled and gazed:
+		_walking = false
+	elif ai_enabled and _fear > 0.0 and not boss:
+		_flee(delta, target)
 	elif ai_enabled and flyer:
 		_tick_fly(delta, target)
 	elif ai_enabled and _tick_attack(delta, target):
@@ -499,6 +550,24 @@ func tick(delta: float, target: Vector2) -> void:
 		col = BURIED_COLUMNS[1]
 	elif wolf and _circling:
 		col = HOP_COLUMNS[int(_anim_time * 8.0) % 4]
+	if demon:
+		# 뿔 악귀: 걸을 때 2-5열, 팔 치켜듦 (예고) 6열, 숨 고름 7열
+		if _burst >= 0.0:
+			col = BURIED_COLUMNS[0]
+		elif _recover > 0.0 or _stun > 0.0:
+			col = BURIED_COLUMNS[1]
+		elif _walking or _fear > 0.0:
+			col = HOP_COLUMNS[int(_anim_time * 7.0) % 4]
+		else:
+			col = IDLE_COLUMNS[int(_anim_time * 2.0) % 2]
+	if pattern == &"archdemon":
+		# 마왕: 등불 깜빡임 (6열 · 0열 번갈아), 지옥불 기둥 6열, 숨 고름 7열 (꺼진 등불)
+		if _dim >= 0.0:
+			col = BURIED_COLUMNS[0] if int(_anim_time * 12.0) % 2 == 0 else IDLE_COLUMNS[0]
+		elif not _bales.is_empty():
+			col = BURIED_COLUMNS[0]
+		elif _recover > 0.0:
+			col = BURIED_COLUMNS[1]
 	if wisp:
 		# 도깨비불: 부푸는 동안 6열, 튀긴 뒤 쪼그라든 동안 7열
 		if _burst >= 0.0:
@@ -520,6 +589,9 @@ func tick(delta: float, target: Vector2) -> void:
 		_sprite.flip_h = (_dive_to.x > position.x) if in_air() else (target.x > position.x)
 	if pattern == &"general":
 		_sprite.flip_h = (_bus_to.x < _bus_from.x) if (_bus_aim >= 0.0 or _bus_t >= 0.0) else (target.x < position.x)
+	elif (demon or pattern == &"archdemon") and not gazed:
+		# 악귀 · 마왕 그림은 오른쪽을 본다: 사냥꾼 쪽으로 (달아날 땐 반대쪽)
+		_sprite.flip_h = (target.x > position.x) if _fear > 0.0 else (target.x < position.x)
 	elif _quad():
 		# 네발 짐승 그림은 오른쪽을 본다: 사냥꾼 쪽 (달려드는 중이면 달려드는 쪽) 으로 뒤집는다
 		_sprite.flip_h = (_lunge_dir.x < 0.0) if (_windup >= 0.0 or _lunge_t >= 0.0) else (target.x < position.x)
@@ -552,6 +624,9 @@ func tick(delta: float, target: Vector2) -> void:
 	if _slow > 0.0 and _flash <= 0.0:
 		# 물의 지팡이에 느려진 동안 푸르게
 		_sprite.modulate = _tint * Color(0.7, 0.85, 1.4)
+	elif gazed and _flash <= 0.0:
+		# 바라보는 동안 얼어붙은 악귀: 잿빛으로
+		_sprite.modulate = _tint * Color(0.72, 0.72, 0.84)
 	z_index = int(sort_y())
 	queue_redraw()
 
@@ -621,13 +696,20 @@ func _tick_attack(delta: float, target: Vector2) -> bool:
 		_burst -= delta
 		if _burst < 0.0:
 			burst.emit(position)
-			_recover = Config.WISP_RECOVER
-			_lunge_cd = Config.WISP_COOLDOWN
+			_recover = Config.DEMON_RECOVER if demon else Config.WISP_RECOVER
+			_lunge_cd = Config.DEMON_COOLDOWN if demon else Config.WISP_COOLDOWN
 		return true
 	if _bus_aim >= 0.0:
 		_bus_aim -= delta
 		if _bus_aim < 0.0:
 			_bus_t = 0.0
+		return true
+	if _dim >= 0.0:
+		_dim -= delta
+		if _dim < 0.0:
+			dimmed.emit(position)
+			_recover = Config.ARCH_RECOVER
+			_pattern_cd = Config.ARCH_COOLDOWN
 		return true
 	if _roar >= 0.0:
 		_roar -= delta
@@ -675,7 +757,10 @@ func _tick_attack(delta: float, target: Vector2) -> bool:
 			if _bales[i].t <= 0.0:
 				bale_landed.emit(_bales[i].at)
 				_bales.remove_at(i)
-		if _bales.is_empty():
+		if _bales.is_empty() and pattern == &"archdemon":
+			_recover = Config.ARCH_RECOVER
+			_pattern_cd = Config.ARCH_COOLDOWN
+		elif _bales.is_empty():
 			_recover = Config.STRAW_RECOVER
 			_pattern_cd = Config.STRAW_COOLDOWN
 			_throws += 1
@@ -748,6 +833,18 @@ func _tick_attack(delta: float, target: Vector2) -> bool:
 			_charges_left = Config.GENERAL_CHARGES
 			_aim_general(target)
 			return true
+		if pattern == &"archdemon" and _pattern_cd <= 0.0 and d <= Config.ARCH_RANGE:
+			# 등불 깜빡 → 정전 (+ 등 뒤 악귀) 과 지옥불 기둥을 번갈아. 체력 절반 아래면 정전이 길고 기둥이 늘어남
+			if _arch_step % 2 == 0:
+				_dim = Config.ARCH_DIM_WINDUP
+			else:
+				var n := Config.ARCH_PILLARS_ENRAGED if enraged() else Config.ARCH_PILLARS
+				var turn := randf() * TAU
+				for i in n:
+					var at := target if i == 0 else target + Vector2.from_angle(turn + TAU * i / maxf(n - 1, 1)) * Config.ARCH_PILLAR_SPREAD * Vector2(1.0, 0.7)
+					_bales.append({at = at, t = Config.ARCH_PILLAR_WINDUP + i * Config.ARCH_PILLAR_GAP, w = Config.ARCH_PILLAR_WINDUP, r = Config.ARCH_PILLAR_RADIUS, pillar = true})
+			_arch_step += 1
+			return true
 		if pattern == &"tongue" and _pattern_cd <= 0.0 and d <= Config.TONGUE_RANGE:
 			_tongue_to = position + (target - position).normalized() * Config.TONGUE_RANGE
 			_aim = Config.TONGUE_WINDUP
@@ -760,6 +857,19 @@ func _tick_attack(delta: float, target: Vector2) -> bool:
 			return true
 		return false
 	_circling = false
+	_walking = false
+	if demon:
+		# 뿔 악귀: 붙으면 팔을 치켜들고 내려찍기, 아니면 걸어서 다가온다 (내려찍기 거리 조금 안쪽에서 멈춤 = 몸으로 밀지 않음)
+		if may_attack and _lunge_cd <= 0.0 and d <= Config.DEMON_TRIGGER:
+			_burst = windup_time
+			return true
+		if d <= Config.DEMON_NOTICE or alert:
+			if d > Config.DEMON_TRIGGER * 0.8:
+				var to := _stand(position.move_toward(target, Config.DEMON_WALK * speed * delta))
+				_walking = to != position
+				position = to
+			return true
+		return false
 	if wolf and d <= Config.WOLF_NOTICE:
 		if may_attack and _lunge_cd <= 0.0 and d <= Config.WOLF_RING + 16.0:
 			_lunge_dir = (target - position).normalized()
@@ -898,7 +1008,11 @@ func _draw() -> void:
 		# 막차 전조등: 앞쪽에 노란 빛 두 줄
 		var fw := signf(_bus_to.x - position.x) if absf(_bus_to.x - position.x) > 1.0 else 0.0
 		draw_circle(Vector2(fw * 44.0, -12), 5.0, Color(1.0, 0.95, 0.6, 0.9))
-	if _windup >= 0.0 or _aim >= 0.0 or _log_aim >= 0.0:
+	if _dim >= 0.0:
+		# 마왕 등불 깜빡임: 손에 든 등불 자리에 초록 불이 꺼졌다 켜졌다
+		var fw := -1.0 if _sprite.flip_h else 1.0
+		draw_circle(Vector2(fw * 18.0, -22.0) / scale.x, (7.0 if int(_anim_time * 12.0) % 2 == 0 else 3.0) / scale.x, Color(0.5, 1.0, 0.55, 0.45))
+	if _windup >= 0.0 or _aim >= 0.0 or _log_aim >= 0.0 or _dim >= 0.0:
 		draw_circle(Vector2(0, -30), 6.0, Color(1.0, 0.92, 0.5))
 		draw_arc(Vector2(0, -30), 6.0, 0, TAU, 16, Color(0.6, 0.15, 0.1), 1.0)
 		draw_string(ThemeDB.fallback_font, Vector2(-2.5, -25), "!", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.85, 0.15, 0.1))
