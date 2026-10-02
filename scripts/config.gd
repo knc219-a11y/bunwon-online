@@ -591,7 +591,7 @@ const HUNT_ZONES: Array[Dictionary] = [
 		## 밀목보다 한 계단 (임시, 봇으로 맞춤). 창기병은 둘씩 짝지어 (떼 2). 첫 봇에서 51번 사냥에 맞은 횟수 0~2 → 예고를 짧게, 더 단단하게.
 		count = 10, hp = 13, speed = 1.3, boss_hp = 80,
 		swarm = 2,
-		damage = 3, knockback = 4.0, windup = 0.5, pack = false, boss_pattern = &"general",
+		damage = 3, knockback = 4.0, windup = 0.4, pack = false, boss_pattern = &"general",
 		advice = "권장: 하트 13 · 사냥 도시락",
 		loot = {&"money": 34, &"potion": 26, &"junk": 20, &"gear": 20},
 		rarity = {&"normal": 22, &"magic": 46, &"rare": 32}, boss_rarity = {&"normal": 5, &"magic": 48, &"rare": 47},
@@ -603,7 +603,7 @@ const HUNT_ZONES: Array[Dictionary] = [
 ## LANCER_TIME 동안 LANCER_DISTANCE 만큼 돌격 (나무 · 바위에 막히면 거기서 멈춤). 돌격 뒤 LANCER_RECOVER 초 돌아섬 = 칠 틈.
 const LANCER_TRIGGER := 150.0
 const LANCER_DISTANCE := 170.0
-const LANCER_TIME := 0.55
+const LANCER_TIME := 0.45
 const LANCER_RECOVER := 1.1
 const LANCER_COOLDOWN := 1.8
 ## 역마 장군 (역동 대장 general): GENERAL_RANGE 안이면 창 돌격 GENERAL_CHARGES 번. 첫 돌격 예고 GENERAL_WINDUP, 다음은 GENERAL_NEXT_WINDUP
