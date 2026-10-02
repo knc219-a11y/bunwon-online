@@ -25,7 +25,7 @@ static var egg_roll := -1.0
 static var feel := true
 static var swarm := true
 ## 활 몰아잡기 방식 (2026-10-02 후보): &"" 지금 (첫 몬스터에 박힘) · &"pierce" 관통 · &"spread" 부채살 · &"volley" 3연사
-static var bow_style := &""
+static var bow_style: StringName = Config.BOW_STYLE
 
 const T := Config.TILE
 ## 사냥꾼이 걸을 수 있는 공터 (캐릭터 위치 기준, px)

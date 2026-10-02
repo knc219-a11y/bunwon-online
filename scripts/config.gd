@@ -171,6 +171,10 @@ const SWARM_ALERT_REST := 0.45
 const MAX_ATTACKERS := 2
 
 ## 활 몰아잡기 (2026-10-02 후보 비교, 떼가 생긴 뒤 활 사냥이 길어져서). 값은 전부 임시.
+## 기본 방식 (HuntGround.bow_style 기본값): &"" 첫 몬스터에 박힘 · &"pierce" · &"spread" · &"volley".
+## 2026-10-02 사용자: "이런 공격방식은 레벨제도를 도입해서 스킬을 찍는걸로 가는거어떨까 무조건 고정이 아니고"
+## → 셋은 나중에 레벨 · 스킬로 고르게 하고, 그 전까지 기본은 지금 그대로.
+const BOW_STYLE := &""
 ## pierce 관통: 화살이 BOW_PIERCE 마리까지 꿰뚫는다 (마리마다 같은 피해).
 const BOW_PIERCE := 3
 ## spread 부채살: 화살 3발을 이 각도(도)로 벌려 쏜다. 쿨이 이 배율로 길어진다.

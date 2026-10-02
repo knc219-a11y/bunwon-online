@@ -11,6 +11,7 @@ func _ready() -> void:
 	# 사냥 손맛 · 몰아잡기 떼 (2026-10-02)는 44)에서 따로 본다. 그 전 구역 · 몬스터 수 검사는 예전 한 마리씩 기준.
 	HuntGround.feel = false
 	HuntGround.swarm = false
+	HuntGround.bow_style = &""
 	var main: Node2D = load("res://scenes/main.tscn").instantiate()
 	add_child(main)
 	await get_tree().process_frame
@@ -2567,6 +2568,9 @@ func _ready() -> void:
 	# 44) 사냥 손맛 · 몰아잡기 (2026-10-02): 구르기 · 연속 베기 3타 · 꾹 눌러 공격 · 떼 · 한꺼번에 덮치는 수 · 드롭 몫
 	await _pace_checks()
 
+	# 45) 활 몰아잡기 (2026-10-02): 관통 · 부채살 · 3연사
+	await _bow_style_checks()
+
 	# 41) 저장/불러오기 (2026-09-30 사용자 선택 C 디아2식): 저장 → 장면을 버리고 → 새 장면에 불러오면 모든 상태가 같다
 	await _save_load_checks()
 
@@ -2910,3 +2914,55 @@ func _action(action: StringName) -> InputEventAction:
 	ev.action = action
 	ev.pressed = true
 	return ev
+
+
+## 45) 활 몰아잡기. 한 줄로 선 몬스터 셋 (체력 1) 에 오른쪽으로 쏜다.
+func _bow_style_checks() -> void:
+	var m: Node2D = load("res://scenes/main.tscn").instantiate()
+	add_child(m)
+	await get_tree().process_frame
+	GameState.reset()
+	GameState.hunter_unlocked = true
+	GameState.first_egg_done = true
+	GameState.worn[&"hunter"][&"weapon"] = &"hunting_bow"
+	m._set_active(m.hunter)
+	var kills := {}
+	for style: StringName in [&"", &"pierce", &"spread", &"volley"]:
+		# 구역마다 몬스터를 새로 (앞 방식이 잡은 수만큼 줄어서)
+		GameState.hunts_today = 0
+		m.enter_hunt(null, 0)
+		var h: HuntGround = m.hunt
+		h.set_process(false)
+		h.set_ai(false)
+		var feet: Vector2 = m.hunter.feet()
+		HuntGround.bow_style = style
+		h.shots.clear()
+		h._cooldown = 0.0
+		var line := []
+		for o: WildSlime in h.slimes:
+			o.position = feet + Vector2(-400, 0)
+		for k in 3:
+			var o: WildSlime = h.slimes[k]
+			o.hp = 1
+			o.position = feet + Vector2(50 + 22 * k, 8)
+			line.append(o)
+		h.swing(Vector2.RIGHT)
+		var fired := h.shots.size()
+		var cd := h._cooldown
+		for i in 45:
+			h.tick(1.0 / 30.0)
+		kills[style] = line.filter(func(o) -> bool: return not is_instance_valid(o) or not o in h.slimes).size()
+		match style:
+			&"":
+				_check(fired == 1 and kills[style] == 1, "활 지금: 한 발이 첫 몬스터에 박힘 (%d마리)" % kills[style])
+			&"pierce":
+				_check(fired == 1 and kills[style] == 3, "관통 화살: 한 발이 한 줄 %d마리를 꿰뚫음 (%d마리)" % [Config.BOW_PIERCE, kills[style]])
+			&"spread":
+				_check(fired == 3 and is_equal_approx(cd, 0.55 * Config.BOW_SPREAD_COOLDOWN), "부채살: 3발, 쿨 x%.1f" % Config.BOW_SPREAD_COOLDOWN)
+			&"volley":
+				_check(fired == 3 and kills[style] == 3 and is_equal_approx(cd, 0.55 * Config.BOW_VOLLEY_COOLDOWN), "3연사: 3발이 연달아 나가 한 줄 3마리 (%d마리), 쿨 x%.1f" % [kills[style], Config.BOW_VOLLEY_COOLDOWN])
+		m.leave_hunt()
+		await get_tree().process_frame
+	HuntGround.bow_style = Config.BOW_STYLE
+	m.queue_free()
+	await get_tree().process_frame
