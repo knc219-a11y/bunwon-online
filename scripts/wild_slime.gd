@@ -59,6 +59,16 @@ var windup_time := 0.6
 var pattern := &""
 ## 대장 내려찍기 때 튀어나온 새끼 (알·드롭 없음)
 var minion := false
+## 몰아잡기 떼 (2026-10-02): 이 몬스터 한 마리가 예전 한 마리의 몇 몫인지 (드롭 · 알 확률에 곱함). 떼 4마리면 0.25.
+var share := 1.0
+## 맞았을 때 밀려나는 거리 배율 (몰아 베기, Config.HIT_KNOCKBACK_MULT)
+var knock_mult := 1.0
+## false 면 새 달려들기 · 내려꽂기 · 불똥 예고를 시작하지 않는다 (이미 예고 중인 몬스터가 Config.MAX_ATTACKERS 마리면 HuntGround 가 끈다)
+var may_attack := true
+## 몰아잡기 떼: 같은 떼 번호 (-1 = 떼 아님) · 떼가 모여 있는 자리 · 사냥꾼을 알아챘는지 (하나가 알아채면 떼 모두, HuntGround)
+var pack_id := -1
+var home := Vector2.ZERO
+var alert := false
 
 ## 달려들기 (A): 웅크림 남은 시간(-1 = 아님) → 돌진(0~1) → 헐떡임
 var _windup := -1.0
@@ -267,7 +277,7 @@ func hit(from: Vector2, amount := 1) -> bool:
 	if away == Vector2.ZERO:
 		away = Vector2.UP
 	if _air_t < 0.0 and _bus_t < 0.0 and boss_frame == Vector2i.ZERO:
-		position = _stand(position + away * knockback)
+		position = _stand(position + away * knockback * knock_mult)
 	_hop_t = -1.0
 	if not flyer:
 		_rest = Config.WILD_SLIME_REST_TIME
@@ -282,6 +292,18 @@ func airborne() -> bool:
 ## 까마귀가 공중에 있다 (맴돌기 · 예고 · 내려꽂는 중)
 func in_air() -> bool:
 	return _fly >= 0.0 or _swoop >= 0.0 or _dive_t >= 0.0
+
+
+## 몰아잡기 떼 한 마리로 만든다 (setup_zone 뒤에): 체력을 낮추고 드롭 몫을 1/n 로
+func make_swarm(n: int) -> void:
+	hp = maxi(1, roundi(hp * Config.SWARM_HP_MULT))
+	max_hp = hp
+	share = 1.0 / n
+
+
+## 달려들기 · 내려꽂기 · 불똥을 예고하거나 하는 중 (한꺼번에 덮치는 수를 셀 때)
+func attacking() -> bool:
+	return _windup >= 0.0 or _lunge_t >= 0.0 or _burst >= 0.0 or _swoop >= 0.0 or _dive_t >= 0.0
 
 
 ## 헐떡이는 중 (달려들기·대장 패턴 뒤, 때릴 틈)
@@ -395,7 +417,7 @@ func tick(delta: float, target: Vector2) -> void:
 			position = _hop_from.lerp(_hop_to, minf(_hop_t, 1.0))
 			if _hop_t >= 1.0:
 				_hop_t = -1.0
-				_rest = Config.WILD_SLIME_REST_TIME * randf_range(0.7, 1.3) / speed
+				_rest = Config.WILD_SLIME_REST_TIME * randf_range(0.7, 1.3) / speed * (Config.SWARM_ALERT_REST if alert else 1.0)
 		else:
 			_rest -= delta
 			if _rest <= 0.0:
@@ -636,13 +658,13 @@ func _tick_attack(delta: float, target: Vector2) -> bool:
 		return false
 	if wisp:
 		# 도깨비불: 불빛 안에서만 부풀어 튀긴다 (어둠 속에선 그냥 떠다님)
-		if lit and _lunge_cd <= 0.0 and d <= Config.WISP_TRIGGER:
+		if lit and may_attack and _lunge_cd <= 0.0 and d <= Config.WISP_TRIGGER:
 			_burst = windup_time
 			return true
 		return false
 	_circling = false
 	if wolf and d <= Config.WOLF_NOTICE:
-		if _lunge_cd <= 0.0 and d <= Config.WOLF_RING + 16.0:
+		if may_attack and _lunge_cd <= 0.0 and d <= Config.WOLF_RING + 16.0:
 			_lunge_dir = (target - position).normalized()
 			if _lunge_dir == Vector2.ZERO:
 				_lunge_dir = Vector2.DOWN
@@ -663,7 +685,7 @@ func _tick_attack(delta: float, target: Vector2) -> bool:
 		position = to
 		_circling = true
 		return true
-	if _lunge_cd <= 0.0 and d <= Config.LUNGE_TRIGGER:
+	if may_attack and _lunge_cd <= 0.0 and d <= Config.LUNGE_TRIGGER:
 		_lunge_dir = (target - position).normalized()
 		if _lunge_dir == Vector2.ZERO:
 			_lunge_dir = Vector2.DOWN
@@ -702,6 +724,9 @@ func _tick_fly(delta: float, target: Vector2) -> void:
 			# 사냥꾼이 멀리 가 버리면 내려앉아 다시 쫀다
 			_fly = -1.0
 			_rest = randf_range(0.5, 1.5)
+		elif _fly < 0.0 and not may_attack:
+			# 다른 까마귀가 내려꽂는 중이면 조금 더 맴돈다
+			_fly = 0.3
 		elif _fly < 0.0:
 			_swoop = windup_time
 			_dive_to = target.clamp(area.position, area.end)
@@ -737,8 +762,11 @@ func _hop_dest(dir: Vector2) -> Vector2:
 
 func _start_hop(target: Vector2) -> void:
 	var dir: Vector2
-	if position.distance_to(target) <= Config.WILD_SLIME_CHASE_DISTANCE:
+	if position.distance_to(target) <= (Config.SWARM_ALERT_CHASE if alert else Config.WILD_SLIME_CHASE_DISTANCE):
 		dir = (target - position).normalized()
+	elif pack_id >= 0 and position.distance_to(home) > Config.SWARM_SPREAD * 1.5:
+		# 떼는 흩어지지 않고 모인 자리 둘레에서 논다
+		dir = (home - position).normalized()
 	else:
 		dir = Vector2.RIGHT.rotated(randf() * TAU)
 	var to := _hop_dest(dir)

@@ -36,6 +36,8 @@ var slow_mult := 1.0
 var show_facing_cell := true
 ## 선택창이 열려 있는 동안처럼 조작 중이지만 걷지 않을 때 true
 var frozen := false
+## 사냥터 구르기 중 (HuntGround 가 대신 움직인다, 걷기 입력은 안 받음)
+var dashing := false
 var facing := Vector2i.DOWN
 var moving := false
 
@@ -111,7 +113,7 @@ func facing_cell() -> Vector2i:
 
 func _process(delta: float) -> void:
 	var dir := Vector2.ZERO
-	if active and not frozen:
+	if active and not frozen and not dashing:
 		dir = Input.get_vector("move_left", "move_right", "move_up", "move_down")
 	var was_moving := moving
 	moving = dir != Vector2.ZERO

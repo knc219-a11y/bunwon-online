@@ -29,10 +29,11 @@ const RARITY_COLORS := {
 
 
 ## 한 마리를 쓰러뜨렸을 때 떨어질 것. 없으면 빈 사전.
-static func roll_for_kill(rng: RandomNumberGenerator, zone := 0) -> Dictionary:
+## share: 이 몬스터가 예전 한 마리의 몇 몫인지 (몰아잡기 떼 한 마리면 1/떼 수)
+static func roll_for_kill(rng: RandomNumberGenerator, zone := 0, share := 1.0) -> Dictionary:
 	var z: Dictionary = Config.HUNT_ZONES[zone]
 	var missing := Wearables.missing_hunt_drops()
-	if rng.randf() >= loot_chance():
+	if rng.randf() >= loot_chance() * share:
 		return {}
 	var kind := pick_kind(rng.randf() * 100.0, z.loot)
 	if kind == &"gear":

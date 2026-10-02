@@ -8,6 +8,9 @@ var _failures := 0
 func _ready() -> void:
 	# 사냥터 드롭표는 19)에서 따로 본다. 그 전까지는 알 보장만 보도록 끈다.
 	HuntGround.loot_enabled = false
+	# 사냥 손맛 · 몰아잡기 떼 (2026-10-02)는 44)에서 따로 본다. 그 전 구역 · 몬스터 수 검사는 예전 한 마리씩 기준.
+	HuntGround.feel = false
+	HuntGround.swarm = false
 	var main: Node2D = load("res://scenes/main.tscn").instantiate()
 	add_child(main)
 	await get_tree().process_frame
@@ -2300,6 +2303,8 @@ func _ready() -> void:
 	# 둘러서서 돈다 (나무가 없는 빈터에서)
 	m_a.position = m_feet + Vector2(100, 0)
 	m_a._lunge_cd = 5.0
+	# 둘레 자리 각도를 위쪽에서 시작 (사냥꾼이 맵 아래 가장자리라 아래쪽 자리는 영역 밖으로 밀려 거리가 짧아짐, 예전엔 무작위라 가끔 실패)
+	m_a._angle = -PI / 2.0
 	m_a.ai_enabled = true
 	for i in 90:
 		m_a.tick(1.0 / 30.0, m_feet)
@@ -2559,6 +2564,9 @@ func _ready() -> void:
 	# 43) 소리 (2026-10-01 사운드 첫 단계): 버스 · 소리 파일 · 배경음 고르기 · 크기 단계
 	await _sound_checks()
 
+	# 44) 사냥 손맛 · 몰아잡기 (2026-10-02): 구르기 · 연속 베기 3타 · 꾹 눌러 공격 · 떼 · 한꺼번에 덮치는 수 · 드롭 몫
+	await _pace_checks()
+
 	# 41) 저장/불러오기 (2026-09-30 사용자 선택 C 디아2식): 저장 → 장면을 버리고 → 새 장면에 불러오면 모든 상태가 같다
 	await _save_load_checks()
 
@@ -2775,6 +2783,120 @@ func _sound_checks() -> void:
 	_check(AudioServer.is_bus_mute(AudioServer.get_bus_index(&"Music")), "배경음 끔 = Music 버스 음소거")
 	Sound.set_music_volume(m0)
 	_check(not AudioServer.is_bus_mute(AudioServer.get_bus_index(&"Music")), "배경음 다시 켬")
+
+
+func _pace_checks() -> void:
+	HuntGround.feel = true
+	HuntGround.swarm = true
+	HuntGround.loot_enabled = false
+	var m: Node2D = load("res://scenes/main.tscn").instantiate()
+	add_child(m)
+	await get_tree().process_frame
+	GameState.reset()
+	GameState.hunter_unlocked = true
+	GameState.first_egg_done = true
+	m._set_active(m.hunter)
+	m.enter_hunt(null, 0)
+	var h: HuntGround = m.hunt
+	h.set_process(false)
+	h.set_ai(false)
+	var z: Dictionary = Config.HUNT_ZONES[0]
+	_check(h.slimes.size() == z.count * Config.SWARM_SIZE, "떼: 분원농협 몬스터 자리마다 %d마리 (%d마리)" % [Config.SWARM_SIZE, h.slimes.size()])
+	var s0: WildSlime = h.slimes[0]
+	_check(s0.hp == maxi(1, roundi(z.hp * Config.SWARM_HP_MULT)) and is_equal_approx(s0.share, 1.0 / Config.SWARM_SIZE), "떼 몬스터는 체력 낮고 드롭 몫 1/%d" % Config.SWARM_SIZE)
+	var rng := RandomNumberGenerator.new()
+	var got := 0
+	for i in 400:
+		if not HuntLoot.roll_for_kill(rng, 0, 0.0).is_empty():
+			got += 1
+	_check(got == 0, "드롭 몫 0 이면 아무것도 안 떨어짐")
+	# 구르기
+	var feet: Vector2 = m.hunter.feet()
+	for o: WildSlime in h.slimes:
+		o.position = feet + Vector2(0, 300)
+	var p0: Vector2 = m.hunter.position
+	_check(h.dash(Vector2.UP), "Space 구르기")
+	_check(not h.dash(Vector2.UP), "구르는 중에는 다시 못 구름")
+	for i in 10:
+		h.tick(1.0 / 30.0)
+	_check(m.hunter.position.distance_to(p0) >= Config.DASH_DISTANCE * 0.8 and not m.hunter.dashing, "구르면 휙 움직임 (%.0fpx)" % m.hunter.position.distance_to(p0))
+	# 구르는 동안은 몸에 부딪혀도 안 다침
+	h.dash_cd = 0.0
+	var hearts0 := h.hearts
+	h.dash(Vector2.RIGHT)
+	h.slimes[0].position = m.hunter.feet()
+	h.tick(1.0 / 30.0)
+	_check(h.hearts == hearts0, "구르는 동안은 안 맞음")
+	for i in 40:
+		h.tick(1.0 / 30.0)
+	h.slimes[0].position = feet + Vector2(0, 300)
+	# 연속 베기 3타: 3타째는 넓고 피해 +1
+	feet = m.hunter.feet()
+	var hand: Vector2 = feet + Vector2(0, -8)
+	var w := Wearables.weapon()
+	var far: Vector2 = hand + Vector2(w.reach + w.radius * 1.3, 0)
+	var a: WildSlime = h.slimes[1]
+	var b: WildSlime = h.slimes[2]
+	a.position = far
+	a.hp = 5
+	b.position = hand + Vector2(w.reach, 0)
+	b.hp = 5
+	h._cooldown = 0.0
+	h._since_swing = 99.0
+	h.swing(Vector2.RIGHT)
+	var hp_a1 := a.hp
+	var hp_b1 := b.hp
+	_check(h.combo == 0 and hp_a1 == 5 and hp_b1 == 4, "1타: 가까운 것만 1 피해")
+	for k in 2:
+		a.position = far + Vector2(Config.COMBO_FINISH_STEP * k, 0)
+		b.position = hand + Vector2(w.reach, 0)
+		h._hitstop = 0.0
+		for i in 30:
+			if h._cooldown <= 0.0:
+				break
+			h.tick(1.0 / 30.0)
+			h._hitstop = 0.0
+		a.position = m.hunter.feet() + Vector2(0, -8) + Vector2(w.reach + w.radius * 1.3 - (Config.COMBO_FINISH_STEP if k == 1 else 0.0), 0)
+		b.position = m.hunter.feet() + Vector2(0, -8) + Vector2(w.reach, 0)
+		h.swing(Vector2.RIGHT)
+	_check(h.combo == 2 and a.hp == 5 - 2 and b.hp == 4 - 1 - 2, "3타째는 넓게 베고 피해 +1 (멀리 %d · 가까이 %d)" % [a.hp, b.hp])
+	_check(h._hitstop > 0.0, "맞히면 잠깐 멈춤 (타격 멈춤)")
+	# 한꺼번에 덮치는 수
+	h.set_ai(true)
+	h._hitstop = 0.0
+	h._invulnerable = 99.0
+	feet = m.hunter.feet()
+	var near: Array[WildSlime] = []
+	for i in 6:
+		var o: WildSlime = h.slimes[3 + i]
+		o.position = feet + Vector2.from_angle(TAU * i / 6.0) * 40.0
+		o.hp = 9
+		near.append(o)
+	var most := 0
+	for t in 90:
+		h.tick(1.0 / 30.0)
+		most = maxi(most, near.filter(func(o: WildSlime) -> bool: return o.attacking()).size())
+	_check(most >= 1 and most <= Config.MAX_ATTACKERS, "떼여도 한꺼번에 달려드는 건 %d마리까지 (가장 많을 때 %d)" % [Config.MAX_ATTACKERS, most])
+	# 꾹 누르고 있으면 계속 공격
+	h.set_ai(false)
+	h._cooldown = 0.0
+	h._hitstop = 0.0
+	Input.action_press("attack")
+	var swings := 0
+	for i in 30:
+		var before := h._since_swing
+		m._process(1.0 / 30.0)
+		if h._since_swing < before:
+			swings += 1
+		h.tick(1.0 / 30.0)
+		h._hitstop = 0.0
+	Input.action_release("attack")
+	_check(swings >= 2, "왼쪽 클릭을 꾹 누르면 계속 벤다 (1초에 %d번)" % swings)
+	m.leave_hunt()
+	m.queue_free()
+	await get_tree().process_frame
+	HuntGround.feel = false
+	HuntGround.swarm = false
 
 
 func _check(ok: bool, what: String) -> void:

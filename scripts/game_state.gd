@@ -212,6 +212,8 @@ func _register_inputs() -> void:
 		"menu_close": [KEY_ESCAPE],
 		"use_potion": [KEY_1],
 		"inventory": [KEY_I],
+		## 사냥터 구르기 (2026-10-02). Space 는 마을에선 도구질, 사냥터에선 구르기 (J 는 그대로 휘두르기)
+		"dash": [KEY_SPACE, KEY_SHIFT],
 	}
 	for action: String in map:
 		if InputMap.has_action(action):

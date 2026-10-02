@@ -139,6 +139,37 @@ const FIRST_WEAPON_DROPS := {0: &"hunting_bow", 1: &"water_staff"}
 ## 장비 드롭 중 무기가 나올 몫 (나머지는 모자 · 옷 · 신발)
 const WEAPON_DROP_SHARE := 0.35
 
+## 사냥 손맛 (2026-10-02 사용자: "사냥액션이 너무 루즈해 요즘 로그라이크 액션게임처럼 좀 스피드하고 더 몰아잡는 느낌",
+## "지금 게임 구조로는 하데스2같은 느낌이 좋은거같아"). 값은 전부 임시.
+## 구르기 (Space): 바라보는 쪽 · 걷는 쪽으로 휙. 구르는 동안과 조금 뒤까지 안 맞는다.
+const DASH_DISTANCE := 58.0
+const DASH_TIME := 0.14
+const DASH_COOLDOWN := 0.5
+const DASH_IFRAMES := 0.24
+## 근거리 연속 베기: 클릭을 꾹 누르고 있으면 계속 벤다. COMBO_WINDOW 안에 다시 베면 다음 타, 3타째는 넓고 세게 (피해 +1).
+## 근거리 무기 쿨에 COMBO_SPEED 를 곱한다 (휘두르기가 빨라짐)
+const COMBO_WINDOW := 0.5
+const COMBO_SPEED := 0.7
+const COMBO_FINISH_RADIUS := 1.45
+## 3타째 앞으로 내딛는 거리 (px)
+const COMBO_FINISH_STEP := 8.0
+## 맞히면 세상이 아주 잠깐 멈춘다 (타격 멈춤, 초) · 쓰러뜨리면 화면이 살짝 흔들린다 (px)
+const HITSTOP := 0.045
+const HITSTOP_KILL := 0.07
+const SHAKE := 2.5
+## 맞은 몬스터가 밀려나는 거리 배율 (몰아 베려면 덜 밀려나야 한다)
+const HIT_KNOCKBACK_MULT := 0.45
+## 떼 (몰아잡기): 몬스터 자리 하나에 SWARM_SIZE 마리가 모여 있다 (구역 swarm 이 있으면 그 수).
+## 떼 몬스터는 체력이 SWARM_HP_MULT 배 (반올림, 최소 1). 한 마리 드롭 · 알 확률은 1/떼 수 (사냥 한 번 합은 그대로).
+const SWARM_SIZE := 4
+const SWARM_HP_MULT := 0.5
+const SWARM_SPREAD := 20.0
+## 떼 하나가 사냥꾼을 알아채면 (WILD_SLIME_CHASE_DISTANCE 안) 떼 모두가 이 거리 안에서 쫓아오고, 쉬는 시간이 이 배율로 짧아진다
+const SWARM_ALERT_CHASE := 240.0
+const SWARM_ALERT_REST := 0.45
+## 한꺼번에 달려들기 예고를 할 수 있는 몬스터 수 (떼가 한 번에 덮치지 않게, 하데스처럼 차례로)
+const MAX_ATTACKERS := 2
+
 ## 부딪히면 하트 -1, 그 뒤 이 시간 동안은 다시 맞지 않는다 (초)
 const HURT_INVULNERABLE_TIME := 1.0
 const WILD_SLIME_TOUCH_DISTANCE := 14.0
@@ -384,6 +415,8 @@ const HUNT_ZONES: Array[Dictionary] = [
 		egg_chance = 0.01, boss_egg_chance = 0.15,
 		## 2막부터 한 계단 더 (대장간 제작품으로 금사리가 쉬워진 것을 보고, 2026-09-29): 내려꽂기 하트 -2, 대장 체력 26. windup = 내려꽂기 예고(초)
 		count = 15, hp = 4, speed = 1.0, boss_hp = 26,
+		## 몰아잡기 떼 (2026-10-02): 까마귀는 이미 많아서 두 마리씩
+		swarm = 2,
 		damage = 2, knockback = 4.0, windup = 0.35, pack = false, boss_pattern = &"straw",
 		advice = "권장: 하트 9 · 제작 장비",
 		loot = {&"money": 38, &"potion": 25, &"junk": 19, &"gear": 18},
@@ -459,6 +492,8 @@ const HUNT_ZONES: Array[Dictionary] = [
 		egg = "res://data/creatures/species/will_o.tres", boss_egg = "res://data/creatures/species/tiger.tres",
 		egg_chance = 0.03, boss_egg_chance = 0.2,
 		count = 12, hp = 8, speed = 1.3, boss_hp = 50,
+		## 몰아잡기 떼 (2026-10-02): 늑대는 둘러서서 돌아 세 마리씩
+		swarm = 3,
 		damage = 2, knockback = 4.0, windup = 0.35, pack = false, boss_pattern = &"tiger",
 		## 3막 대장 재료 (2026-09-30 축사 닭장): 백호를 쓰러뜨릴 때마다 산군 발톱 하나, 처음 잡으면 다음 날 마을에 축사 터
 		boss_material3 = true,

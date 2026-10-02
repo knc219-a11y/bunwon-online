@@ -243,6 +243,9 @@ func _process(delta: float) -> void:
 	if clock_running and not sleeping and not menu_open and not inventory.visible:
 		advance_clock(delta * Config.CLOCK_MINUTES_PER_SECOND)
 	Sound.bgm(wanted_bgm())
+	# 사냥터: 왼쪽 클릭을 꾹 누르고 있으면 계속 공격한다 (2026-10-02 손맛, 쿨이 돌 때마다 한 번)
+	if hunt and HuntGround.feel and not menu_open and not inventory.visible and Input.is_action_pressed("attack"):
+		hunt.swing(get_global_mouse_position() - (hunter.feet() + Vector2(0, -12)))
 
 
 ## 지금 틀 배경음: 사냥터 · 마을 밤(저녁 7시부터) · 마을 낮
@@ -324,6 +327,9 @@ func _unhandled_input(event: InputEvent) -> void:
 	if hunt:
 		if event.is_action_pressed("attack"):
 			hunt.swing(get_global_mouse_position() - (hunter.feet() + Vector2(0, -12)))
+		elif event.is_action_pressed("dash") and HuntGround.feel:
+			# 구르기 (Space · Shift): 걷는 쪽으로, 서 있으면 바라보는 쪽으로
+			hunt.dash(Input.get_vector("move_left", "move_right", "move_up", "move_down"))
 		elif event.is_action_pressed("use_tool"):
 			hunt.swing()
 		elif event.is_action_pressed("use_potion"):
@@ -615,12 +621,12 @@ func enter_hunt(companion: Creature = null, zone := 0) -> bool:
 		last_companion = companion
 		companion.process_mode = Node.PROCESS_MODE_DISABLED
 		var c := hunt.add_companion(companion)
-		GameState.notify("%s과(와) 사냥터에 들어왔다. 클릭(또는 Space)으로 휘두르면 %s도 알아서 돕는다!%s" % [c.display_name(), c.display_name(), drank_text])
+		GameState.notify("%s과(와) 사냥터에 들어왔다. 클릭(꾹 누르면 연속 베기)으로 싸우고 Space로 구른다. %s도 알아서 돕는다!%s" % [c.display_name(), c.display_name(), drank_text])
 		return true
 	if zone > 0:
-		GameState.notify("%s 웨이포인트에서 사냥을 시작했다. 클릭(또는 Space)으로 휘두른다!" % Config.HUNT_ZONES[zone].name)
+		GameState.notify("%s 웨이포인트에서 사냥을 시작했다. 클릭(꾹 누르면 연속 베기) · Space 구르기!" % Config.HUNT_ZONES[zone].name)
 	else:
-		GameState.notify("사냥터에 들어왔다. 클릭(또는 Space)으로 사냥칼을 휘두른다. 야생 슬라임을 쓰러뜨리자!")
+		GameState.notify("사냥터에 들어왔다. 클릭(꾹 누르면 연속 베기)으로 휘두르고 Space로 구른다. 야생 슬라임을 쓰러뜨리자!")
 	return true
 
 
@@ -631,6 +637,7 @@ func leave_hunt() -> void:
 	var knocked := hunt.knocked
 	var eggs := hunt.collect_all()
 	GameState.hunter_eggs.append_array(eggs)
+	hunter.dashing = false
 	hunt.queue_free()
 	hunt = null
 	# 금가루에 느려진 채로 마을에 돌아오지 않게
@@ -2272,7 +2279,7 @@ func _build_hud() -> void:
 	help.position = Vector2(8, 345)
 	help.add_theme_font_size_override("font_size", 10)
 	help.modulate = Color(1, 1, 1, 0.6)
-	help.text = "WASD 이동 · Space 도구 (사냥터: 클릭) · Q/E 도구 바꾸기 · F 상호작용 · R 크리처 일 · I 가방 · Tab 캐릭터 · 집 현관 F 잠자기"
+	help.text = "WASD 이동 · Space 도구 (사냥터: 클릭 공격 · Space 구르기) · Q/E 도구 바꾸기 · F 상호작용 · R 크리처 일 · I 가방 · Tab 캐릭터 · 집 현관 F 잠자기"
 	layer.add_child(help)
 	# 저녁·밤 색 (하루 시계). 아침엔 투명.
 	_dusk = ColorRect.new()
