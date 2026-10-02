@@ -20,6 +20,8 @@ var shot_to := Vector2.ZERO
 var shot_time := 0.0
 ## 혀로 끌어오는 몬스터 (혀 끝이 따라간다)
 var pulling: WildSlime
+## 다음 공격까지 남은 시간 (HuntGround 가 줄이고 정한다)
+var cooldown := 0.0
 
 var _sprite: Sprite2D
 var _anim_time := 0.0

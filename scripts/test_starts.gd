@@ -8,6 +8,9 @@ extends RefCounted
 ## 크리처: [종, 일, 속성 (&"" = 부화 때 굴린 대로), 훈련 범위 단계, 훈련 속도 단계]
 ## 농사 크리처는 열린 밭 구역 가운데에 차례로, 채집은 공급함 옆 풀밭, 고철 줍기는 고물 더미 옆에 놓는다.
 ## 무기: 앞의 것부터 얻어 첫 무기를 든다. 사냥꾼 방어구: [기본 장비, 등급]. 농부 제작품: 대장간 기본 장비.
+## 시작 지점마다 사냥꾼 레벨
+const LEVELS := {&"hunter": 1, &"day5": 7, &"forge_ready": 10, &"forge_done": 13, &"doma": 15, &"act3": 18, &"milmok": 20, &"barn": 22}
+
 const STARTS: Array[Dictionary] = [
 	{id = &"fresh", name = "처음부터", note = "지금과 똑같이 1일째"},
 	{
@@ -159,6 +162,9 @@ static func apply(main: Node2D, id: StringName) -> bool:
 	GameState.waypoints.assign(s.get("waypoints", [0]))
 	# 웨이포인트가 켜진 구역 앞 구역들의 대장은 이미 쓰러뜨린 것으로 친다
 	GameState.bosses_beaten.assign(range(GameState.waypoints.max()))
+	# 사냥꾼 레벨 (2026-10-02): 봇 기록 (design/hunter-level/runs) 어림. 스킬 포인트는 찍지 않은 채로 (막 대장 보너스 포함)
+	GameState.hunter_level = LEVELS.get(id, 1)
+	GameState.skill_points = GameState.hunter_level - 1 + GameState.bosses_beaten.filter(func(z: int) -> bool: return HunterSkills.is_act_boss_zone(z)).size()
 	# 구역 대장 첫 처치 선물(무기)은 들고 시작하는 만큼 이미 받은 것으로 친다
 	for z: int in Config.FIRST_WEAPON_DROPS:
 		if Config.FIRST_WEAPON_DROPS[z] in s.get("weapons", []):

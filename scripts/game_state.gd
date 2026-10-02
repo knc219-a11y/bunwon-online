@@ -96,6 +96,13 @@ var displayed_hen_eggs := 0
 var lunches := 0
 ## 주민에게 입양 보낸 크리처 (2026-10-01 사용자 선택 D). {species, elements (리소스 경로), who (&"smith" 등)}
 var adopted: Array = []
+## 사냥꾼 레벨 · 스킬 (2026-10-02 디아2식). hunter_xp 는 지금 레벨 안에서 모은 경험치.
+## skills = {스킬 id: 찍은 단계}, skill_left = {무기 종류: 왼클릭에 건 스킬 id}
+var hunter_level := 1
+var hunter_xp := 0
+var skill_points := 0
+var skills := {}
+var skill_left := {}
 
 
 func _ready() -> void:
@@ -191,6 +198,11 @@ func reset() -> void:
 	displayed_hen_eggs = 0
 	lunches = 0
 	adopted = []
+	hunter_level = 1
+	hunter_xp = 0
+	skill_points = 0
+	skills = {}
+	skill_left = {}
 	changed.emit()
 
 
@@ -212,6 +224,8 @@ func _register_inputs() -> void:
 		"menu_close": [KEY_ESCAPE],
 		"use_potion": [KEY_1],
 		"inventory": [KEY_I],
+		## 사냥꾼 스킬 창 (2026-10-02, 디아2처럼 T)
+		"skills": [KEY_T],
 		## 사냥터 구르기 (2026-10-02). Space 는 마을에선 도구질, 사냥터에선 구르기 (J 는 그대로 휘두르기)
 		"dash": [KEY_SPACE, KEY_SHIFT],
 	}
@@ -228,3 +242,9 @@ func _register_inputs() -> void:
 		var click := InputEventMouseButton.new()
 		click.button_index = MOUSE_BUTTON_LEFT
 		InputMap.action_add_event("attack", click)
+	# 오른클릭 큰 스킬 (2026-10-02 사냥꾼 스킬)
+	if not InputMap.has_action("skill_right"):
+		InputMap.add_action("skill_right")
+		var rclick := InputEventMouseButton.new()
+		rclick.button_index = MOUSE_BUTTON_RIGHT
+		InputMap.action_add_event("skill_right", rclick)

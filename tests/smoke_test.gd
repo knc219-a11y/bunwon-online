@@ -1895,8 +1895,8 @@ func _ready() -> void:
 	g_t._fly = 1.0
 	g_t.hp = 2
 	g_t.position = gh.companion.position + Vector2(90, 0)
-	gh._companion_cooldown = 0.0
-	gh._tick_companion(0.01)
+	gh.companion.cooldown = 0.0
+	gh._tick_companion(gh.companion, 0.01)
 	_check(g_t.hp == 1 and not g_t.in_air() and g_t._rest > 0.0, "아기 까마귀가 날던 까마귀를 쪼아 떨어뜨림")
 	main.leave_hunt()
 
@@ -1926,9 +1926,9 @@ func _ready() -> void:
 	_check(not d_s.buried, "가까이 가면 일어남")
 	# 덩굴 묶기: 잠깐 붙잡음
 	d_s.position = dh.companion.position + Vector2(Config.COMPANION_BIND_RANGE - 10, 0)
-	dh._companion_cooldown = 0.0
+	dh.companion.cooldown = 0.0
 	var d_hp0 := d_s.hp
-	dh._tick_companion(0.01)
+	dh._tick_companion(dh.companion, 0.01)
 	_check(d_s.stunned() and d_s.hp == d_hp0 - 1, "아기 나무 정령이 덩굴로 묶음 (피해 1 + 멈춤)")
 	# 대장: 장승 한 쌍
 	for o in dh.slimes.duplicate():
@@ -2176,7 +2176,7 @@ func _ready() -> void:
 	for i in int(Config.STAFF_BURN_DELAY * 30) + 5:
 		# 동행이 사냥꾼 쪽으로 걸어가도 도깨비불이 불빛 안에 있게 (불씨는 불빛 안에서만 탄다)
 		b_g.position = bjh.companion.position + Vector2(20, 0)
-		bjh._companion_cooldown = 99.0  # 동행이 다시 치지 않게 (크리처 공격 간격은 타고난 능력치에 따라 1.5초보다 짧을 수 있다)
+		bjh.companion.cooldown = 99.0  # 동행이 다시 치지 않게 (크리처 공격 간격은 타고난 능력치에 따라 1.5초보다 짧을 수 있다)
 		bjh.tick(1.0 / 30.0)
 	_check(b_g.hp == 1, "불씨: 잠시 뒤 한 번 더 피해 (체력 %d)" % b_g.hp)
 	# 도깨비불 불똥: 불빛 안에서만 부풀어 원 안을 다치게 함
@@ -2571,6 +2571,9 @@ func _ready() -> void:
 	# 45) 활 몰아잡기 (2026-10-02): 관통 · 부채살 · 3연사
 	await _bow_style_checks()
 
+	# 46) 사냥꾼 레벨 · 스킬 (2026-10-02 사용자 선택 B: 무기 트리 셋 + 조련)
+	await _hunter_skill_checks()
+
 	# 41) 저장/불러오기 (2026-09-30 사용자 선택 C 디아2식): 저장 → 장면을 버리고 → 새 장면에 불러오면 모든 상태가 같다
 	await _save_load_checks()
 
@@ -2607,6 +2610,12 @@ func _save_load_checks() -> void:
 		GameState.stash.append(stash_id)
 	GameState.chicks.assign([2, 1])
 	GameState.nest = 3
+	# 사냥꾼 레벨 · 스킬 (2026-10-02)
+	GameState.hunter_level = 13
+	GameState.hunter_xp = 77
+	GameState.skill_points = 2
+	GameState.skills = {&"pierce": 2, &"spread": 1, &"fight_together": 3}
+	GameState.skill_left = {&"bow": &"spread"}
 	GameState.fed = 1
 	GameState.displayed_crops = 5
 	GameState.tonic_day = 69
@@ -2964,5 +2973,173 @@ func _bow_style_checks() -> void:
 		m.leave_hunt()
 		await get_tree().process_frame
 	HuntGround.bow_style = Config.BOW_STYLE
+	m.queue_free()
+	await get_tree().process_frame
+
+
+## 46) 사냥꾼 레벨 · 스킬. 경험치 · 레벨업 · 찍기 규칙 · 스킬마다 실제 효과.
+func _hunter_skill_checks() -> void:
+	var m: Node2D = load("res://scenes/main.tscn").instantiate()
+	add_child(m)
+	await get_tree().process_frame
+	GameState.reset()
+	GameState.hunter_unlocked = true
+	GameState.first_egg_done = true
+	_check(GameState.hunter_level == 1 and GameState.skill_points == 0 and GameState.skills.is_empty(), "새 게임은 사냥꾼 Lv 1 · 스킬 포인트 0")
+	_check(HunterSkills.kill_xp(0) < HunterSkills.kill_xp(3) and HunterSkills.kill_xp(1, true) > HunterSkills.kill_xp(1) * (Config.BOSS_XP_MULT - 1), "깊은 구역 · 대장일수록 경험치가 많음")
+	HunterSkills.gain(HunterSkills.xp_to_next(1))
+	_check(GameState.hunter_level == 2 and GameState.skill_points == 1, "다음 레벨까지 모으면 Lv 2 · 스킬 포인트 +1")
+	_check(HunterSkills.gap_mult(0, 20) == Config.XP_GAP_MIN and HunterSkills.gap_mult(5, 20) == 1.0, "레벨 차 벌칙: Lv 20 이 분원농협에선 경험치 %d%%, 밀목에선 그대로" % roundi(Config.XP_GAP_MIN * 100))
+	_check(HunterSkills.is_act_boss_zone(1) and HunterSkills.is_act_boss_zone(3) and not HunterSkills.is_act_boss_zone(2), "막 대장 구역은 금사리 · 도마리 (스킬 포인트 +1)")
+	_check(HunterSkills.why_not(&"dash_slash") == "Lv 6 부터", "레벨이 모자라면 못 찍음")
+	GameState.hunter_level = 20
+	GameState.skill_points = 40
+	_check(HunterSkills.why_not(&"dash_slash") == "회전 베기 먼저", "위 스킬을 먼저 찍어야 함")
+	_check(HunterSkills.learn(&"pierce") and HunterSkills.left_mode(&"bow") == &"pierce", "관통 화살을 찍으면 왼클릭에 걸림")
+	HunterSkills.learn(&"spread")
+	_check(HunterSkills.left_mode(&"bow") == &"spread" and HunterSkills.cycle_mode(&"bow") == &"" and HunterSkills.cycle_mode(&"bow") == &"pierce" and HunterSkills.cycle_mode(&"bow", -1) == &"", "Q/E 로 기본 · 관통 · 부채살을 돌려 고름")
+	# 스킬 창 (T)
+	m._set_active(m.hunter)
+	m._unhandled_input(_action(&"skills"))
+	_check(m.skill_panel.visible, "T 로 스킬 창이 열림")
+	m.skill_panel.cursor = Vector2i(3, 0)
+	var before: int = GameState.skill_points
+	m.skill_panel.learn_cursor()
+	_check(HunterSkills.rank(&"fight_together") == 1 and GameState.skill_points == before - 1, "스킬 창에서 찍기 (함께 싸우기 1)")
+	m._unhandled_input(_action(&"skills"))
+	_check(not m.skill_panel.visible, "T 로 닫힘")
+	for id in [&"whirl", &"dash_slash", &"sword_mastery", &"earth_split", &"volley", &"arrow_rain", &"big_orb", &"chain_orb", &"element_boost", &"element_storm", &"creature_guard", &"charge_order", &"two_together"]:
+		HunterSkills.learn(id)
+	HuntGround.feel = true
+	# 활: 관통 1단계 = 3마리, 부채살 5단계 = 5발
+	GameState.worn[&"hunter"][&"weapon"] = &"hunting_bow"
+	GameState.skill_left[&"bow"] = &"pierce"
+	m.enter_hunt(null, 0)
+	var h: HuntGround = m.hunt
+	h.set_process(false)
+	h.set_ai(false)
+	h.swing(Vector2.RIGHT)
+	_check(h.shots.size() == 1 and h.shots[0].pierce == Config.BOW_PIERCE, "관통 화살 1단계: %d마리 꿰뚫음" % Config.BOW_PIERCE)
+	h.shots.clear()
+	h._cooldown = 0.0
+	GameState.skills[&"spread"] = 5
+	GameState.skill_left[&"bow"] = &"spread"
+	h.swing(Vector2.RIGHT)
+	_check(h.shots.size() == 5, "부채살 5단계: 화살 5발 (%d)" % h.shots.size())
+	h.shots.clear()
+	# 화살비: 원 안 몬스터가 세 번 맞음
+	var feet: Vector2 = m.hunter.feet()
+	for o: WildSlime in h.slimes:
+		o.position = feet + Vector2(-400, 0)
+	var rain_t: WildSlime = h.slimes[0]
+	rain_t.hp = 3
+	rain_t.position = feet + Vector2(60, 0)
+	_check(h.skill_right(rain_t.position), "오른클릭 화살비")
+	for i in 45:
+		h.tick(1.0 / 30.0)
+		h._hitstop = 0.0
+	_check(not rain_t in h.slimes, "화살비가 세 번 쏟아져 체력 3 몬스터를 쓰러뜨림")
+	_check(not h.skill_right(feet) and h.right_cd > 0.0, "오른클릭 스킬은 쿨이 있음")
+	m.leave_hunt()
+	await get_tree().process_frame
+	# 검: 회전 베기 (등 뒤도 벰) · 돌진 베기 · 대지 가르기
+	GameState.hunts_today = 0
+	GameState.worn[&"hunter"][&"weapon"] = &"long_sword"
+	GameState.skill_left[&"melee"] = &"whirl"
+	m.enter_hunt(null, 0)
+	h = m.hunt
+	h.set_process(false)
+	h.set_ai(false)
+	feet = m.hunter.feet()
+	for o: WildSlime in h.slimes:
+		o.position = feet + Vector2(-400, 0)
+	var behind: WildSlime = h.slimes[0]
+	behind.hp = 1
+	behind.position = feet + Vector2(-16, 0)
+	for k in 3:
+		h._cooldown = 0.0
+		h._since_swing = 0.0
+		h.swing(Vector2.RIGHT)
+		h._hitstop = 0.0
+	_check(not behind in h.slimes, "회전 베기: 3타째가 등 뒤 몬스터도 벰")
+	var ahead: WildSlime = h.slimes[0]
+	ahead.hp = 1
+	# 구르기가 끝날 때 부르는 돌진 베기 (구르기 길이는 맵 막힘에 따라 달라서 끝난 자리에서 바로 본다)
+	ahead.position = m.hunter.feet() + Vector2(24, 0)
+	h._dash_dir = Vector2.RIGHT
+	h._dash_slash()
+	_check(not ahead in h.slimes, "돌진 베기: 구르기가 끝난 자리 앞을 벰")
+	feet = m.hunter.feet()
+	var line: Array = []
+	for k in 3:
+		var o: WildSlime = h.slimes[k]
+		o.hp = 1
+		o.position = feet + Vector2(25 + 20 * k, -6)
+		line.append(o)
+	h.right_cd = 0.0
+	h.skill_right(feet + Vector2(100, -8))
+	_check(line.all(func(o) -> bool: return not o in h.slimes), "대지 가르기: 앞 줄 3마리를 한 번에")
+	m.leave_hunt()
+	await get_tree().process_frame
+	# 지팡이: 연쇄 구슬 · 원소 폭풍 · 큰 구슬
+	GameState.hunts_today = 0
+	GameState.worn[&"hunter"][&"weapon"] = &"water_staff"
+	GameState.skill_left[&"staff"] = &"chain_orb"
+	m.enter_hunt(null, 0)
+	h = m.hunt
+	h.set_process(false)
+	h.set_ai(false)
+	var wst: Dictionary = Wearables.weapon()
+	_check(is_equal_approx(h.orb_blast(wst.blast), wst.blast * (1.0 + Config.BIG_ORB_STEP)), "큰 구슬 1단계: 터지는 범위 +10%")
+	h.swing(Vector2.RIGHT)
+	_check(h.shots.size() == 1 and h.shots[0].get("chain", 0) == 2, "연쇄 구슬: 작은 구슬 2개를 품음")
+	for o: WildSlime in h.slimes:
+		o.position = m.hunter.feet() + Vector2(-400, 0)
+	for i in 60:
+		h.tick(1.0 / 30.0)
+		h._hitstop = 0.0
+		if h.shots.any(func(sh) -> bool: return sh.get("small", false)):
+			break
+	_check(h.shots.filter(func(sh) -> bool: return sh.get("small", false)).size() == 2, "연쇄 구슬이 터지면 작은 구슬 2개가 튐")
+	feet = m.hunter.feet()
+	var storm_t: WildSlime = h.slimes[0]
+	storm_t.hp = 1
+	storm_t.position = feet + Vector2(70, 10)
+	h.right_cd = 0.0
+	h.skill_right(storm_t.position)
+	_check(not storm_t in h.slimes, "원소 폭풍: 가리킨 곳이 넓게 터짐")
+	m.leave_hunt()
+	await get_tree().process_frame
+	# 조련: 둘이 함께 · 크리처 방패 · 돌격 명령
+	GameState.hunts_today = 0
+	var c1: Creature = m._hatch(CreatureCatalog.SLIME, Vector2i(6, 10))
+	var c2: Creature = m._hatch(CreatureCatalog.SLIME, Vector2i(7, 10))
+	m.enter_hunt(c1, 0)
+	h = m.hunt
+	h.set_process(false)
+	h.set_ai(false)
+	_check(h.companion != null and h.companion2 != null and c2.process_mode == Node.PROCESS_MODE_DISABLED, "둘이 함께: 동행 둘")
+	var hearts: int = h.hearts
+	h._invulnerable = 0.0
+	h._hurt(m.hunter.feet() + Vector2(10, 0))
+	_check(h.hearts == hearts and h.guard_cd > 0.0, "크리처 방패: 첫 한 번은 동행이 대신 맞음")
+	h._invulnerable = 0.0
+	h._hurt(m.hunter.feet() + Vector2(10, 0))
+	_check(h.hearts == hearts - 1, "방패 쿨 동안엔 그대로 맞음")
+	feet = m.hunter.feet()
+	for o: WildSlime in h.slimes:
+		o.position = feet + Vector2(-400, 0)
+	var ct: WildSlime = h.slimes[0]
+	ct.hp = 5
+	ct.position = feet + Vector2(60, 0)
+	_check(h.order_charge(ct.position), "R 돌격 명령")
+	h.companion_ai = false
+	for i in 20:
+		h.tick(1.0 / 30.0)
+		h._hitstop = 0.0
+	_check(ct.hp < 5 and ct.stunned(), "돌격: 동행이 달려가 들이받고 기절시킴")
+	m.leave_hunt()
+	_check(c1.process_mode == Node.PROCESS_MODE_INHERIT and c2.process_mode == Node.PROCESS_MODE_INHERIT, "돌아오면 두 동행 모두 밭 일로")
+	HuntGround.feel = false
 	m.queue_free()
 	await get_tree().process_frame

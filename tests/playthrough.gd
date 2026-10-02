@@ -120,6 +120,7 @@ func _ready() -> void:
 		HuntGround.bow_style = StringName(OS.get_environment("BOW")) if OS.get_environment("BOW") != "plain" else &""
 	seed(rng_seed)
 	expedition_on = OS.get_environment("EXPEDITION") != "0"
+	skills_on = OS.get_environment("SKILLS") != "0"
 	main = load("res://scenes/main.tscn").instantiate()
 	add_child(main)
 	await get_tree().process_frame
@@ -177,6 +178,11 @@ func _ready() -> void:
 			crowd.append("%d일 전체 %d · 놀고 있는 %d · 원정 %d · 입양 %d" % [d, c[0], c[1], c[2], c[3]])
 	_log("\n크리처 원정 · 입양 (%s): %s · 원정 돈 합 %d원 · 원정 장비 %d · 입양 %d마리 %s" % ["켬" if expedition_on else "끔", " / ".join(crowd), expedition_money, expedition_gear, adopted_n,
 		GameState.adopted.map(func(a: Dictionary) -> String: return "%s→%s" % [load(a.species).display_name, a.who])])
+	var lv := []
+	for d in [2, 5, 10, 15, 20, 25, 30, 40, 50, 60, 70, 80]:
+		if level_by_day.has(d):
+			lv.append("%d일 Lv%d" % [d, level_by_day[d]])
+	_log("\n사냥꾼 레벨 (%s): %s · 끝 Lv %d (남은 포인트 %d) · 찍은 스킬 %s" % ["스킬 찍음" if skills_on else "스킬 안 찍음", " · ".join(lv), GameState.hunter_level, GameState.skill_points, GameState.skills])
 	_log("무기 (봇이 즐겨 듦: %s): 처음 든 날 %s · 쏜 화살 · 구슬 %d" % [weapon_pref, "%d일" % weapon_day if weapon_day > 0 else "없음", shots_fired])
 	_log("입은 장비: 농부 %s · 사냥꾼 %s" % [_worn_text(&"farmer"), _worn_text(&"hunter")])
 	_log("\n최종: %d일째, 돈 %d원, 씨앗 %d, 크리처 %d (훈련 단계 합 %d), 밭 구역 %d, 웨이포인트 %s" % [GameState.day, GameState.money, GameState.seeds, main.creatures.size(), trained, GameState.open_plots, GameState.waypoints])
@@ -698,6 +704,34 @@ func _wanted_weapon(id: StringName) -> bool:
 
 ## 즐겨 드는 종류 무기 중 가장 좋은 것을 든다 (가방 · 창고에서). knife 면 무기를 내려놓는다.
 ## 다른 종류 무기는 들지 않는다 (주울 때 빈 칸이라 바로 들었으면 내려놓음).
+## 사냥꾼 스킬 (2026-10-02 B): 봇은 든 무기 트리를 먼저, 그다음 조련을 찍는다 (SKILLS=0 이면 안 찍음)
+const SKILL_ORDER := {
+	&"melee": [&"whirl", &"dash_slash", &"fight_together", &"sword_mastery", &"creature_guard", &"earth_split", &"two_together", &"charge_order"],
+	&"bow": [&"pierce", &"spread", &"volley", &"fight_together", &"creature_guard", &"arrow_rain", &"two_together", &"charge_order"],
+	&"staff": [&"big_orb", &"chain_orb", &"element_boost", &"fight_together", &"creature_guard", &"element_storm", &"two_together", &"charge_order"],
+}
+var skills_on := true
+var level_by_day := {}
+
+
+func spend_skill_points() -> void:
+	if not skills_on:
+		return
+	var kind: StringName = Wearables.weapon().kind
+	var order: Array = SKILL_ORDER[kind]
+	var learned := true
+	while GameState.skill_points > 0 and learned:
+		learned = false
+		# 앞 스킬일수록 먼저, 다 찍었거나 못 찍으면 다음
+		for id: StringName in order:
+			if HunterSkills.learn(id):
+				learned = true
+				break
+	# 왼클릭은 찍은 방식 중 가장 뒤 것 (활은 3연사 > 부채살 > 관통)
+	var modes := HunterSkills.modes_for(kind)
+	GameState.skill_left[kind] = modes[-1]
+
+
 func pick_weapon() -> void:
 	var worn: StringName = GameState.worn[&"hunter"].get(&"weapon", &"")
 	if worn != &"" and not _wanted_weapon(worn):
@@ -809,6 +843,7 @@ func hunt_day() -> void:
 			if s.data.species == CreatureCatalog.WHITE_TIGER or (s.data.species == CreatureCatalog.TIGER and (pick == null or pick.data.species != CreatureCatalog.WHITE_TIGER)):
 				pick = s
 	pick_weapon()
+	spend_skill_points()
 	if GameState.lunches > 0:
 		lunches_eaten += 1
 	main.enter_hunt(pick, zone)
@@ -992,6 +1027,11 @@ func hunt_day() -> void:
 			elif clear and d <= w.range * 0.85:
 				# 쏠 틈을 기다린다 (제자리)
 				target = feet
+		# 오른클릭 큰 스킬: 쓸 수 있으면 가까운 몬스터에 (봇은 쿨마다 바로)
+		var rs := HunterSkills.right_skill(w.kind)
+		if skills_on and goal == &"fight" and rs != &"" and h.right_cd <= 0.0 and h.hittable(nearest_s) and not (nearest_s.buried and not nearest_s.disguise) \
+				and nearest_s.position.distance_to(feet) <= (Config.EARTH_SPLIT_LENGTH if w.kind == &"melee" else w.range * 0.8):
+			h.skill_right(nearest_s.position + Vector2(0, -6))
 		if shoot:
 			h.swing(nearest_s.position + Vector2(0, -8 * nearest_s.scale.y) - (feet + Vector2(0, -8)))
 			shots_fired += 1
@@ -1058,9 +1098,10 @@ func hunt_day() -> void:
 		eggs.append(sp.display_name)
 		if sp == CreatureCatalog.TIGER or sp == CreatureCatalog.WHITE_TIGER:
 			tigers_got[sp.display_name] = tigers_got.get(sp.display_name, 0) + 1
-	_log("사냥: 시작 %s · 동행 %s · %s · 싸움 %.0f초 · 처치 %d · 맞은 횟수 %d · 비킨 틱 %d · 남은 하트 %d%s · 알 %s · 돈 %+d · 물약 %+d · 젤리 %+d · 장비 %+d" % [
+	_log("사냥: 시작 %s · 동행 %s · %s · 싸움 %.0f초 · 처치 %d · 맞은 횟수 %d · 비킨 틱 %d · 남은 하트 %d%s · 알 %s · 돈 %+d · 물약 %+d · 젤리 %+d · 장비 %+d · Lv %d" % [
 		Config.HUNT_ZONES[zone].name, comp, " → ".join(zone_times), fight_t, kills, hurt, dodges, hearts_left, " (쓰러짐)" if knocked else "",
-		eggs, GameState.money - money0, GameState.potions - potions0, GameState.junk - junk0, GameState.gear.size() + GameState.owned_wear.size() - gear0])
+		eggs, GameState.money - money0, GameState.potions - potions0, GameState.junk - junk0, GameState.gear.size() + GameState.owned_wear.size() - gear0, GameState.hunter_level])
+	level_by_day[GameState.day] = GameState.hunter_level
 	if t >= 900.0:
 		_log("  ! 사냥 봇이 15분 안에 끝내지 못함 (막힘?)")
 	# 알 넣기 · 젤리 팔기
