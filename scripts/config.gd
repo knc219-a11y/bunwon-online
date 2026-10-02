@@ -184,6 +184,59 @@ const BOW_SPREAD_COOLDOWN := 1.3
 const BOW_VOLLEY_GAP := 0.08
 const BOW_VOLLEY_COOLDOWN := 1.6
 
+## 사냥꾼 레벨 · 스킬 (2026-10-02 사용자 선택: 디아2식 사냥꾼 레벨 + 스킬 포인트). 값은 전부 임시.
+## 경험치: 처치마다 KILL_XP_BASE x KILL_XP_GROWTH^구역, 대장은 x BOSS_XP_MULT, 대장을 처음 잡으면 x FIRST_BOSS_XP_MULT 를 더.
+## 다음 레벨까지 = XP_BASE x Lv^XP_EXP (어림: 2일 Lv5 · 20일 Lv11 · 70일 Lv21 · 130일 Lv30 안팎, 끝판에서 LEVEL_CAP).
+const KILL_XP_BASE := 4.0
+const KILL_XP_GROWTH := 1.32
+const BOSS_XP_MULT := 10
+const FIRST_BOSS_XP_MULT := 60
+const XP_BASE := 12.0
+const XP_EXP := 1.9
+const LEVEL_CAP := 50
+## 디아2식 레벨 차 벌칙: 사냥꾼 레벨이 구역 몬스터 레벨 + XP_GAP_FREE 를 넘으면 한 레벨마다 XP_GAP_STEP 씩 줄어든다 (최저 XP_GAP_MIN)
+const XP_GAP_FREE := 5
+const XP_GAP_STEP := 0.25
+const XP_GAP_MIN := 0.05
+## 구역 몬스터 레벨 (HUNT_ZONES 순서, 모자라면 마지막 + 3씩)
+const ZONE_MONSTER_LEVEL: Array[int] = [1, 3, 6, 9, 12, 15, 18, 21, 24, 27]
+## 막 대장 (막의 두 번째 구역 대장: 금사리 · 도마리 · 밀목) 을 처음 잡으면 스킬 포인트 하나 더 (디아2 퀘스트 보상처럼)
+const ACT_BOSS_SKILL_POINT := 1
+## 스킬 값 (B 무기 트리 셋 + 조련, 단계마다 per). 전부 임시.
+## 활 부채살 · 3연사 쿨 배율이 단계마다 이만큼 (3연사는 두 배) 줄어든다
+const SKILL_COOLDOWN_STEP := 0.04
+## 회전 베기: 3타 앞쪽 범위에 더해 사냥꾼 둘레 (3타 반지름 x WHIRL_RADIUS) 를 한 바퀴 · 단계마다 +8%
+const WHIRL_RADIUS := 1.0
+const WHIRL_RADIUS_STEP := 0.08
+const DASH_SLASH_STEP := 0.06
+const SWORD_MASTERY_SPEED := 0.06
+## 대지 가르기 (오른클릭): 길이 · 폭 (px), 기절 (초), 쿨 (초, 단계마다 -0.4)
+const EARTH_SPLIT_LENGTH := 70.0
+const EARTH_SPLIT_WIDTH := 10.0
+const EARTH_SPLIT_STUN := 0.6
+const EARTH_SPLIT_COOLDOWN := 4.0
+## 화살비 (오른클릭): 반지름 · 세 번 쏟아지는 간격 · 쿨
+const ARROW_RAIN_RADIUS := 30.0
+const ARROW_RAIN_GAP := 0.3
+const ARROW_RAIN_COOLDOWN := 5.0
+## 지팡이: 큰 구슬 +10%/단계 · 연쇄 작은 구슬 사거리 · 터짐 배율 · 속성 강화 +20%/단계 · 원소 폭풍
+const BIG_ORB_STEP := 0.1
+const CHAIN_ORB_RANGE := 40.0
+const CHAIN_ORB_BLAST := 0.55
+const ELEMENT_BOOST_STEP := 0.2
+const ELEMENT_STORM_RADIUS := 44.0
+const ELEMENT_STORM_COOLDOWN := 6.0
+## 조련: 함께 싸우기 +10%/단계 · 크리처 방패 쿨 (단계마다 -2.5) · 돌격 명령
+const FIGHT_TOGETHER_SPEED := 0.1
+const GUARD_COOLDOWN := 20.0
+const GUARD_COOLDOWN_STEP := 2.5
+const CHARGE_PICK_RADIUS := 80.0
+const CHARGE_SPEED := 320.0
+const CHARGE_STUN := 1.0
+const CHARGE_COOLDOWN := 6.0
+## 레벨업 띠가 떠 있는 시간 (초)
+const LEVEL_UP_BANNER_TIME := 2.5
+
 ## 부딪히면 하트 -1, 그 뒤 이 시간 동안은 다시 맞지 않는다 (초)
 const HURT_INVULNERABLE_TIME := 1.0
 const WILD_SLIME_TOUCH_DISTANCE := 14.0

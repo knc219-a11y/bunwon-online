@@ -71,6 +71,8 @@ var boss_spawned := false
 const BOSS_AT := Vector2(13 * T, 7 * T)
 ## 따라온 크리처 (없으면 혼자). 2026-09-27 결정 A. 따라오는 동료.
 var companion: HuntCompanion
+## 조련 "둘이 함께" (2026-10-02): 두 번째 동행 (없으면 null)
+var companion2: HuntCompanion
 ## false 면 동행 크리처가 스스로 움직이지 않는다 (공격 간격은 그대로 흐름). 테스트에서 끈다.
 var companion_ai := true
 
@@ -91,10 +93,23 @@ var _hitstop := 0.0
 var _shake := 0.0
 ## 맞힌 자리에 뜨는 피해 숫자 {at, text, t}
 var _pops: Array[Dictionary] = []
+## 레벨업 · 막 대장 띠 (남은 시간 · 글)
+var _level_banner := 0.0
+## 오른클릭 큰 스킬 · R 돌격 명령 쿨, 크리처 방패 쿨 (초)
+var right_cd := 0.0
+var order_cd := 0.0
+var guard_cd := 0.0
+## 화살비: {at, radius, waves, t} · 대지 가르기 그림: {from, to, t} · 돌격 중인 동행: {c, target}
+var _rains: Array[Dictionary] = []
+var _splits: Array[Dictionary] = []
+var _charge := {}
+var _banner_text := ""
 var _swing_time := 0.0
 var _swing_dir := Vector2.DOWN
 ## 이번 휘두르기 반지름 (그리기용, 무기마다 다름)
 var _swing_radius := Config.SWING_RADIUS
+## 마지막 휘두르기가 회전 베기였는지 (그림)
+var _whirl := false
 ## 날아가는 화살 · 지팡이 구슬 {kind = &"arrow"/&"orb", at, dir, left = 남은 거리, (orb) blast, element}
 var shots: Array[Dictionary] = []
 ## 지팡이 구슬이 터진 자리 (그리기용) {at, radius, element, t}
@@ -342,8 +357,9 @@ func in_light(p: Vector2) -> bool:
 		return true
 	if hunter and p.distance_to(hunter.feet()) <= lantern_radius():
 		return true
-	if companion and companion.light_radius() > 0.0 and p.distance_to(companion.position) <= companion.light_radius():
-		return true
+	for c in companions():
+		if c.light_radius() > 0.0 and p.distance_to(c.position) <= c.light_radius():
+			return true
 	if _bus_light and _bus_light.visible and p.distance_to(_bus_light.position) <= Config.BUS_LIGHT_RADIUS:
 		return true
 	for l in lamps:
@@ -448,11 +464,24 @@ func monster_area() -> Rect2:
 
 ## 농장 크리처를 데려온다. 사냥꾼 뒤에 선다.
 func add_companion(from: Creature) -> HuntCompanion:
-	companion = HuntCompanion.new()
-	companion.setup(from)
-	companion.position = hunter.feet() + Vector2(0, Config.COMPANION_FOLLOW_DISTANCE)
-	add_child(companion)
-	return companion
+	var c := HuntCompanion.new()
+	c.setup(from)
+	c.position = hunter.feet() + Vector2(0 if companion == null else 14, Config.COMPANION_FOLLOW_DISTANCE)
+	add_child(c)
+	if companion == null:
+		companion = c
+	else:
+		companion2 = c
+	return c
+
+
+## 데려온 동행 모두 (0 · 1 · 2)
+func companions() -> Array[HuntCompanion]:
+	var out: Array[HuntCompanion] = []
+	for c in [companion, companion2]:
+		if c != null:
+			out.append(c)
+	return out
 
 
 ## 입은 장비와 세트 보너스까지 더한 하트 칸 수
@@ -542,8 +571,8 @@ func advance() -> bool:
 	boss_spawned = false
 	_fill_zone()
 	_place_hunter()
-	if companion:
-		companion.position = hunter.feet() + Vector2(0, Config.COMPANION_FOLLOW_DISTANCE)
+	for c in companions():
+		c.position = hunter.feet() + Vector2(0, Config.COMPANION_FOLLOW_DISTANCE)
 	var z: Dictionary = Config.HUNT_ZONES[zone]
 	var text := "%d구역 %s에 들어왔다. %s이(가) 더 단단하고 빠르다!" % [zone + 1, z.name, z.monster]
 	if z.has("advice"):
@@ -565,6 +594,7 @@ func tick(delta: float) -> void:
 	if hunter == null or knocked:
 		return
 	_shake = maxf(_shake - delta, 0.0)
+	_level_banner = maxf(_level_banner - delta, 0.0)
 	camera.offset = Vector2(randf_range(-1, 1), randf_range(-1, 1)).round() * Config.SHAKE if _shake > 0.0 else Vector2.ZERO
 	if _hitstop > 0.0:
 		# 타격 멈춤: 맞은 순간 세상이 아주 잠깐 멈춘다 (손맛)
@@ -577,6 +607,9 @@ func tick(delta: float) -> void:
 	_swing_time = maxf(_swing_time - delta, 0.0)
 	_since_swing += delta
 	dash_cd = maxf(dash_cd - delta, 0.0)
+	right_cd = maxf(right_cd - delta, 0.0)
+	order_cd = maxf(order_cd - delta, 0.0)
+	guard_cd = maxf(guard_cd - delta, 0.0)
 	_tick_dash(delta)
 	if frozen > 0.0:
 		frozen -= delta
@@ -625,8 +658,11 @@ func tick(delta: float) -> void:
 	_tick_shots(delta)
 	if knocked:
 		return
-	if companion:
-		_tick_companion(delta)
+	_tick_skills(delta)
+	if knocked:
+		return
+	for c in companions():
+		_tick_companion(c, delta)
 	for i in range(drops.size() - 1, -1, -1):
 		if drops[i].at.distance_to(feet) <= 14.0:
 			picked.append(drops[i].species)
@@ -686,6 +722,7 @@ func _tick_dash(delta: float) -> void:
 	if dash_t >= Config.DASH_TIME:
 		dash_t = -1.0
 		hunter.dashing = false
+		_dash_slash()
 
 
 ## 공격한다 (클릭). 든 무기에 따라 휘두르기 · 화살 · 지팡이 구슬 (2026-09-29 무기). 무기가 없으면 사냥칼.
@@ -702,28 +739,40 @@ func swing(dir := Vector2.ZERO) -> int:
 	var w := Wearables.weapon()
 	_cooldown = w.cooldown
 	var hand := hunter.feet() + Vector2(0, -8)
+	# 왼클릭 방식 (2026-10-02 레벨 · 스킬): 찍은 스킬 중 Q/E 로 고른 것. bow_style 은 시험 · 봇이 억지로 정할 때.
+	var mode := HunterSkills.left_mode(w.kind)
 	if w.kind == &"bow":
-		match bow_style:
+		var style := bow_style if bow_style != &"" else mode
+		var r := maxi(HunterSkills.rank(style), 1)
+		# 3 · 5단계에서 화살 +1
+		var extra := (1 if r >= 3 else 0) + (1 if r >= 5 else 0)
+		match style:
 			&"pierce":
-				shots.append({kind = &"arrow", at = hand, dir = _swing_dir, left = w.range, pierce = Config.BOW_PIERCE, hit = []})
+				shots.append({kind = &"arrow", at = hand, dir = _swing_dir, left = w.range, pierce = Config.BOW_PIERCE + r - 1, hit = []})
 			&"spread":
-				for a in [-Config.BOW_SPREAD_DEG, 0.0, Config.BOW_SPREAD_DEG]:
+				var n := 3 + extra
+				for k in n:
+					var a := (k - (n - 1) / 2.0) * Config.BOW_SPREAD_DEG
 					shots.append({kind = &"arrow", at = hand, dir = _swing_dir.rotated(deg_to_rad(a)), left = w.range})
-				_cooldown *= Config.BOW_SPREAD_COOLDOWN
+				_cooldown *= Config.BOW_SPREAD_COOLDOWN - Config.SKILL_COOLDOWN_STEP * (r - 1)
 			&"volley":
 				# 첫 발은 바로, 나머지는 조금씩 늦게 (그때 사냥꾼 손에서 나감)
-				for k in 3:
+				for k in 3 + extra:
 					shots.append({kind = &"arrow", at = hand, dir = _swing_dir, left = w.range, delay = k * Config.BOW_VOLLEY_GAP})
-				_cooldown *= Config.BOW_VOLLEY_COOLDOWN
+				_cooldown *= Config.BOW_VOLLEY_COOLDOWN - 2 * Config.SKILL_COOLDOWN_STEP * (r - 1)
 			_:
 				shots.append({kind = &"arrow", at = hand, dir = _swing_dir, left = w.range})
 		return 1
 	if w.kind == &"staff":
-		shots.append({kind = &"orb", at = hand, dir = _swing_dir, left = w.range, blast = w.blast, element = w.element})
+		var orb := {kind = &"orb", at = hand, dir = _swing_dir, left = w.range, blast = orb_blast(w.blast), element = w.element}
+		if mode == &"chain_orb":
+			orb.chain = 2 + (HunterSkills.rank(&"chain_orb") - 1) / 2
+		shots.append(orb)
 		return 1
 	_swing_time = 0.15
 	var radius: float = w.radius
-	var bonus := 0
+	var bonus := 1 if HunterSkills.rank(&"sword_mastery") >= 5 else 0
+	var whirl := false
 	_finisher = false
 	if feel:
 		# 연속 베기 (2026-10-02 손맛): 빨리 이어 베면 1 → 2 → 3타. 3타째는 앞으로 내딛으며 넓고 세게.
@@ -733,16 +782,26 @@ func swing(dir := Vector2.ZERO) -> int:
 		if combo == 2:
 			_finisher = true
 			radius *= Config.COMBO_FINISH_RADIUS
-			bonus = 1
+			bonus += 1
+			# 회전 베기: 3타째가 사냥꾼 둘레를 한 바퀴
+			whirl = mode == &"whirl"
 			_cooldown *= 1.6
 			hunter.step(_swing_dir * Config.COMBO_FINISH_STEP)
 			hand = hunter.feet() + Vector2(0, -8)
+	# 검 숙련: 근거리 공격 빠르기
+	_cooldown /= 1.0 + Config.SWORD_MASTERY_SPEED * HunterSkills.rank(&"sword_mastery")
 	_swing_radius = radius
+	_whirl = whirl
 	var center: Vector2 = hand + _swing_dir * w.reach
+	# 회전 베기: 앞쪽 3타 범위는 그대로 두고, 사냥꾼 둘레 한 바퀴도 함께 벤다 (앞으로는 덜 닿지 않게)
+	var around := hunter.feet() + Vector2(0, -6)
+	var whirl_r := radius * Config.WHIRL_RADIUS * (1.0 + Config.WHIRL_RADIUS_STEP * (HunterSkills.rank(&"whirl") - 1))
+	if whirl:
+		_swing_radius = whirl_r
 	var hits := 0
 	var kills := 0
 	for s in slimes.duplicate():
-		if not s.airborne() and hittable(s) and s.position.distance_to(center) <= radius:
+		if not s.airborne() and hittable(s) and (s.position.distance_to(center) <= radius or (whirl and s.position.distance_to(around) <= whirl_r)):
 			hits += 1
 			if _strike(s, hunter.feet(), power() + bonus):
 				kills += 1
@@ -817,6 +876,11 @@ func _tick_shots(delta: float) -> void:
 				_hitstop = Config.HITSTOP
 		else:
 			_burst(sh.at, sh.blast, sh.element)
+			# 연쇄 구슬: 터진 자리에서 작은 구슬이 사방으로 (작은 구슬은 다시 튀지 않음)
+			var n: int = sh.get("chain", 0)
+			for k in n:
+				var d: Vector2 = sh.dir.rotated(TAU * (k + 0.5) / n)
+				shots.append({kind = &"orb", at = sh.at, dir = d, left = Config.CHAIN_ORB_RANGE, blast = sh.blast * Config.CHAIN_ORB_BLAST, element = sh.element, small = true})
 
 
 ## 지팡이 구슬이 터진다: 둘레 모두 1 피해 + 속성 효과
@@ -827,21 +891,27 @@ func _burst(at: Vector2, radius: float, element: StringName) -> void:
 			continue
 		if _strike(s, at, power()):
 			continue
+		# 속성 강화: 효과 시간 +20%/단계, 5단계면 불이 두 번
+		var boost := 1.0 + Config.ELEMENT_BOOST_STEP * HunterSkills.rank(&"element_boost")
 		match element:
 			&"water":
-				s.slow(Config.STAFF_SLOW_TIME)
+				s.slow(Config.STAFF_SLOW_TIME * boost)
 			&"earth":
-				s.stun(Config.STAFF_STUN_TIME)
+				s.stun(Config.STAFF_STUN_TIME * boost)
 			&"fire":
 				_burns.append({slime = s, t = Config.STAFF_BURN_DELAY})
+				if HunterSkills.rank(&"element_boost") >= 5:
+					_burns.append({slime = s, t = Config.STAFF_BURN_DELAY * 2.0})
 
 
-var _companion_cooldown := 0.0
 
 
 ## 동행 크리처: 사냥꾼 뒤를 따라가다가 닿는 야생 슬라임이 있으면 공격한다.
-func _tick_companion(delta: float) -> void:
-	_companion_cooldown = maxf(_companion_cooldown - delta, 0.0)
+func _tick_companion(companion: HuntCompanion, delta: float) -> void:
+	companion.cooldown = maxf(companion.cooldown - delta, 0.0)
+	if not _charge.is_empty() and _charge.c == companion:
+		_tick_charge(delta)
+		return
 	var target := _nearest_slime(companion.position, true)
 	if companion_ai:
 		var chase := companion.style in [HuntCompanion.Style.BUMP, HuntCompanion.Style.ROAR, HuntCompanion.Style.SPIRIT] and target != null \
@@ -850,23 +920,30 @@ func _tick_companion(delta: float) -> void:
 			companion.move_toward_point(target.position, delta)
 		else:
 			var behind := hunter.feet() - Vector2(hunter.facing) * Config.COMPANION_FOLLOW_DISTANCE
+			if companion == companion2:
+				# 두 번째 동행은 옆으로 비켜 따라온다
+				behind += Vector2(hunter.facing).orthogonal() * 14.0
 			if companion.position.distance_to(hunter.feet()) > Config.COMPANION_FOLLOW_DISTANCE * 0.8:
 				companion.move_toward_point(behind, delta)
 			else:
 				companion.move_toward_point(companion.position, delta)
-	if target == null or _companion_cooldown > 0.0 or (target.airborne() and companion.style != HuntCompanion.Style.PECK):
+	if target == null or companion.cooldown > 0.0 or (target.airborne() and companion.style != HuntCompanion.Style.PECK):
 		return
 	if companion.position.distance_to(target.position) > companion.reach():
 		return
-	companion_attack(target)
+	companion_attack(target, companion)
 
 
 ## 동행 크리처가 한 번 공격한다 (1 피해). 쓰러뜨리면 사냥꾼이 쓰러뜨린 것과 똑같이 친다 (알 확률 포함).
-func companion_attack(target: WildSlime) -> void:
-	_companion_cooldown = companion.attack_interval()
+func companion_attack(target: WildSlime, companion: HuntCompanion = null) -> void:
+	if companion == null:
+		companion = self.companion
+	# 조련 함께 싸우기 (2026-10-02): 공격 빠르기 +10%/단계, 5단계면 피해 +1
+	var together := HunterSkills.rank(&"fight_together")
+	companion.cooldown = companion.attack_interval() / (1.0 + Config.FIGHT_TOGETHER_SPEED * together)
 	companion.play_attack(target.position)
 	# 아기 백호 번개 발톱 (2026-09-30): 한 방이 2 피해
-	var claw := 2 if companion.style == HuntCompanion.Style.SPIRIT else 1
+	var claw := (2 if companion.style == HuntCompanion.Style.SPIRIT else 1) + (1 if together >= 5 else 0)
 	if companion.style == HuntCompanion.Style.ROAR or companion.style == HuntCompanion.Style.SPIRIT:
 		# 포효: 둘레 몬스터 (대장 빼고) 가 잠깐 멈춘다
 		for o in slimes:
@@ -898,6 +975,148 @@ func companion_attack(target: WildSlime) -> void:
 		target.position = (target.position + away * 10.0).clamp(target.area.position, target.area.end)
 
 
+# --- 사냥꾼 스킬 (2026-10-02 사용자 선택 B: 무기 트리 셋 + 조련) -------------------
+
+## 지팡이 구슬 터지는 반지름 (큰 구슬 +10%/단계)
+func orb_blast(base: float) -> float:
+	return base * (1.0 + Config.BIG_ORB_STEP * HunterSkills.rank(&"big_orb"))
+
+
+## 둘레 몬스터를 친다 (스킬 공통). 맞힌 수.
+func _area_hit(center: Vector2, radius: float, amount: int, stun := 0.0) -> int:
+	var hits := 0
+	for s in slimes.duplicate():
+		if s.airborne() or not hittable(s) or (s.buried and not s.disguise) or s.position.distance_to(center) > radius + 6.0 * s.scale.x:
+			continue
+		hits += 1
+		if not _strike(s, center, amount) and stun > 0.0 and not s.boss:
+			s.stun(stun)
+	if feel and hits > 0:
+		_hitstop = Config.HITSTOP
+	return hits
+
+
+## 돌진 베기: 근거리 무기를 들고 구르기가 끝나면 앞을 벤다
+func _dash_slash() -> void:
+	var r := HunterSkills.rank(&"dash_slash")
+	var w := Wearables.weapon()
+	if r <= 0 or w.kind != &"melee" or knocked:
+		return
+	var radius: float = w.radius * (1.0 + Config.DASH_SLASH_STEP * (r - 1))
+	_swing_dir = _dash_dir
+	_swing_time = 0.15
+	_swing_radius = radius
+	_finisher = true
+	_whirl = false
+	_area_hit(hunter.feet() + Vector2(0, -8) + _dash_dir * w.reach, radius, power() + (1 if r >= 3 else 0) + (1 if r >= 5 else 0))
+
+
+## 오른클릭 큰 스킬 (든 무기의 트리): 대지 가르기 · 화살비 · 원소 폭풍. at = 가리킨 곳 (월드). 썼으면 true.
+func skill_right(at: Vector2) -> bool:
+	if knocked or frozen > 0.0 or dash_t >= 0.0 or right_cd > 0.0:
+		return false
+	var w := Wearables.weapon()
+	var id := HunterSkills.right_skill(w.kind)
+	if id == &"":
+		GameState.notify("오른클릭 스킬이 없다. T 스킬 창에서 %s 트리 마지막 스킬 (Lv 18) 을 찍자." % {&"melee": "검", &"bow": "활", &"staff": "지팡이"}[w.kind])
+		return false
+	var r := HunterSkills.rank(id)
+	var hand := hunter.feet() + Vector2(0, -8)
+	var dir := (at - hand).normalized()
+	if dir == Vector2.ZERO:
+		dir = Vector2(hunter.facing)
+	hunter.facing = Vector2i(int(signf(dir.x)), 0) if absf(dir.x) > absf(dir.y) else Vector2i(0, int(signf(dir.y)))
+	match id:
+		&"earth_split":
+			right_cd = Config.EARTH_SPLIT_COOLDOWN - 0.4 * (r - 1)
+			var length := Config.EARTH_SPLIT_LENGTH + 12.0 * (r - 1)
+			var to := hand + dir * length
+			_splits.append({from = hand, to = to, t = 0.4})
+			var hits := 0
+			for s in slimes.duplicate():
+				if s.airborne() or not hittable(s) or (s.buried and not s.disguise):
+					continue
+				var q := Geometry2D.get_closest_point_to_segment(s.position + Vector2(0, -6), hand, to)
+				if q.distance_to(s.position + Vector2(0, -6)) <= Config.EARTH_SPLIT_WIDTH + 6.0 * s.scale.x:
+					hits += 1
+					if not _strike(s, hand, power() + 1) and not s.boss:
+						s.stun(Config.EARTH_SPLIT_STUN)
+			_shake = 0.15
+			if hits > 0 and feel:
+				_hitstop = Config.HITSTOP_KILL
+		&"arrow_rain":
+			right_cd = Config.ARROW_RAIN_COOLDOWN - 0.4 * (r - 1)
+			var p := hand + (at - hand).limit_length(w.range)
+			_rains.append({at = p, radius = Config.ARROW_RAIN_RADIUS + 4.0 * (r - 1), waves = 3, t = Config.ARROW_RAIN_GAP})
+		&"element_storm":
+			right_cd = Config.ELEMENT_STORM_COOLDOWN - 0.5 * (r - 1)
+			var p := hand + (at - hand).limit_length(w.range)
+			_burst(p, orb_blast(Config.ELEMENT_STORM_RADIUS + 6.0 * (r - 1)), w.element)
+			_shake = 0.12
+	Sound.sfx(&"swing", 0.0, 0.7)
+	return true
+
+
+## R 돌격 명령 (조련): 동행이 at 가까운 몬스터에 달려가 들이받는다. 썼으면 true.
+func order_charge(at: Vector2) -> bool:
+	var r := HunterSkills.rank(&"charge_order")
+	if r <= 0 or companion == null or order_cd > 0.0 or knocked or not _charge.is_empty():
+		return false
+	var target: WildSlime = null
+	for s in slimes:
+		if not hittable(s) or s.airborne() or (s.buried and not s.disguise):
+			continue
+		if target == null or s.position.distance_to(at) < target.position.distance_to(at):
+			target = s
+	if target == null or target.position.distance_to(at) > Config.CHARGE_PICK_RADIUS:
+		return false
+	order_cd = Config.CHARGE_COOLDOWN - 0.5 * (r - 1)
+	_charge = {c = companion, target = target, t = 1.0}
+	return true
+
+
+func _tick_charge(delta: float) -> void:
+	var c: HuntCompanion = _charge.c
+	var target: WildSlime = _charge.target
+	_charge.t -= delta
+	if not is_instance_valid(target) or not target in slimes or _charge.t <= 0.0:
+		_charge = {}
+		return
+	var to := target.position - c.position
+	var step := Config.CHARGE_SPEED * delta
+	if to.length() > 12.0 + step:
+		c.position += to.normalized() * step
+		return
+	_charge = {}
+	var r := HunterSkills.rank(&"charge_order")
+	c.play_attack(target.position)
+	_shake = 0.08
+	if _strike(target, c.position, 1 + (1 if r >= 3 else 0) + (1 if r >= 5 else 0)):
+		return
+	if not target.boss:
+		target.stun(Config.CHARGE_STUN + 0.2 * (r - 1))
+		var away := (target.position - c.position).normalized()
+		target.position = (target.position + away * 12.0).clamp(target.area.position, target.area.end)
+
+
+## 화살비 · 대지 가르기 그림 시간
+func _tick_skills(delta: float) -> void:
+	for i in range(_splits.size() - 1, -1, -1):
+		_splits[i].t -= delta
+		if _splits[i].t <= 0.0:
+			_splits.remove_at(i)
+	for i in range(_rains.size() - 1, -1, -1):
+		var r: Dictionary = _rains[i]
+		r.t -= delta
+		if r.t > 0.0:
+			continue
+		_area_hit(r.at, r.radius, power())
+		r.waves -= 1
+		r.t = Config.ARROW_RAIN_GAP
+		if r.waves <= 0:
+			_rains.remove_at(i)
+
+
 func _nearest_slime(from: Vector2, only_hittable := false) -> WildSlime:
 	var best: WildSlime = null
 	for s in slimes:
@@ -920,6 +1139,13 @@ func _defeat(s: WildSlime) -> void:
 		s.queue_free()
 		GameState.touch()
 		return
+	# 사냥꾼 경험치 (2026-10-02 레벨 · 스킬): 동행이 잡아도 같게. 대장을 처음 잡으면 크게, 막 대장이면 스킬 포인트 +1
+	var first_boss := last_boss and not zone in GameState.bosses_beaten
+	_give_xp(HunterSkills.kill_xp(zone, s.boss, first_boss))
+	if first_boss and HunterSkills.is_act_boss_zone(zone):
+		GameState.skill_points += Config.ACT_BOSS_SKILL_POINT
+		_level_banner = Config.LEVEL_UP_BANNER_TIME
+		_banner_text = "막 대장을 처음 쓰러뜨렸다! 스킬 포인트 +%d  (T 스킬 창)" % Config.ACT_BOSS_SKILL_POINT
 	# 대장 재료 (2026-09-29 대장간 복구 A): 금두꺼비를 잡을 때마다 사금 덩이 하나, 처음 잡으면 다음 날 마을에 대장간 터
 	var material_text := ""
 	if last_boss and z.get("boss_material", false):
@@ -998,6 +1224,18 @@ func _defeat(s: WildSlime) -> void:
 		spawn_boss()
 	# 윗줄의 남은 슬라임 수를 새로 쓴다
 	GameState.touch()
+
+
+## 경험치를 준다 (레벨 차 벌칙 적용). 레벨이 오르면 가운데 띠와 알림.
+func _give_xp(base: int) -> void:
+	var amount := maxi(1, roundi(base * HunterSkills.gap_mult(zone))) if base > 0 else 0
+	if GameState.hunter_level >= Config.LEVEL_CAP:
+		return
+	var ups := HunterSkills.gain(amount)
+	if ups > 0:
+		_level_banner = Config.LEVEL_UP_BANNER_TIME
+		_banner_text = "레벨 업!  Lv %d · 스킬 포인트 +%d  (T 스킬 창)" % [GameState.hunter_level, ups]
+		GameState.notify("사냥꾼 레벨이 올랐다! Lv %d · 남은 스킬 포인트 %d (T 스킬 창)" % [GameState.hunter_level, GameState.skill_points])
 
 
 ## 야생 슬라임을 다 쓰러뜨리면 공터 가운데에 대장 슬라임이 나온다 (디아블로2 챔피언처럼).
@@ -1218,6 +1456,15 @@ func _take(d: Dictionary) -> bool:
 
 ## what: 무엇에 다쳤는지 알림 첫마디 (비우면 "<who>에게 부딪혔다!")
 func _hurt(from: Vector2, damage := 1, who := "야생 슬라임", what := "") -> void:
+	# 조련 크리처 방패 (2026-10-02): 동행이 한 번 대신 맞아 준다 (다시 막기까지 쿨)
+	var guard := HunterSkills.rank(&"creature_guard")
+	if guard > 0 and guard_cd <= 0.0 and companion != null:
+		guard_cd = Config.GUARD_COOLDOWN - Config.GUARD_COOLDOWN_STEP * (guard - 1)
+		_invulnerable = Config.HURT_INVULNERABLE_TIME
+		companion.play_attack(hunter.feet())
+		_pops.append({at = companion.position + Vector2(0, -18), text = "막음!", t = 0.5, big = true})
+		GameState.notify("%s이(가) 대신 막아 주었다! (크리처 방패)" % companion.display_name())
+		return
 	hearts -= damage
 	_invulnerable = Config.HURT_INVULNERABLE_TIME
 	Sound.sfx(&"hurt")
@@ -1325,7 +1572,14 @@ func _draw() -> void:
 	if _swing_time > 0.0 and hunter:
 		var c := hunter.feet() + Vector2(0, -12)
 		var a := _swing_dir.angle()
-		if _finisher:
+		if _whirl:
+			# 회전 베기: 사냥꾼 둘레 한 바퀴 금빛 고리
+			var cc := hunter.feet() + Vector2(0, -6)
+			draw_set_transform(cc, 0.0, Vector2(1.0, 0.7))
+			draw_arc(Vector2.ZERO, _swing_radius, 0, TAU, 28, Color(1, 0.9, 0.5, 0.9), 4.0)
+			draw_arc(Vector2.ZERO, _swing_radius - 4.0, 0, TAU, 24, Color(1, 1, 1, 0.7), 1.5)
+			draw_set_transform(Vector2.ZERO)
+		elif _finisher:
 			# 3타째: 넓고 굵은 금빛 반원
 			draw_arc(c, _swing_radius + 2.0, a - 1.5, a + 1.5, 16, Color(1, 0.9, 0.5, 0.9), 4.0)
 			draw_arc(c, _swing_radius - 3.0, a - 1.3, a + 1.3, 14, Color(1, 1, 1, 0.7), 1.5)
@@ -1372,9 +1626,33 @@ func _draw_fx() -> void:
 			_fx.draw_line(tail, tail - sh.dir * 3.0 - o * 3.0, Color(1, 1, 1), 1.0)
 		else:
 			var col: Color = ELEMENT_COLORS[sh.element]
-			_fx.draw_circle(sh.at, 8.0, Color(col, 0.3))
-			_fx.draw_circle(sh.at, 5.0, col)
-			_fx.draw_circle(sh.at + Vector2(-1.5, -1.5), 2.0, Color(1, 1, 1, 0.85))
+			var k := 0.55 if sh.get("small", false) else 1.0
+			_fx.draw_circle(sh.at, 8.0 * k, Color(col, 0.3))
+			_fx.draw_circle(sh.at, 5.0 * k, col)
+			_fx.draw_circle(sh.at + Vector2(-1.5, -1.5) * k, 2.0 * k, Color(1, 1, 1, 0.85))
+	# 화살비: 바닥 원 + 떨어지는 화살 줄
+	for r in _rains:
+		_fx.draw_set_transform(r.at, 0.0, Vector2(1.0, 0.6))
+		_fx.draw_circle(Vector2.ZERO, r.radius, Color(1, 0.95, 0.7, 0.18))
+		_fx.draw_arc(Vector2.ZERO, r.radius, 0, TAU, 24, Color(1, 0.9, 0.6, 0.8), 1.0)
+		_fx.draw_set_transform(Vector2.ZERO)
+		var fall := 1.0 - fposmod(r.t, Config.ARROW_RAIN_GAP) / Config.ARROW_RAIN_GAP
+		for k in 7:
+			var off := Vector2(cos(k * 2.4) * r.radius * 0.8, sin(k * 2.4) * r.radius * 0.45)
+			var top: Vector2 = r.at + off + Vector2(0, -40 + 34 * fall)
+			_fx.draw_line(top, top + Vector2(0, 9), Color(0.15, 0.1, 0.05, 0.8), 2.5)
+			_fx.draw_line(top, top + Vector2(0, 9), Color(0.95, 0.85, 0.6), 1.0)
+	# 대지 가르기: 갈라진 땅 줄
+	for sp in _splits:
+		var a: float = sp.t / 0.4
+		var d: Vector2 = (sp.to - sp.from).normalized()
+		var o := d.orthogonal()
+		var pts := PackedVector2Array()
+		var n := 10
+		for k in n + 1:
+			pts.append(sp.from.lerp(sp.to, float(k) / n) + o * (3.0 if k % 2 == 0 else -3.0))
+		_fx.draw_polyline(pts, Color(0.25, 0.15, 0.08, a), 4.0)
+		_fx.draw_polyline(pts, Color(1.0, 0.8, 0.4, a), 1.5)
 	for b in _blasts:
 		var col: Color = ELEMENT_COLORS[b.element]
 		_fx.draw_set_transform(b.at, 0.0, Vector2(1.0, 0.6))
@@ -1502,6 +1780,31 @@ func _draw_hud() -> void:
 	var zt := "%d구역 %s" % [zone + 1, Config.HUNT_ZONES[zone].name]
 	var zw := font.get_string_size(zt, HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x + 22
 	UiSkin.draw_chip(_hud, Vector2(636 - zw, 30), UiSkin.Icon.FLAG, zt, 17)
+	# 사냥꾼 레벨 · 경험치 막대 (하트 아래)
+	_hud.draw_style_box(UiSkin.chip_box(), Rect2(4, 49, 120, 14))
+	_hud.draw_string(font, Vector2(8, 60), "Lv %d" % GameState.hunter_level, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, UiSkin.INK)
+	_hud.draw_rect(Rect2(38, 53, 82, 6), Color(0.35, 0.25, 0.2))
+	_hud.draw_rect(Rect2(39, 54, 80 * HunterSkills.progress(), 4), Color(0.95, 0.75, 0.2))
+	if GameState.skill_points > 0:
+		UiSkin.draw_chip(_hud, Vector2(127, 48), -1, "스킬 +%d (T)" % GameState.skill_points, 16)
+	# 찍은 스킬이 있으면 지금 왼클릭 방식 · 오른클릭 스킬 (쿨이면 남은 초)
+	var wk: StringName = Wearables.weapon().kind
+	var parts: Array[String] = []
+	if HunterSkills.modes_for(wk).size() > 1:
+		parts.append("왼 %s (Q/E)" % HunterSkills.skill_name(HunterSkills.left_mode(wk)))
+	var rs := HunterSkills.right_skill(wk)
+	if rs != &"":
+		parts.append("오른 %s%s" % [HunterSkills.skill_name(rs), " %.0f" % ceilf(right_cd) if right_cd > 0.0 else ""])
+	if HunterSkills.rank(&"charge_order") > 0 and companion:
+		parts.append("R 돌격%s" % (" %.0f" % ceilf(order_cd) if order_cd > 0.0 else ""))
+	if not parts.is_empty():
+		UiSkin.draw_chip(_hud, Vector2(4, 66), -1, " · ".join(parts), 15)
+	if _level_banner > 0.0:
+		var bw := font.get_string_size(_banner_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x + 20
+		var a := clampf(_level_banner / 0.4, 0.0, 1.0)
+		_hud.draw_rect(Rect2(320 - bw / 2, 92, bw, 18), Color(0.1, 0.06, 0.04, 0.7 * a))
+		_hud.draw_string_outline(font, Vector2(320 - bw / 2 + 10, 105), _banner_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, 3, Color(UiSkin.TAG_EDGE, a))
+		_hud.draw_string(font, Vector2(320 - bw / 2 + 10, 105), _banner_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(1.0, 0.85, 0.3, a))
 	_draw_offscreen_hint(font)
 	_draw_minimap()
 	if path_open:

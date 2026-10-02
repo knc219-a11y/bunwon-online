@@ -92,6 +92,10 @@ var _menu: ColorRect
 var _menu_text: Label
 ## 디아블로식 가방 창 (I 키, 창고 궤짝 F). 열려 있는 동안 캐릭터는 멈추고 사냥터도 멈춘다.
 var inventory: InventoryUI
+## 사냥꾼 스킬 창 (2026-10-02, T)
+var skill_panel: SkillPanel
+## 조련 "둘이 함께": 두 번째로 데려간 크리처
+var _companion_source2: Creature
 ## 사냥터 (2026-09-27 결정 A). 사냥꾼이 들어가 있는 동안만 있다.
 var hunt: HuntGround
 ## 사냥터에 있는 동안 숨기는 마을 쪽 노드
@@ -240,11 +244,11 @@ func _process(delta: float) -> void:
 		follow_camera()
 		update_fading()
 		Creature.focus = active.position
-	if clock_running and not sleeping and not menu_open and not inventory.visible:
+	if clock_running and not sleeping and not menu_open and not inventory.visible and not skill_panel.visible:
 		advance_clock(delta * Config.CLOCK_MINUTES_PER_SECOND)
 	Sound.bgm(wanted_bgm())
 	# 사냥터: 왼쪽 클릭을 꾹 누르고 있으면 계속 공격한다 (2026-10-02 손맛, 쿨이 돌 때마다 한 번)
-	if hunt and HuntGround.feel and not menu_open and not inventory.visible and Input.is_action_pressed("attack"):
+	if hunt and HuntGround.feel and not menu_open and not inventory.visible and not skill_panel.visible and Input.is_action_pressed("attack"):
 		hunt.swing(get_global_mouse_position() - (hunter.feet() + Vector2(0, -12)))
 
 
@@ -301,6 +305,15 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("inventory") and not menu_open:
 		open_inventory()
 		return
+	if skill_panel.visible:
+		if event.is_action_pressed("skills") or event.is_action_pressed("menu_close"):
+			close_skills()
+		else:
+			skill_panel.handle_key(event)
+		return
+	if event.is_action_pressed("skills") and not menu_open:
+		open_skills()
+		return
 	if menu_open:
 		if menu_kind == &"start" and event is InputEventKey and event.pressed and event.physical_keycode >= KEY_1 and event.physical_keycode <= KEY_9:
 			var n: int = event.physical_keycode - KEY_1
@@ -334,6 +347,20 @@ func _unhandled_input(event: InputEvent) -> void:
 			hunt.swing()
 		elif event.is_action_pressed("use_potion"):
 			hunt.drink_potion()
+		elif event.is_action_pressed("skill_right"):
+			hunt.skill_right(get_global_mouse_position())
+		elif event.is_action_pressed("creature_job"):
+			# R: 조련 돌격 명령 (마우스 가까운 몬스터에)
+			if not hunt.order_charge(get_global_mouse_position()) and HunterSkills.rank(&"charge_order") <= 0:
+				GameState.notify("돌격 명령은 T 스킬 창 조련 트리 (Lv 12) 에서 찍는다.")
+		elif event.is_action_pressed("tool_next") or event.is_action_pressed("tool_prev"):
+			# Q/E: 왼클릭 공격 방식 바꾸기 (찍은 스킬 중)
+			var kind: StringName = Wearables.weapon().kind
+			if HunterSkills.modes_for(kind).size() <= 1:
+				GameState.notify("바꿀 공격 스킬이 없다. T 스킬 창에서 찍자.")
+			else:
+				var m := HunterSkills.cycle_mode(kind, 1 if event.is_action_pressed("tool_next") else -1)
+				GameState.notify("왼클릭: %s" % HunterSkills.skill_name(m))
 		elif event.is_action_pressed("interact"):
 			interact()
 		elif event.is_action_pressed("switch_character"):
@@ -621,6 +648,17 @@ func enter_hunt(companion: Creature = null, zone := 0) -> bool:
 		last_companion = companion
 		companion.process_mode = Node.PROCESS_MODE_DISABLED
 		var c := hunt.add_companion(companion)
+		# 조련 "둘이 함께" (2026-10-02): 두 번째 동행은 훈련이 가장 많이 된 다른 크리처를 알아서 데려간다
+		if HunterSkills.rank(&"two_together") > 0:
+			var best: Creature = null
+			for o in companion_candidates():
+				if o != companion and (best == null or o.data.radius_level + o.data.speed_level > best.data.radius_level + best.data.speed_level):
+					best = o
+			if best:
+				_companion_source2 = best
+				best.process_mode = Node.PROCESS_MODE_DISABLED
+				var c2 := hunt.add_companion(best)
+				drank_text += " %s도 함께 왔다 (둘이 함께)." % c2.display_name()
 		GameState.notify("%s과(와) 사냥터에 들어왔다. 클릭(꾹 누르면 연속 베기)으로 싸우고 Space로 구른다. %s도 알아서 돕는다!%s" % [c.display_name(), c.display_name(), drank_text])
 		return true
 	if zone > 0:
@@ -650,6 +688,9 @@ func leave_hunt() -> void:
 		# 데려간 크리처는 원래 자리에서 원래 일을 다시 한다
 		_companion_source.process_mode = Node.PROCESS_MODE_INHERIT
 		_companion_source = null
+	if _companion_source2:
+		_companion_source2.process_mode = Node.PROCESS_MODE_INHERIT
+		_companion_source2 = null
 	hunter.farm = farm
 	hunter.walk_area = Rect2()
 	hunter.terrain = null
@@ -1007,6 +1048,25 @@ func open_inventory(stash := false, sell := false) -> void:
 	if hunt:
 		hunt.set_process(false)
 	inventory.open(active, stash, sell)
+
+
+## 사냥꾼 스킬 창 (T). 사냥터에선 여는 동안 멈춘다.
+func open_skills() -> void:
+	close_menu()
+	active.frozen = true
+	if hunt:
+		hunt.set_process(false)
+	skill_panel.open()
+
+
+func close_skills() -> void:
+	if not skill_panel.visible:
+		return
+	skill_panel.close()
+	active.frozen = false
+	if hunt:
+		hunt.set_process(true)
+	GameState.touch()
 
 
 func close_inventory() -> void:
@@ -2322,9 +2382,15 @@ func _build_hud() -> void:
 	_menu_text.add_theme_font_size_override("font_size", 10)
 	_menu_text.add_theme_color_override("font_color", UiSkin.INK)
 	_menu.add_child(_menu_text)
+	# 가방 · 스킬 창은 사냥터 HUD (층 2) 위에 (하트 · 작은 지도가 창을 덮지 않게)
+	var top := CanvasLayer.new()
+	top.layer = 5
+	add_child(top)
 	inventory = InventoryUI.new()
 	inventory.wear_changed.connect(_on_wear_changed)
-	layer.add_child(inventory)
+	top.add_child(inventory)
+	skill_panel = SkillPanel.new()
+	top.add_child(skill_panel)
 	_refresh_hud()
 
 
