@@ -261,6 +261,8 @@ func hit(from: Vector2, amount := 1) -> bool:
 			_rest = minf(_rest, Config.SWOOP_HIT_RECOVER)
 	hp -= amount
 	_flash = 0.25
+	# 쓰러뜨리는 마지막 한 방은 조금 낮고 묵직하게
+	Sound.sfx(&"hit", 0.0, 0.8 if hp <= 0 else 1.0)
 	var away := (position - from).normalized()
 	if away == Vector2.ZERO:
 		away = Vector2.UP

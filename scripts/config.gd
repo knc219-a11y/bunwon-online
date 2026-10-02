@@ -243,6 +243,8 @@ const CLOCK_MINUTES_PER_SECOND := 2.0
 ## 저녁 노을이 지기 시작하는 시각과 다 어두워지는 시각 (분). 어두워도 일은 다 할 수 있다.
 const DUSK_START_MINUTE := 18 * 60
 const DUSK_FULL_MINUTE := 21 * 60
+## 이 시각부터 마을 밤 배경음 (2026-10-01 사운드 첫 단계)
+const NIGHT_MUSIC_MINUTE := 19 * 60
 const DUSK_ALPHA := 0.35
 ## 시계는 새벽 2시에서 멈춘다 (쓰러지거나 벌칙 없음, 자러 가면 된다)
 const CLOCK_MAX_MINUTE := 26 * 60

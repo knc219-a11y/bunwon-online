@@ -242,6 +242,14 @@ func _process(delta: float) -> void:
 		Creature.focus = active.position
 	if clock_running and not sleeping and not menu_open and not inventory.visible:
 		advance_clock(delta * Config.CLOCK_MINUTES_PER_SECOND)
+	Sound.bgm(wanted_bgm())
+
+
+## 지금 틀 배경음: 사냥터 · 마을 밤(저녁 7시부터) · 마을 낮
+func wanted_bgm() -> StringName:
+	if hunt:
+		return &"hunt"
+	return &"village_night" if GameState.minutes >= Config.NIGHT_MUSIC_MINUTE else &"village_day"
 
 
 ## 하루 시계를 게임 분만큼 돌린다. 새벽 2시에서 멈추고, 아무것도 막지 않는다. HUD는 10분마다 고친다.
@@ -381,6 +389,16 @@ func use_tool() -> void:
 	for cell in tool_cells(work):
 		if farm.do_work(work, cell):
 			done += 1
+	if done > 0:
+		match work:
+			Farm.Work.TILL:
+				Sound.sfx(&"hoe")
+			Farm.Work.SOW:
+				Sound.sfx(&"hoe", -8.0, 1.5)
+			Farm.Work.WATER:
+				Sound.sfx(&"water")
+			Farm.Work.HARVEST:
+				Sound.sfx(&"harvest")
 	if done == 0:
 		if work == Farm.Work.SOW and GameState.seeds <= 0:
 			GameState.notify("씨앗이 없다.")
@@ -858,7 +876,8 @@ func menu_confirm() -> void:
 	if id == &"sell_gear":
 		open_inventory(false, true)
 		return
-	supply_action(id)
+	if supply_action(id):
+		Sound.sfx(&"coin", 0.0, 1.0, 0.0)
 	_rebuild_menu()
 	_refresh_props()
 
@@ -1869,6 +1888,8 @@ func save_menu_options() -> Array[StringName]:
 			out.append(&"back")
 		&"pause":
 			out.append(&"resume")
+			out.append(&"music_volume")
+			out.append(&"sfx_volume")
 			if save_slot >= 0:
 				out.append(&"save_quit")
 	return out
@@ -1882,6 +1903,10 @@ func save_menu_text(id: StringName) -> String:
 			return "돌아가기"
 		&"resume":
 			return "계속하기"
+		&"music_volume":
+			return "배경음 크기   %s   (F로 바꾸기)" % Sound.percent(Sound.music_volume)
+		&"sfx_volume":
+			return "효과음 크기   %s   (F로 바꾸기)" % Sound.percent(Sound.sfx_volume)
 		&"save_quit":
 			return "저장하고 나가기 (슬롯 %d)" % save_slot
 	var slot := String(id).trim_prefix("slot_").to_int()
@@ -1904,6 +1929,15 @@ func save_menu_confirm(id: StringName) -> void:
 			return
 		&"resume":
 			close_menu()
+			return
+		&"music_volume":
+			Sound.set_music_volume(Sound.next_step(Sound.music_volume))
+			_rebuild_menu()
+			return
+		&"sfx_volume":
+			Sound.set_sfx_volume(Sound.next_step(Sound.sfx_volume))
+			Sound.sfx(&"coin", 0.0, 1.0, 0.0)
+			_rebuild_menu()
 			return
 		&"save_quit":
 			save_and_quit()
@@ -2070,6 +2104,7 @@ func next_day() -> Array[String]:
 		incubating_days = -1
 		var s := _hatch(incubating_species, HATCH_CELL)
 		incubating_species = null
+		Sound.sfx(&"hatch", 0.0, 1.0, 0.0)
 		lines.append("알이 부화했다! " + s.describe())
 		text += " 알이 부화했다! " + s.describe() + " F로 들어서 밭 옆에 놓아 주자."
 	elif incubating_days > 0:
