@@ -94,6 +94,20 @@ var fed := 0
 var hen_eggs := 0
 var displayed_hen_eggs := 0
 var lunches := 0
+## 나루터 (2026-10-02 시설 4): 0 = 없음, 1 = 무너진 터, 2 = 고침 (뱃사공 열림)
+var naru_state := 0
+## 4막 대장(곤지암 마왕)을 쓰러뜨린 적이 있는지. 다음 날 아침 나루터 터가 드러난다.
+var naru_boss_down := false
+## 4막 대장 재료
+var material4 := 0
+## 통발: 지금 물에 놓은 수 · 나루터 바구니의 물고기 · 꺼내 든 물고기 · 공급함에 진열한 물고기 · 뱃사공 매운탕
+var traps := 0
+var basket := 0
+var fish := 0
+var displayed_fish := 0
+var stews := 0
+## 오늘 크리처가 한 물고기 몰기 수 (내일 아침 물고기 +). 아침마다 0.
+var fish_drive := 0
 ## 주민에게 입양 보낸 크리처 (2026-10-01 사용자 선택 D). {species, elements (리소스 경로), who (&"smith" 등)}
 var adopted: Array = []
 ## 사냥꾼 레벨 · 스킬 (2026-10-02 디아2식). hunter_xp 는 지금 레벨 안에서 모은 경험치.
@@ -197,6 +211,15 @@ func reset() -> void:
 	hen_eggs = 0
 	displayed_hen_eggs = 0
 	lunches = 0
+	naru_state = 0
+	naru_boss_down = false
+	material4 = 0
+	traps = 0
+	basket = 0
+	fish = 0
+	displayed_fish = 0
+	stews = 0
+	fish_drive = 0
 	adopted = []
 	hunter_level = 1
 	hunter_xp = 0

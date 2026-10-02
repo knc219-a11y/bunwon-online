@@ -144,6 +144,9 @@ static func night(main: Node2D, rng: RandomNumberGenerator) -> String:
 			elif zd.get("boss_material3", false):
 				GameState.material3 += 1
 				mats[Config.BOSS_MATERIAL3_NAME] = mats.get(Config.BOSS_MATERIAL3_NAME, 0) + 1
+			elif zd.get("boss_material4", false):
+				GameState.material4 += 1
+				mats[Config.BOSS_MATERIAL4_NAME] = mats.get(Config.BOSS_MATERIAL4_NAME, 0) + 1
 		if rng.randf() < Config.EXPEDITION_GEAR_CHANCE * p:
 			# 원정 장비는 공용 창고로. 창고가 차 있으면 그 자리에서 판다.
 			var roll := Wearables.roll_gear(rng, &"", zd.rarity)
@@ -184,7 +187,7 @@ static func zone_text(main: Node2D, zone: int) -> String:
 static func next_villager() -> StringName:
 	var best := &""
 	var best_n := Config.ADOPT_CAP
-	for who: StringName in [&"smith", &"alchemist", &"rancher"]:
+	for who: StringName in [&"smith", &"alchemist", &"rancher", &"ferryman"]:
 		if not villager_open(who):
 			continue
 		var n := adopted_by(who)
@@ -202,11 +205,13 @@ static func villager_open(who: StringName) -> bool:
 			return GameState.yak_state >= 2
 		&"rancher":
 			return GameState.barn_state >= 2
+		&"ferryman":
+			return GameState.naru_state >= 2
 	return false
 
 
 static func any_villager() -> bool:
-	return [&"smith", &"alchemist", &"rancher"].any(func(w: StringName) -> bool: return villager_open(w))
+	return [&"smith", &"alchemist", &"rancher", &"ferryman"].any(func(w: StringName) -> bool: return villager_open(w))
 
 
 static func adopted_by(who: StringName) -> int:
@@ -242,6 +247,8 @@ static func adopt(main: Node2D, s: Creature) -> StringName:
 			GameState.potions += g.count
 		&"rancher":
 			GameState.lunches += g.count
+		&"ferryman":
+			GameState.fish += g.count
 	spawn_adopted(main, GameState.adopted.size() - 1)
 	GameState.notify("%s %s이(가) %s 곁에서 지내게 됐다. 보답으로 %s." % [d.element_names(), d.species.display_name, g.name, g.text])
 	return who

@@ -21,6 +21,8 @@ data/hunt_maps/<이름>.txt 의 칸 지도를 읽어 assets/hunt/<이름>_ground
      P 버스 정류장 (막힘, 칸 덩어리 하나가 한 채)
   밀목 (나무가 빽빽한 솔숲 · 솔치 고개 · 경안천 어귀): 새 글자 없음 (T 나무 · B 덤불 · R 바위 · ~ = 냇물)
   역동 (옛 경안역 역참 · 넓은 말 들판 · 마방 · 경안천): 새 글자 없음 (H 창고 = 마방, F 울타리, h 여물 더미)
+  곤지암 (폐병원 · 곤지천 · 신립 장군 묘 · 고양이 바위): Q 폐병원 건물 (막힘, 칸 덩어리 하나가 한 동)
+     M 신립 장군 묘 (막힘, 봉분 + 비석)   Y 고양이 바위 (막힘, 덩어리 둘 = 천둥에 갈라진 두 쪽, 왼쪽에 고양이 머리)
 
 실행: python3 tools/make_hunt_maps.py [지도.txt ...] [--out 폴더]  (Pillow, numpy 필요)
 """
@@ -35,7 +37,7 @@ ROOT = os.path.join(os.path.dirname(__file__), "..")
 T = 24
 tiles = np.array(Image.open(os.path.join(ROOT, "assets/tiles/farm_tiles.png")).convert("RGB")).astype(float)
 ## 구역 풀빛 (Config.HUNT_ZONES ground_tint 와 같게). 파일 이름 앞부분으로 고른다.
-GRASS_TINTS = {"geumsa": np.array([0.9, 0.86, 0.72]), "nonghyup": np.array([0.82, 0.9, 0.8]), "gwangdong": np.array([0.92, 0.88, 0.74]), "doma": np.array([0.78, 0.86, 0.7]), "bunjeon": np.array([0.6, 0.72, 0.74]), "milmok": np.array([0.62, 0.76, 0.6]), "yeokdong": np.array([0.86, 0.9, 0.7])}
+GRASS_TINTS = {"geumsa": np.array([0.9, 0.86, 0.72]), "nonghyup": np.array([0.82, 0.9, 0.8]), "gwangdong": np.array([0.92, 0.88, 0.74]), "doma": np.array([0.78, 0.86, 0.7]), "bunjeon": np.array([0.6, 0.72, 0.74]), "milmok": np.array([0.62, 0.76, 0.6]), "yeokdong": np.array([0.86, 0.9, 0.7]), "gonjiam": np.array([0.62, 0.66, 0.6])}
 
 PATH_D = np.array((188, 162, 124)); PATH_DD = np.array((160, 134, 104))
 WET = np.array((176, 150, 116))
@@ -64,7 +66,7 @@ RAIL = np.array((196, 200, 206)); RAIL_D = np.array((120, 124, 132))
 GRASS, SAND, DEEP, FORD, PADDY_K, STUB_K, FIELD_K, CONC_K, MAT_K, ROAD_K = range(10)
 BASE = {".": GRASS, "T": GRASS, "J": GRASS, ",": SAND, "S": SAND, "E": SAND, "N": SAND, "W": SAND,
         "~": DEEP, "o": DEEP, "b": DEEP, "=": FORD,
-        "p": PADDY_K, "x": STUB_K, "r": FIELD_K, "%": CONC_K, "H": CONC_K, "m": MAT_K, "a": ROAD_K}
+        "p": PADDY_K, "x": STUB_K, "r": FIELD_K, "%": CONC_K, "H": CONC_K, "m": MAT_K, "a": ROAD_K, "Q": CONC_K}
 
 
 def noise(w, h, cell, seed):
@@ -396,6 +398,8 @@ def render(path):
         bus_stop(img, *box)
     for box in blocks(grid, "H"):
         warehouse(img, *box)
+    if any(k in "QMY" for k in grid.flatten()):
+        gonjiam_paint(img, grid)
     out = os.path.join(OUT or os.path.join(ROOT, "assets", "hunt"), name + "_ground.png")
     os.makedirs(os.path.dirname(out), exist_ok=True)
     Image.fromarray(np.clip(img, 0, 255).astype(np.uint8)).save(out)
@@ -477,6 +481,73 @@ def bus_stop(img, x0, y0, x1, y1):
     rect(img, X0 + 6, Y1 - 5, X1 - 6, Y1 - 4, PLANK_D)
     rect(img, X0, wall + 1, X0 + 2, Y1, POST)
     rect(img, X1 - 2, wall + 1, X1, Y1, POST)
+
+
+def gonjiam_paint(img, grid):
+    """곤지암: 폐병원 (Q, 위는 얼룩진 시멘트 평지붕 · 아래 두 칸은 깨진 창 두 줄 + 본관 문), 신립 장군 묘 (M), 갈라진 고양이 바위 (Y)."""
+    from PIL import ImageDraw
+    import random
+    pil = Image.fromarray(np.clip(img, 0, 255).astype(np.uint8))
+    d = ImageDraw.Draw(pil)
+    rnd = random.Random(4)
+    roof, roof_d, wall, wall_d = (150, 150, 146), (120, 120, 118), (214, 210, 198), (170, 164, 152)
+    win, stain, moss = (40, 38, 48), (120, 112, 96), (96, 120, 80)
+    for (x0, y0, x1, y1) in blocks(grid, "Q"):
+        X0, Y0, X1, Y1 = x0 * T, y0 * T, x1 * T, y1 * T
+        wall_top = Y1 - 2 * T
+        d.rectangle([X0 + 4, Y1 - 2, X1 + 5, Y1 + 4], fill=(96, 86, 104))
+        d.rectangle([X0, Y0, X1 - 1, wall_top], fill=roof)
+        d.rectangle([X0, Y0, X1 - 1, Y0 + 3], fill=(176, 176, 172))
+        for _ in range((x1 - x0) * (y1 - y0) // 3):
+            cx, cy = rnd.randint(X0, X1 - 8), rnd.randint(Y0 + 4, wall_top - 6)
+            d.ellipse([cx, cy, cx + rnd.randint(6, 18), cy + rnd.randint(4, 10)], fill=roof_d if rnd.random() < 0.7 else moss)
+        d.rectangle([X0, wall_top, X1 - 1, Y1 - 1], fill=wall)
+        d.rectangle([X0, wall_top, X1 - 1, wall_top + 2], fill=wall_d)
+        d.rectangle([X0, Y1 - 4, X1 - 1, Y1 - 1], fill=wall_d)
+        door = (x1 - x0) >= 10
+        dx0 = ((x0 + x1) // 2 - 1) * T
+        for row in (0, 1):
+            wy = wall_top + 8 + row * 20
+            for wx in range(X0 + 6, X1 - 12, 16):
+                if door and row == 1 and dx0 - 10 <= wx <= dx0 + 2 * T:
+                    continue
+                d.rectangle([wx, wy, wx + 9, wy + 10], fill=win)
+                if rnd.random() < 0.35:
+                    d.polygon([(wx, wy), (wx + 5, wy + 4), (wx + 9, wy)], fill=(90, 96, 110))
+                else:
+                    d.line([wx, wy + 5, wx + 9, wy + 5], fill=(70, 70, 84))
+                if rnd.random() < 0.4:
+                    d.line([wx + 4, wy + 11, wx + 3 + rnd.randint(-1, 2), wy + 11 + rnd.randint(4, 12)], fill=stain, width=2)
+        if door:
+            d.rectangle([dx0, Y1 - 30, dx0 + 2 * T - 1, Y1 - 1], fill=(30, 26, 34))
+            d.line([dx0 + T, Y1 - 30, dx0 + T, Y1 - 1], fill=(70, 60, 60))
+            d.rectangle([dx0 - 6, Y1 - 36, dx0 + 2 * T + 5, Y1 - 31], fill=(120, 116, 110))
+    for (x0, y0, x1, y1) in blocks(grid, "M"):
+        mx, my, mw, mh = x0 * T, y0 * T, (x1 - x0) * T, (y1 - y0) * T
+        d.ellipse([mx - 4, my + 2, mx + mw + 4, my + mh + 4], fill=(70, 96, 60))
+        d.ellipse([mx, my, mx + mw, my + mh - 4], fill=(108, 140, 84), outline=(70, 96, 60))
+        d.ellipse([mx + 10, my + 4, mx + mw - 10, my + 18], fill=(128, 160, 96))
+        d.rectangle([mx + mw // 2 - 5, my + mh - 14, mx + mw // 2 + 5, my + mh + 4], fill=(170, 168, 172), outline=(100, 98, 108))
+    halves = sorted(blocks(grid, "Y"))
+    for i, (x0, y0, x1, y1) in enumerate(halves):
+        X0, Y0, W = x0 * T, y0 * T, (x1 - x0) * T
+        H = (y1 - y0) * T
+        ear = i == 0
+        d.ellipse([X0 - 2, Y0 + H - 10, X0 + W + 4, Y0 + H + 4], fill=(96, 86, 104))
+        d.rounded_rectangle([X0 + 2, Y0 + 6, X0 + W - (8 if ear else 2), Y0 + H - 2], 10, fill=(150, 146, 152), outline=(96, 92, 104))
+        d.rounded_rectangle([X0 + 4, Y0 + H - 14, X0 + W - 6, Y0 + H - 2], 6, fill=(118, 114, 124))
+        if ear:
+            d.ellipse([X0 + 6, Y0 - 6, X0 + 30, Y0 + 18], fill=(156, 152, 158), outline=(96, 92, 104))
+            d.polygon([(X0 + 8, Y0 - 2), (X0 + 11, Y0 - 14), (X0 + 16, Y0 - 4)], fill=(150, 146, 152), outline=(96, 92, 104))
+            d.polygon([(X0 + 20, Y0 - 4), (X0 + 26, Y0 - 14), (X0 + 29, Y0 + 1)], fill=(150, 146, 152), outline=(96, 92, 104))
+            d.point([(X0 + 13, Y0 + 5), (X0 + 22, Y0 + 5)], fill=(40, 36, 44))
+        else:
+            d.line([X0 + 40, Y0 + 2, X0 + 46, Y0 - 10, X0 + 42, Y0 - 16], fill=(150, 146, 152), width=4)
+    if len(halves) == 2:
+        gx = (halves[0][2] * T + halves[1][0] * T) // 2
+        gy = halves[0][1] * T
+        d.line([gx - 2, gy - 20, gx + 6, gy + 8, gx, gy + 2 * T], fill=(230, 240, 255), width=1)
+    img[:] = np.array(pil).astype(img.dtype)
 
 
 args = sys.argv[1:]

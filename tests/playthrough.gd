@@ -1,6 +1,6 @@
 extends Node
 ## 핵심 루프 점검용 자동 플레이 (2026-09-28). 새 게임에서 며칠을 "보통 플레이어"처럼 돌리고 숫자를 남긴다.
-## 실행: godot --headless --path . res://tests/playthrough.tscn   (환경변수 DAYS=10 SEED=1 OUT=경로 WEAPON=bow BOW=pierce|spread|volley|plain)
+## 실행: godot --headless --path . res://tests/playthrough.tscn   (환경변수 DAYS=10 SEED=1 OUT=경로 WEAPON=bow BOW=pierce|spread|volley|plain START=시작 지점 id)
 ## WEAPON (2026-09-29 무기): 봇이 즐겨 드는 무기 종류. bow (기본) · staff · melee (근거리 무기) · knife (무기 없이 사냥칼만).
 ## 그 종류 무기가 없으면 사냥칼로 싸운다. DEBUG_KO=1 이면 하트가 줄 때 · 쓰러질 때 까닭을 적는다.
 ## 농사는 칸마다 도구를 쓰는 횟수를 세고, 사냥은 길찾기 봇이 실제 사냥터(실시간 AI)에서 싸운다.
@@ -95,6 +95,14 @@ var barn_restore_day := -1
 var feed_creature: Creature = null
 var lunches_eaten := 0
 var hen_eggs_sold := 0
+## 나루터 (2026-10-02 시설 4, 통발): 터 · 복구 날, 잡은 · 판 물고기, 끓인 · 먹은 매운탕, 물고기 몰기 크리처
+var naru_site_day := -1
+var naru_restore_day := -1
+var fish_caught := 0
+var fish_sold := 0
+var stews_made := 0
+var stews_eaten := 0
+var fish_creature: Creature = null
 var weasel_nights := 0
 var tigers_got := {}
 ## 역동 (2026-10-02, 4막 첫 구역): 첫 도착 · 사냥 수 · 맞은 횟수 · 쓰러짐, 아기 망아지 알 · 깊이 간 칸에서 더 거둔 무
@@ -105,6 +113,14 @@ var yd_hurt := 0
 var yd_knocked := 0
 var foals_got := 0
 var plow_bonus := 0
+## 곤지암 (2026-10-02, 4막 대장 구역): 첫 도착 · 사냥 수 · 맞은 횟수 · 쓰러짐, 아기 악귀 알 · 밤일 수
+const GONJIAM := 7
+var gj_day := -1
+var gj_hunts := 0
+var gj_hurt := 0
+var gj_knocked := 0
+var imps_got := 0
+var night_jobs := 0
 ## 크리처 원정 + 입양 (2026-10-01). EXPEDITION=0 이면 끈다 (비교용).
 var expedition_on := true
 ## 채집으로 마을에 남겨 두는 크리처 수 (풀밭 들나물이 하루 7~8포기라 그 정도)
@@ -133,6 +149,9 @@ func _ready() -> void:
 	add_child(main)
 	await get_tree().process_frame
 	main._rng.seed = rng_seed
+	# START (2026-10-02 곤지암): 테스트용 시작 지점에서 이어 돌린다 (예: START=gonjiam DAYS=8, 구역 값만 빨리 맞출 때)
+	if OS.get_environment("START") != "":
+		TestStarts.apply(main, StringName(OS.get_environment("START")))
 	# 시계는 봇이 어림한 시간으로 돌린다 (크리처를 기다리며 빨리 돌리는 동안 시계가 흐르지 않게)
 	main.clock_running = false
 	farm = main.farm
@@ -183,6 +202,13 @@ func _ready() -> void:
 		"%d일" % yd_day if yd_day > 0 else "없음", cleared_day.get(Config.HUNT_ZONES[YEOKDONG].name, "없음"), yd_hunts, yd_hurt,
 		float(yd_hurt) / maxi(yd_hunts, 1), yd_knocked, foals_got,
 		main.creatures.filter(func(c: Creature) -> bool: return c.data.species == CreatureCatalog.FOAL and c.job == CreatureJobs.FARM).size(), plow_bonus])
+	_log("\n곤지암: 첫 도착 %s · 마왕 첫 처치 %s · 곤지암 사냥 %d번 · 거기서 맞은 횟수 %d (한 번에 %.1f) · 쓰러짐 %d번 · 아기 악귀 알 %d · 아기 악귀 %d마리 · 밤일 %d번" % [
+		"%d일" % gj_day if gj_day > 0 else "없음", cleared_day.get(Config.HUNT_ZONES[GONJIAM].name, "없음"), gj_hunts, gj_hurt,
+		float(gj_hurt) / maxi(gj_hunts, 1), gj_knocked, imps_got,
+		main.creatures.filter(func(c: Creature) -> bool: return c.data.species == CreatureCatalog.IMP).size(), night_jobs])
+	_log("\n나루터: 터 %s · 복구 %s · 남은 마왕 뿔 %d · 잡은 물고기 %d · 판 물고기 %d · 끓인 매운탕 %d · 먹은 매운탕 %d · 물고기 몰기 %s" % [
+		"%d일" % naru_site_day if naru_site_day > 0 else "없음", "%d일" % naru_restore_day if naru_restore_day > 0 else "없음", GameState.material4,
+		fish_caught, fish_sold, stews_made, stews_eaten, fish_creature.describe() if fish_creature else "없음"])
 	var crowd := []
 	for d in [20, 40, 60, 80, 100]:
 		if crowd_by_day.has(d):
@@ -232,6 +258,8 @@ func play_day() -> void:
 		yak_site_day = GameState.day
 	if GameState.barn_state >= 1 and barn_site_day < 0:
 		barn_site_day = GameState.day
+	if GameState.naru_state >= 1 and naru_site_day < 0:
+		naru_site_day = GameState.day
 	_log("\n## %d일째 (시작 돈 %d, 씨앗 %d, 작물 %d)" % [GameState.day, GameState.money, GameState.seeds, GameState.crops])
 	main._set_active(main.farmer)
 	await place_new_creatures()
@@ -306,6 +334,10 @@ func play_day() -> void:
 	for l in lines:
 		if l.contains("족제비가"):
 			weasel_nights += 1
+		if l.begins_with("아기 악귀가 밤새"):
+			var m := RegEx.create_from_string("(\\d+)번").search(l)
+			if m:
+				night_jobs += m.get_string(1).to_int()
 		if l.begins_with("원정대"):
 			var m := RegEx.create_from_string("\\+(\\d+)원").search(l)
 			if m:
@@ -331,8 +363,9 @@ func place_new_creatures() -> void:
 			_assign(s, CreatureJobs.FARM, farmers)
 			farmers += 1
 	# 아기 망아지 (2026-10-02 역동): 밭이 다 찼으면 슬라임 농사 하나를 채집으로 돌리고 그 밭을 맡긴다 (밭 갈기, 플레이어가 할 법한 배치)
+	# 아기 악귀 (2026-10-02 곤지암): 같은 식으로 슬라임 농사 하나 대신 밭을 맡긴다 (밤일)
 	for s: Creature in main.creatures:
-		if s.home != main.HATCH_CELL or s.data.species != CreatureCatalog.FOAL or farmers < GameState.open_plots:
+		if s.home != main.HATCH_CELL or not (s.data.species in [CreatureCatalog.FOAL, CreatureCatalog.IMP]) or farmers < GameState.open_plots:
 			continue
 		for o: Creature in main.creatures:
 			if o.job != CreatureJobs.FARM or o.data.species != CreatureCatalog.SLIME or o.home == main.HATCH_CELL:
@@ -412,6 +445,23 @@ func place_new_creatures() -> void:
 			while pick.job != CreatureJobs.FEED:
 				pick.next_job()
 			_log("크리처 배치: %s → 모이 주기 (칸 %s)" % [pick.describe(), pick.home])
+	# 나루터를 고쳤으면 물속성 채집 전담 하나 (없으면 아무 채집 전담) 에게 물고기 몰기
+	if GameState.naru_state >= 2 and fish_creature == null:
+		var pick: Creature = null
+		for s: Creature in main.creatures:
+			if s.home == main.HATCH_CELL or s == scrap_creature or s == herb_creature or s == feed_creature or s.job != CreatureJobs.FORAGE or s.expedition_zone >= 0:
+				continue
+			if pick == null or (s.has_element(&"water") and not pick.has_element(&"water")):
+				pick = s
+		if pick != null:
+			fish_creature = pick
+			main.farmer.position = pick.position
+			main.interact()
+			main.farmer.position = Farm.center_of(Creature.fish_spot() + Vector2i(-2, 0))
+			main.interact()
+			while pick.job != CreatureJobs.FISH:
+				pick.next_job()
+			_log("크리처 배치: %s → 물고기 몰기 (칸 %s)" % [pick.describe(), pick.home])
 	if farmers >= Config.FIELD_PLOTS.size() and full_day < 0:
 		full_day = GameState.day
 
@@ -563,6 +613,16 @@ func shop() -> Array[String]:
 			keep_crops = maxi(keep_crops, mini(GameState.crops, Config.BARN_COST_CROPS))
 	if GameState.barn_state >= 2:
 		coop_day(did)
+	# 나루터 (2026-10-02 통발): 마왕 뿔이 다 모이면 무 · 돈을 남겨 두고 고친다
+	if GameState.naru_state == 1 and GameState.material4 >= Config.NARU_COST_MATERIAL:
+		if main.can_restore_naru() and main.restore_naru():
+			naru_restore_day = GameState.day
+			did.append("나루터 복구(%d원 · 무 %d · %s %d)" % [Config.NARU_COST_MONEY, Config.NARU_COST_CROPS, Config.BOSS_MATERIAL4_NAME, Config.NARU_COST_MATERIAL])
+		else:
+			reserve = maxi(reserve, Config.NARU_COST_MONEY)
+			keep_crops = maxi(keep_crops, mini(GameState.crops, Config.NARU_COST_CROPS))
+	if GameState.naru_state >= 2:
+		dock_day(did)
 	if GameState.yak_state >= 2:
 		brew_day(did)
 	var held := false
@@ -624,6 +684,29 @@ func shop() -> Array[String]:
 	if held:
 		held_days.append(GameState.day)
 	return did
+
+
+## 나루터: 바구니 물고기를 꺼내 매운탕이 없으면 뱃사공이 하나 끓이고 나머지는 진열, 통발은 날마다 다시 놓는다.
+func dock_day(did: Array[String]) -> void:
+	var made: Array[String] = []
+	if GameState.basket > 0:
+		fish_caught += GameState.basket
+		made.append("물고기 %d" % GameState.basket)
+		main.dock_action(&"take_fish")
+	if GameState.stews == 0 and GameState.fish >= Config.STEW_FISH:
+		main._set_active(main.ferryman)
+		if main.dock_action(&"stew"):
+			stews_made += 1
+			made.append("매운탕")
+		main._set_active(main.farmer)
+	if GameState.fish > 0:
+		fish_sold += GameState.fish
+		made.append("물고기 %d 진열" % GameState.fish)
+		main.supply_action(&"display_fish")
+	if GameState.traps < Config.TRAP_MAX and main.dock_action(&"set_traps"):
+		made.append("통발 %d" % GameState.traps)
+	if not made.is_empty():
+		did.append("나루터: " + " · ".join(made))
 
 
 ## 닭장: 모이를 맡은 크리처가 없으면 무로 모이를 주고, 닭이 다 찼으면 둥지 달걀을 꺼내
@@ -878,6 +961,8 @@ func hunt_day() -> void:
 	spend_skill_points()
 	if GameState.lunches > 0:
 		lunches_eaten += 1
+	if GameState.stews > 0:
+		stews_eaten += 1
 	main.enter_hunt(pick, zone)
 	var h: HuntGround = main.hunt
 	if OS.get_environment("DEBUG_KO") != "" and not GameState.message.is_connected(_debug_msg):
@@ -904,6 +989,7 @@ func hunt_day() -> void:
 	var bun_hurt0 := -1
 	var mil_hurt0 := -1
 	var yd_hurt0 := -1
+	var gj_hurt0 := -1
 	## 가방 · 창고가 차서 못 주운 드롭 자리 (이번 사냥에선 다시 가지 않음. 안 그러면 한 걸음 떨어졌다 돌아가기를 되풀이)
 	var full_at := {}
 	while t < 900.0:
@@ -927,6 +1013,11 @@ func hunt_day() -> void:
 			yd_hunts += 1
 			if yd_day < 0:
 				yd_day = GameState.day
+		if h.zone == GONJIAM and gj_hurt0 < 0:
+			gj_hurt0 = hurt
+			gj_hunts += 1
+			if gj_day < 0:
+				gj_day = GameState.day
 		if h.zone == DOMA and doma_hurt0 < 0:
 			doma_hurt0 = hurt
 			doma_hunts += 1
@@ -1126,8 +1217,11 @@ func hunt_day() -> void:
 		mil_hurt += (yd_hurt0 if yd_hurt0 >= 0 else hurt) - mil_hurt0
 		mil_knocked += int(knocked and h.zone == MILMOK)
 	if yd_hurt0 >= 0:
-		yd_hurt += hurt - yd_hurt0
+		yd_hurt += (gj_hurt0 if gj_hurt0 >= 0 else hurt) - yd_hurt0
 		yd_knocked += int(knocked and h.zone == YEOKDONG)
+	if gj_hurt0 >= 0:
+		gj_hurt += hurt - gj_hurt0
+		gj_knocked += int(knocked and h.zone == GONJIAM)
 	if h.boss_spawned and h._boss() == null:
 		_cleared(h.zone)
 	var comp := h.companion.display_name() if h.companion else "혼자"
@@ -1141,6 +1235,8 @@ func hunt_day() -> void:
 			tigers_got[sp.display_name] = tigers_got.get(sp.display_name, 0) + 1
 		if sp == CreatureCatalog.FOAL:
 			foals_got += 1
+		if sp == CreatureCatalog.IMP:
+			imps_got += 1
 	_log("사냥: 시작 %s · 동행 %s · %s · 싸움 %.0f초 · 처치 %d · 맞은 횟수 %d · 비킨 틱 %d · 남은 하트 %d%s · 알 %s · 돈 %+d · 물약 %+d · 젤리 %+d · 장비 %+d · Lv %d" % [
 		Config.HUNT_ZONES[zone].name, comp, " → ".join(zone_times), fight_t, kills, hurt, dodges, hearts_left, " (쓰러짐)" if knocked else "",
 		eggs, GameState.money - money0, GameState.potions - potions0, GameState.junk - junk0, GameState.gear.size() + GameState.owned_wear.size() - gear0, GameState.hunter_level])

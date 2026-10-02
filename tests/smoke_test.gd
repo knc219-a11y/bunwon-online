@@ -2579,6 +2579,12 @@ func _ready() -> void:
 	# 47) 4막 첫 구역 역동 (2026-10-02 사용자 선택 A): 켄타우로스 창기병 · 역마 장군 · 아기 망아지 (밭 갈기 · 뒷발차기)
 	await _yeokdong_checks()
 
+	# 48) 4막 대장 구역 곤지암 (2026-10-02 사용자 선택 A 악마형): 뿔 악귀 · 마왕 · 아기 악귀 (밤일 · 불 할퀴기 + 겁주기)
+	await _gonjiam_checks()
+
+	# 49) 시설 4 나루터 (2026-10-02 사용자 선택 A 나루터 + B 통발): 팔당호 물가 · 뱃사공 · 통발 · 물고기 몰기 · 매운탕
+	await _naru_checks()
+
 	# 41) 저장/불러오기 (2026-09-30 사용자 선택 C 디아2식): 저장 → 장면을 버리고 → 새 장면에 불러오면 모든 상태가 같다
 	await _save_load_checks()
 
@@ -3272,4 +3278,227 @@ func _yeokdong_checks() -> void:
 	_check(t.stunned() and t._pull_to.distance_to(t._pull_from) > 20.0, "뒷발차기: 멀리 밀리며 잠깐 멈춤")
 	m.leave_hunt()
 	m.queue_free()
+	await get_tree().process_frame
+
+
+func _gonjiam_checks() -> void:
+	var m: Node2D = load("res://scenes/main.tscn").instantiate()
+	add_child(m)
+	await get_tree().process_frame
+	var zi := 7
+	var z: Dictionary = Config.HUNT_ZONES[zi]
+	_check(z.name == "곤지암" and z.monster == "뿔 악귀" and z.boss_monster == "마왕" and z.demon and z.boss_pattern == &"archdemon" and Config.ZONE_MONSTER_LEVEL[zi] == 21, "8구역 곤지암: 뿔 악귀 · 마왕 · 몬스터 Lv 21")
+	var gmap := HuntMap.load_map("gonjiam")
+	_check(not gmap.find("K").is_empty() and not gmap.find("W").is_empty() and not gmap.find("Q").is_empty() and not gmap.find("M").is_empty() and gmap.find("Y").size() == 8, "곤지암 칸 지도: 폐병원 · 신립 장군 묘 · 갈라진 고양이 바위 · 대장 자리 · 웨이포인트")
+	_check(not gmap.is_free(Rect2(gmap.find("Q")[0], Vector2(2, 2))) and not gmap.monster_ok(gmap.find("Y")[0]), "폐병원 · 고양이 바위는 막힘")
+	_check(HunterSkills.is_act_boss_zone(zi), "곤지암은 4막 대장 구역 (첫 처치 스킬 포인트 +1)")
+	TestStarts.apply(m, &"gonjiam")
+	_check(zi in GameState.waypoints and GameState.hunter_level == TestStarts.LEVELS[&"gonjiam"], "시작 지점 곤지암 앞: 곤지암 웨이포인트 · Lv %d" % TestStarts.LEVELS[&"gonjiam"])
+	# 역동 윗길 → 곤지암
+	GameState.hunts_today = 0
+	m.enter_hunt(null, 6)
+	var yh: HuntGround = m.hunt
+	yh.set_ai(false)
+	yh.set_process(false)
+	yh.path_open = true
+	m.hunter.position = yh.next_area().get_center()
+	_check(yh.path_block() == "" and yh.advance() and yh.zone == zi, "역마 장군을 잡으면 역동 윗길로 곤지암에 감")
+	m.leave_hunt()
+	# 아기 악귀: 불 · 겁주기 · 밤일
+	var imp: Creature = m._hatch(CreatureCatalog.IMP, Config.FORAGE_CELLS[5])
+	_check(imp.data.species.display_name == "아기 악귀" and imp.data.elements[0].id == &"fire" and HuntCompanion.style_name(imp.data) == "불 할퀴기 + 겁주기", "아기 악귀 (불, 동행 불 할퀴기 + 겁주기)")
+	var farm: Farm = m.farm
+	var cell: Vector2i = farm._cells.keys()[0]
+	var c: Farm.Cell = farm.get_cell(cell)
+	c.tilled = true
+	c.planted = true
+	c.growth = Config.CROP_GROW_DAYS
+	imp.home = cell
+	imp.job = CreatureJobs.FARM
+	var crops0 := GameState.crops
+	var done := imp.night_work()
+	_check(done > 0 and GameState.crops > crops0 and not farm.can_do(Farm.Work.HARVEST, cell), "밤일: 밤사이 범위 안 익은 무를 거두고 심고 물까지 (%d번)" % done)
+	var slime: Creature = m.creatures.filter(func(o: Creature) -> bool: return o.data.species == CreatureCatalog.SLIME)[0]
+	_check(slime.night_work() == 0, "밤일은 아기 악귀만")
+	# 사냥: 뿔 악귀는 바라보는 동안 얼어붙음
+	GameState.hunts_today = 0
+	m.enter_hunt(imp, zi)
+	var h: HuntGround = m.hunt
+	h.set_ai(false)
+	h.set_process(false)
+	h.companion_ai = false
+	_check(h.zone == zi and h.slimes.size() == z.count * h.swarm_size() and h.slimes.all(func(o: WildSlime) -> bool: return o.demon), "곤지암에 들어옴: 뿔 악귀 %d마리 (자리마다 %d)" % [h.slimes.size(), h.swarm_size()])
+	_check(h.slimes[0]._frame == 48 and is_equal_approx(h.slimes[0]._sprite.scale.x * h.slimes[0].scale.x, 1.0), "뿔 악귀 48칸 시트를 늘이지 않고 그림")
+	m.hunter.position = Vector2(25, 10) * Config.TILE
+	m.hunter.facing = Vector2i.RIGHT
+	var feet: Vector2 = m.hunter.feet()
+	for o: WildSlime in h.slimes:
+		o.position = feet + Vector2(-900, 0)
+		o.ai_enabled = false
+	var front: WildSlime = h.slimes[0]
+	var back: WildSlime = h.slimes[1]
+	front.position = feet + Vector2(80, 0)
+	back.position = feet + Vector2(-80, 0)
+	for d: WildSlime in [front, back]:
+		d.ai_enabled = true
+		d.alert = true
+	h._invulnerable = 99.0
+	for i in 30:
+		h.tick(1.0 / 30.0)
+	_check(front.watched and front.gazed_frozen() and front.position.distance_to(feet + Vector2(80, 0)) < 0.5, "바라보는 쪽 악귀는 얼어붙음")
+	_check(not back.watched and back.position.x > feet.x - 80.0 + 10.0, "등 뒤 악귀는 걸어서 다가옴 (%d px)" % roundi(back.position.x - (feet.x - 80.0)))
+	# 등 뒤에서 붙으면 팔을 치켜들고 내려찍음
+	h._invulnerable = 0.0
+	h.hearts = 20
+	var hearts0 := h.hearts
+	for i in 150:
+		h.tick(1.0 / 30.0)
+		if h.hearts < hearts0:
+			break
+	_check(h.hearts == hearts0 - z.damage, "등 뒤 악귀가 둘레를 내려찍음 (하트 -%d)" % z.damage)
+	# 아기 악귀 겁주기: 맞은 악귀는 달아남
+	h.companion_attack(front, h.companion)
+	_check(front._fear > 0.0 and not front.gazed_frozen(), "겁먹은 악귀는 바라봐도 달아남")
+	for o: WildSlime in h.slimes.duplicate():
+		o.queue_free()
+	h.slimes.clear()
+	# 마왕: 등불 깜빡 → 정전 + 등 뒤 악귀, 다음은 지옥불 기둥
+	var b: WildSlime = h.spawn_boss()
+	_check(b.boss and b.pattern == &"archdemon" and b.title == "마왕" and b._frame == 64 and is_equal_approx(b._sprite.scale.x * b.scale.x, 1.0), "마왕 (64칸 시트를 늘이지 않고)")
+	b.position = feet + Vector2(140, 0)
+	b.ai_enabled = true
+	b._pattern_cd = 0.0
+	b.tick(1.0 / 30.0, feet)
+	_check(b._dim > 0.0, "마왕: 지옥불 등불 깜빡임 (예고)")
+	for i in 60:
+		h.tick(1.0 / 30.0)
+		if h.blackout_t > 0.0:
+			break
+	var called := h.slimes.filter(func(o: WildSlime) -> bool: return o.minion)
+	_check(h.blackout_t > 0.0 and called.size() == Config.ARCH_CALL and called.all(func(o: WildSlime) -> bool: return o.demon and o.position.x < feet.x and o.hp == Config.ARCH_MINION_HP), "등불이 꺼지면 정전 + 사냥꾼 등 뒤에 뿔 악귀 %d" % Config.ARCH_CALL)
+	var seen: WildSlime = called[0]
+	seen.position = feet + Vector2(60, 0)
+	h.tick(1.0 / 30.0)
+	_check(seen.watched and seen.blackout and not seen.gazed_frozen(), "정전 동안엔 바라봐도 악귀가 움직임")
+	for o: WildSlime in called:
+		o.queue_free()
+		h.slimes.erase(o)
+	b._recover = 0.0
+	b._pattern_cd = 0.0
+	h.blackout_t = 0.0
+	b.tick(1.0 / 30.0, feet)
+	var pillars := b.telegraphs().filter(func(t: Dictionary) -> bool: return t.get("pillar", false))
+	_check(pillars.size() == Config.ARCH_PILLARS, "다음 차례: 지옥불 기둥 %d" % Config.ARCH_PILLARS)
+	h._invulnerable = 0.0
+	h.hearts = 20
+	var hearts1 := h.hearts
+	for i in 60:
+		h.tick(1.0 / 30.0)
+		if h.hearts < hearts1:
+			break
+	_check(h.hearts == hearts1 - z.damage, "발밑 지옥불 기둥에 휩싸이면 하트 -%d" % z.damage)
+	b.hp = b.max_hp / 2 - 1
+	b._bales.clear()
+	b._recover = 0.0
+	b._pattern_cd = 0.0
+	b._arch_step = 1
+	b.tick(1.0 / 30.0, feet)
+	_check(b._bales.size() == Config.ARCH_PILLARS_ENRAGED, "체력 절반 아래: 지옥불 기둥 %d" % Config.ARCH_PILLARS_ENRAGED)
+	m.leave_hunt()
+	m.queue_free()
+	await get_tree().process_frame
+
+
+func _naru_checks() -> void:
+	var m: Node2D = load("res://scenes/main.tscn").instantiate()
+	add_child(m)
+	await get_tree().process_frame
+	var farm: Farm = m.farm
+	# 팔당호 물가: 처음부터 물 칸은 막히고 들나물이 안 돋음
+	var water := Vector2i(Config.LAKE_ROWS[21], 21)
+	_check(not farm.is_free(Rect2(Vector2(water * Config.TILE) + Vector2(4, 4), Vector2(8, 8))) and farm.is_free(Rect2(Vector2((water + Vector2i(-2, 0)) * Config.TILE) + Vector2(4, 4), Vector2(8, 8))), "팔당호 물가: 물 칸은 막히고 물가 모래는 걸어 다님")
+	var in_water := Config.HERB_SPOTS.filter(func(c: Vector2i) -> bool: return Config.LAKE_ROWS.has(c.y) and c.x >= Config.LAKE_ROWS[c.y])
+	_check(in_water.is_empty() and not Config.PERSIMMON_CELLS.any(func(c: Vector2i) -> bool: return Config.LAKE_ROWS.has(c.y) and c.x >= Config.LAKE_ROWS[c.y]), "들나물 자리 · 감나무가 물에 없음")
+	_check(not Config.NARU_RECT.has_point(Creature.fish_spot()) and not (Config.LAKE_ROWS.has(Creature.fish_spot().y) and Creature.fish_spot().x >= Config.LAKE_ROWS[Creature.fish_spot().y]), "물고기 몰기 자리는 물가 땅")
+	_check(Config.HUNT_ZONES[Config.NARU_ZONE].get("boss_material4", false), "곤지암 마왕이 4막 대장 재료 (마왕 뿔)")
+	# 마왕을 처음 잡은 다음 날 나루터 터
+	GameState.naru_boss_down = true
+	var lines: Array[String] = m.next_day()
+	_check(GameState.naru_state == 1 and m.naru != null and lines.any(func(l: String) -> bool: return l.contains("나루터 터")), "마왕 첫 처치 다음 날 아침 나루터 터")
+	_check(not m.restore_naru() and GameState.naru_state == 1, "모자라면 못 고침")
+	GameState.money += Config.NARU_COST_MONEY
+	GameState.crops += Config.NARU_COST_CROPS + 10
+	GameState.material4 += Config.NARU_COST_MATERIAL
+	_check(m.restore_naru() and GameState.naru_state == 2 and m.ferryman.visible and GameState.material4 == 0, "돈 · 무 · 마왕 뿔로 한 번에 고침 → 뱃사공")
+	_check(CreatureJobs.FISH in CreatureJobs.jobs(), "고치면 크리처 일에 물고기 몰기")
+	GameState.hunter_unlocked = true
+	m._set_active(m.hunter)
+	for i in 6:
+		if m.active == m.ferryman:
+			break
+		m.switch_character()
+	_check(m.active == m.ferryman, "Tab 으로 뱃사공")
+	# 통발
+	var crops0 := GameState.crops
+	_check(m.dock_action(&"set_traps") and GameState.traps == Config.TRAP_MAX and GameState.crops == crops0 - Config.TRAP_MAX * Config.TRAP_BAIT, "통발 놓기: 미끼 무 하나씩 %d개" % Config.TRAP_MAX)
+	_check(not m.dock_action(&"set_traps"), "다 놓였으면 더 못 놓음")
+	# 물고기 몰기: 물 크리처 · 통발이 있을 때만, 하루 FISH_DRIVE_CAP 번
+	var sl: Creature = m._hatch(CreatureCatalog.SLIME, Creature.fish_spot() + Vector2i.LEFT, load("res://data/creatures/elements/water.tres"))
+	sl.job = CreatureJobs.FISH
+	_check(sl.data.work_speed(CreatureJobs.FISH) > sl.data.base_work_speed * 1.5, "물속성은 물고기 몰기가 빠름")
+	var imp: Creature = m._hatch(CreatureCatalog.IMP, Creature.fish_spot() + Vector2i.LEFT)
+	imp.job = CreatureJobs.FISH
+	_check(imp.night_work() == Config.FISH_DRIVE_CAP and GameState.fish_drive == Config.FISH_DRIVE_CAP, "아기 악귀 밤일 물고기 몰기 (하루 %d번까지)" % Config.FISH_DRIVE_CAP)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 5
+	var r: Dictionary = m.traps_night(rng)
+	_check(r.traps == Config.TRAP_MAX and r.driven == Config.FISH_DRIVE_CAP and r.caught >= Config.FISH_DRIVE_CAP and r.caught <= Config.TRAP_MAX * 2 + Config.FISH_DRIVE_CAP and GameState.basket == r.caught and GameState.traps == 0 and GameState.fish_drive == 0, "아침 통발: 통발마다 0~2 + 몰아 준 수, 통발은 걷힘 (%d마리)" % r.caught)
+	_check(sl.work_once() == false or sl.position.distance_to(Farm.center_of(sl.home)) > 0.5, "통발이 없으면 물고기 몰기 크리처는 쉼")
+	var empty: Dictionary = m.traps_night(rng)
+	_check(empty.traps == 0 and empty.caught == 0, "통발을 안 놓으면 물고기 없음")
+	# 꺼내기 · 매운탕 · 팔기
+	var basket := GameState.basket
+	_check(m.dock_action(&"take_fish") and GameState.fish == basket and GameState.basket == 0, "바구니 물고기 꺼내기")
+	GameState.fish = maxi(GameState.fish, Config.STEW_FISH + 1)
+	var fish0 := GameState.fish
+	_check(m.dock_action(&"stew") and GameState.stews == 1 and GameState.fish == fish0 - Config.STEW_FISH, "뱃사공 매운탕 (물고기 %d · 무 %d)" % [Config.STEW_FISH, Config.STEW_CROPS])
+	m._set_active(m.farmer)
+	_check(not m.dock_action(&"stew") and not (&"stew" in m.dock_options()), "매운탕은 뱃사공만")
+	var money0 := GameState.money
+	var sell := GameState.fish
+	m.supply_action(&"display_fish")
+	m.next_day()
+	_check(GameState.money >= money0 + sell * Config.FISH_PRICE and GameState.fish == 0, "공급함에 진열한 물고기는 밤사이 팔림 (%d마리)" % sell)
+	# 매운탕을 먹고 사냥: 하트 칸 +1 · 경험치 x1.5
+	GameState.hunts_today = 0
+	var hearts0: int = 0
+	m.enter_hunt(null, 0)
+	var h: HuntGround = m.hunt
+	_check(h.stew and GameState.stews == 0, "사냥에 들어갈 때 매운탕을 먹음")
+	h.stew = false
+	hearts0 = h.max_hearts()
+	h.stew = true
+	_check(h.max_hearts() == hearts0 + Config.STEW_HEARTS, "매운탕: 하트 칸 +%d" % Config.STEW_HEARTS)
+	m.leave_hunt()
+	# 입양: 뱃사공도 받아 줌
+	_check(Expedition.villager_open(&"ferryman") and Config.ADOPT_SPOTS[&"ferryman"].size() == 4, "뱃사공도 크리처 입양을 받음")
+	# 저장 → 불러오기: 나루터 · 놓인 통발 · 바구니
+	GameState.traps = 2
+	GameState.basket = 3
+	SaveGame.dir = "user://smoke_saves"
+	DirAccess.make_dir_recursive_absolute(SaveGame.dir)
+	_check(SaveGame.save(m, 3), "나루터 저장")
+	m.queue_free()
+	await get_tree().process_frame
+	var b: Node2D = load("res://scenes/main.tscn").instantiate()
+	add_child(b)
+	await get_tree().process_frame
+	_check(SaveGame.load_into(b, 3) and b.naru != null and b.ferryman.visible and GameState.traps == 2 and GameState.basket == 3, "불러오면 나루터 · 뱃사공 · 통발 · 바구니 그대로")
+	SaveGame.erase(3)
+	SaveGame.dir = "user://"
+	# 시작 지점
+	GameState.reset()
+	TestStarts.apply(b, &"naru")
+	_check(GameState.naru_state == 2 and b.ferryman.visible and GameState.fish == 4 and b.creatures.any(func(c: Creature) -> bool: return c.job == CreatureJobs.FISH), "시작 지점 나루터 복구 뒤: 뱃사공 · 물고기 4 · 물고기 몰기 크리처")
+	b.queue_free()
 	await get_tree().process_frame

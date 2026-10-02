@@ -26,6 +26,12 @@ const FEED := &"feed"
 ## 밭 갈기 (2026-10-02 역동 아기 망아지): 농사를 맡은 아기 망아지가 수확한 빈 칸을 깊이 갈아 둔다 (거두면 무 하나 더).
 ## 따로 고르는 일이 아니라 농사 안의 작은 일. 종의 job_aptitude 에 이 id 가 있는 크리처만 한다.
 const PLOW := &"plow"
+## 밤일 (2026-10-02 곤지암 아기 악귀): 따로 고르는 일이 아니라 종의 성질. job_aptitude 에 이 id 가 있는 크리처는
+## 밤사이 (아침이 오기 전) 맡은 일을 한 바퀴 더 해 둔다 (Creature.night_work).
+const NIGHT := &"night"
+## 물고기 몰기 (2026-10-02 나루터 통발): 나루터를 고치면 생기는 일. 물가에서 물고기를 통발 쪽으로 몰아
+## 한 번 할 때마다 내일 아침 물고기 +1 (GameState.fish_drive, 하루 FISH_DRIVE_CAP 번, 통발이 놓여 있을 때만). 물속성이 두 배 빠르다.
+const FISH := &"fish"
 
 const NAMES := {
 	REST: "쉬는 중",
@@ -38,6 +44,8 @@ const NAMES := {
 	HERB: "도라지밭",
 	FEED: "모이 주기",
 	PLOW: "밭 갈기",
+	NIGHT: "밤일",
+	FISH: "물고기 몰기",
 	&"expedition": "원정",
 }
 
@@ -67,6 +75,8 @@ static func jobs() -> Array[StringName]:
 		out.append(HERB)
 	if GameState.barn_state >= 2:
 		out.append(FEED)
+	if GameState.naru_state >= 2:
+		out.append(FISH)
 	return out
 
 

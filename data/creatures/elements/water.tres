@@ -8,5 +8,6 @@ id = &"water"
 display_name = "물"
 color = Color(0.42, 0.72, 0.95, 1)
 job_aptitude = {
-&"water": 1.5
+&"water": 1.5,
+&"fish": 2.0
 }

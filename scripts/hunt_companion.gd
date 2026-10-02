@@ -7,9 +7,9 @@ extends Node2D
 ## 아기 나무 정령 = 덩굴 묶기 (2026-09-29 도마리): 덩굴을 뻗어 몬스터를 잠깐 붙잡는다.
 ## 누구를 언제 때릴지는 HuntGround 가 정하고, 이 노드는 움직임과 그리기만 맡는다.
 
-enum Style { SHOT, BUMP, PULL, PECK, BIND, EMBER, ROAR, SPIRIT, KICK }
+enum Style { SHOT, BUMP, PULL, PECK, BIND, EMBER, ROAR, SPIRIT, KICK, SCARE }
 
-const STYLE_NAMES := {Style.SHOT: "멀리서 물총", Style.BUMP: "붙어서 박치기", Style.PULL: "혀로 끌어오기", Style.PECK: "날아가 쪼기", Style.BIND: "덩굴 묶기", Style.EMBER: "불빛 + 불씨", Style.ROAR: "포효", Style.SPIRIT: "포효 + 번개 발톱", Style.KICK: "뒷발차기"}
+const STYLE_NAMES := {Style.SHOT: "멀리서 물총", Style.BUMP: "붙어서 박치기", Style.PULL: "혀로 끌어오기", Style.PECK: "날아가 쪼기", Style.BIND: "덩굴 묶기", Style.EMBER: "불빛 + 불씨", Style.ROAR: "포효", Style.SPIRIT: "포효 + 번개 발톱", Style.KICK: "뒷발차기", Style.SCARE: "불 할퀴기 + 겁주기"}
 
 ## 농장에 있는 크리처 (돌아가면 그 자리·그 일로 복귀)
 var source: Creature
@@ -59,6 +59,8 @@ static func style_for(d: CreatureData) -> Style:
 		return Style.SPIRIT
 	if d.species.companion_style == &"kick":
 		return Style.KICK
+	if d.species.companion_style == &"scare":
+		return Style.SCARE
 	var element: StringName = d.elements[0].id if not d.elements.is_empty() else &""
 	return Style.SHOT if element == &"water" else Style.BUMP
 
@@ -73,7 +75,7 @@ func display_name() -> String:
 
 ## 공격 한 번에 걸리는 시간. 일 속도가 빠른 개체일수록 조금 짧다 (절반~두 배 사이). 속도 훈련도 반영.
 func attack_interval() -> float:
-	var base: float = {Style.SHOT: Config.COMPANION_SHOT_INTERVAL, Style.BUMP: Config.COMPANION_BUMP_INTERVAL, Style.PULL: Config.COMPANION_PULL_INTERVAL, Style.PECK: Config.COMPANION_PECK_INTERVAL, Style.BIND: Config.COMPANION_BIND_INTERVAL, Style.EMBER: Config.COMPANION_EMBER_INTERVAL, Style.ROAR: Config.COMPANION_ROAR_INTERVAL, Style.SPIRIT: Config.COMPANION_ROAR_INTERVAL, Style.KICK: Config.COMPANION_KICK_INTERVAL}[style]
+	var base: float = {Style.SHOT: Config.COMPANION_SHOT_INTERVAL, Style.BUMP: Config.COMPANION_BUMP_INTERVAL, Style.PULL: Config.COMPANION_PULL_INTERVAL, Style.PECK: Config.COMPANION_PECK_INTERVAL, Style.BIND: Config.COMPANION_BIND_INTERVAL, Style.EMBER: Config.COMPANION_EMBER_INTERVAL, Style.ROAR: Config.COMPANION_ROAR_INTERVAL, Style.SPIRIT: Config.COMPANION_ROAR_INTERVAL, Style.KICK: Config.COMPANION_KICK_INTERVAL, Style.SCARE: Config.COMPANION_IMP_INTERVAL}[style]
 	return base / clampf(data.base_work_speed * data.train_speed_mult(), 0.5, 2.0)
 
 
@@ -84,7 +86,7 @@ func light_radius() -> float:
 
 
 func reach() -> float:
-	return {Style.SHOT: Config.COMPANION_SHOT_RANGE, Style.BUMP: Config.COMPANION_BUMP_RANGE, Style.PULL: Config.COMPANION_PULL_RANGE, Style.PECK: Config.COMPANION_PECK_RANGE, Style.BIND: Config.COMPANION_BIND_RANGE, Style.EMBER: Config.COMPANION_EMBER_RANGE, Style.ROAR: Config.COMPANION_ROAR_RANGE, Style.SPIRIT: Config.COMPANION_ROAR_RANGE, Style.KICK: Config.COMPANION_KICK_RANGE}[style]
+	return {Style.SHOT: Config.COMPANION_SHOT_RANGE, Style.BUMP: Config.COMPANION_BUMP_RANGE, Style.PULL: Config.COMPANION_PULL_RANGE, Style.PECK: Config.COMPANION_PECK_RANGE, Style.BIND: Config.COMPANION_BIND_RANGE, Style.EMBER: Config.COMPANION_EMBER_RANGE, Style.ROAR: Config.COMPANION_ROAR_RANGE, Style.SPIRIT: Config.COMPANION_ROAR_RANGE, Style.KICK: Config.COMPANION_KICK_RANGE, Style.SCARE: Config.COMPANION_IMP_RANGE}[style]
 
 
 func speed() -> float:
@@ -122,7 +124,7 @@ func play_attack(at: Vector2) -> void:
 	elif style == Style.ROAR or style == Style.SPIRIT:
 		shot_to = at
 		shot_time = 0.3
-	elif style == Style.KICK:
+	elif style == Style.KICK or style == Style.SCARE:
 		shot_to = at
 		shot_time = 0.25
 	else:
@@ -205,6 +207,13 @@ func _draw() -> void:
 		draw_set_transform(to, 0.0, Vector2(1.0, 0.6))
 		draw_arc(Vector2.ZERO, 4.0 + 8.0 * k, 0, TAU, 16, Color(0.85, 0.72, 0.5, 0.9 * (1.0 - k)), 2.0)
 		draw_set_transform(Vector2.ZERO)
+	elif shot_time > 0.0 and style == Style.SCARE:
+		# 불 할퀴기: 맞은 자리에 붉은 발톱 자국 셋 (전용 그림은 다음 단계)
+		var to := shot_to - position + Vector2(0, -8)
+		var k := 1.0 - shot_time / 0.25
+		for i in 3:
+			var o := Vector2(-4 + i * 4, 0)
+			draw_line(to + o + Vector2(-3, -5), to + o + Vector2(3, 5), Color(1.0, 0.45 + 0.3 * k, 0.2, 1.0 - k), 1.5)
 	elif shot_time > 0.0 and style == Style.PECK:
 		# 날아가 쪼기: 상대까지 날아간 자국 (점선)과 쪼는 부리 반짝임 (전용 그림은 다음 단계)
 		var to := shot_to - position + Vector2(0, -10)
