@@ -24,6 +24,8 @@ static var egg_roll := -1.0
 ## 후보 비교 화면을 찍을 때 끄고 켠다.
 static var feel := true
 static var swarm := true
+## 활 몰아잡기 방식 (2026-10-02 후보): &"" 지금 (첫 몬스터에 박힘) · &"pierce" 관통 · &"spread" 부채살 · &"volley" 3연사
+static var bow_style: StringName = Config.BOW_STYLE
 
 const T := Config.TILE
 ## 사냥꾼이 걸을 수 있는 공터 (캐릭터 위치 기준, px)
@@ -701,7 +703,20 @@ func swing(dir := Vector2.ZERO) -> int:
 	_cooldown = w.cooldown
 	var hand := hunter.feet() + Vector2(0, -8)
 	if w.kind == &"bow":
-		shots.append({kind = &"arrow", at = hand, dir = _swing_dir, left = w.range})
+		match bow_style:
+			&"pierce":
+				shots.append({kind = &"arrow", at = hand, dir = _swing_dir, left = w.range, pierce = Config.BOW_PIERCE, hit = []})
+			&"spread":
+				for a in [-Config.BOW_SPREAD_DEG, 0.0, Config.BOW_SPREAD_DEG]:
+					shots.append({kind = &"arrow", at = hand, dir = _swing_dir.rotated(deg_to_rad(a)), left = w.range})
+				_cooldown *= Config.BOW_SPREAD_COOLDOWN
+			&"volley":
+				# 첫 발은 바로, 나머지는 조금씩 늦게 (그때 사냥꾼 손에서 나감)
+				for k in 3:
+					shots.append({kind = &"arrow", at = hand, dir = _swing_dir, left = w.range, delay = k * Config.BOW_VOLLEY_GAP})
+				_cooldown *= Config.BOW_VOLLEY_COOLDOWN
+			_:
+				shots.append({kind = &"arrow", at = hand, dir = _swing_dir, left = w.range})
 		return 1
 	if w.kind == &"staff":
 		shots.append({kind = &"orb", at = hand, dir = _swing_dir, left = w.range, blast = w.blast, element = w.element})
@@ -766,6 +781,10 @@ func _tick_shots(delta: float) -> void:
 			_defeat(s)
 	for i in range(shots.size() - 1, -1, -1):
 		var sh: Dictionary = shots[i]
+		if sh.get("delay", 0.0) > 0.0:
+			sh.delay -= delta
+			sh.at = hunter.feet() + Vector2(0, -8)
+			continue
 		var speed := Config.ARROW_SPEED if sh.kind == &"arrow" else Config.ORB_SPEED
 		var step := minf(speed * delta, sh.left)
 		sh.at += sh.dir * step
@@ -775,6 +794,8 @@ func _tick_shots(delta: float) -> void:
 		for s in slimes:
 			if (s.buried and not s.disguise) or (s.airborne() and not (sh.kind == &"arrow" and s.in_air())) or not hittable(s):
 				continue
+			if sh.has("hit") and s in sh.hit:
+				continue
 			# 몬스터 몸 가운데 (발보다 조금 위, 큰 대장은 더 넓게)
 			if (s.position + Vector2(0, -8 * s.scale.y)).distance_to(sh.at) <= hit_r * s.scale.x:
 				target = s
@@ -782,6 +803,13 @@ func _tick_shots(delta: float) -> void:
 		# 나무 · 창고 · 비닐하우스처럼 키 큰 것에 막힌다 (물 · 바위 · 덤불 위로는 날아감)
 		var blocked := map != null and SHOT_BLOCK.contains(map.at(Vector2i(floori(sh.at.x / T), floori(sh.at.y / T))))
 		if target == null and sh.left > 0.0 and not blocked:
+			continue
+		if target != null and not blocked and sh.get("pierce", 1) > 1:
+			# 관통 화살: 맞히고 계속 날아간다
+			sh.pierce -= 1
+			sh.hit.append(target)
+			if _strike(target, sh.at - sh.dir * 10.0, power()) and feel:
+				_hitstop = Config.HITSTOP
 			continue
 		shots.remove_at(i)
 		if sh.kind == &"arrow":
@@ -1331,6 +1359,8 @@ func _draw_fx() -> void:
 		_fx.draw_string_outline(font, at, pp.text, HORIZONTAL_ALIGNMENT_CENTER, 20, size, 3, Color(0.15, 0.05, 0.1, col.a))
 		_fx.draw_string(font, at, pp.text, HORIZONTAL_ALIGNMENT_CENTER, 20, size, col)
 	for sh in shots:
+		if sh.get("delay", 0.0) > 0.0:
+			continue
 		if sh.kind == &"arrow":
 			# 어두운 테두리 위에 밝은 화살 (풀밭 · 흙길 어디서나 보이게)
 			var tail: Vector2 = sh.at - sh.dir * 14.0
