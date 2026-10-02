@@ -19,6 +19,9 @@ const TIGER: CreatureSpecies = preload("res://data/creatures/species/tiger.tres"
 ## 백호의 옵션은 얻기 힘든만큼 더 좋게 하고(스킬이 2개라던지) 속성도 좀 더 영험한 기운이 보이는걸로").
 ## 새 속성 신령 (모든 일 1.5배, 걸음 1.2배), 능력치 범위가 높음, 사냥 동행 = 포효 + 번개 발톱 (스킬 둘), 축사 지킴이.
 const WHITE_TIGER: CreatureSpecies = preload("res://data/creatures/species/white_tiger.tres")
+## 역동(7구역, 4막 첫 구역) 켄타우로스 창기병 · 역마 장군을 쓰러뜨리면 가끔 나오는 알 (2026-10-02 사용자 선택 A).
+## 땅 속성. 농사를 맡으면 밭 갈기 (깊이 간 칸은 거둘 때 무 하나 더), 사냥 동행 = 뒷발차기 (멀리 밀어내고 잠깐 멈춤).
+const FOAL: CreatureSpecies = preload("res://data/creatures/species/foal.tres")
 
 ## 게임 시작 시 마을 공급함에 들어 있는 알
 const STARTER_EGG := SLIME

@@ -194,7 +194,7 @@ static func scrap_spot() -> Vector2i:
 ## 밭에 할 일이 없으면 한가한 동안 풀밭으로 채집하러 간다 (속성 효과 그대로). 풀밭에서도 할 게 없으면 제자리로.
 func _farm_once() -> bool:
 	var home_pos := Farm.center_of(home)
-	for t in CreatureJobs.FARM_ORDER:
+	for t in (CreatureJobs.PLOW_ORDER if data.species.job_aptitude.has(CreatureJobs.PLOW) else CreatureJobs.FARM_ORDER):
 		var work: Farm.Work = CreatureJobs.FARM_WORK[t]
 		# 채집하러 나가 있어도 밭 일은 제자리 기준으로 찾는다
 		var target: Variant = _farm.find_work(work, home, data.work_radius(), [], home_pos)

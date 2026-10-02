@@ -111,6 +111,14 @@ var _bus_to := Vector2.ZERO
 var _runs := 0
 ## 그림자 늑대 (밀목 wolf, 2026-09-30): 사냥꾼을 보면 둘레에 둘러서서 돌다가 하나씩 달려든다
 var wolf := false
+## 켄타우로스 창기병 (역동 lancer, 2026-10-02): 달려들기가 길다 (발 구름 예고 → 들판을 가로지르는 돌격 → 돌아서는 틈)
+var lancer := false
+## 달려들기 거리 · 시간 (보통 LUNGE_*, 창기병은 LANCER_*)
+var _lunge_len := Config.LUNGE_DISTANCE
+var _lunge_time := Config.LUNGE_TIME
+## 역마 장군 (역동 대장 general): 남은 창 돌격 수, 말발굽 쿵을 이번 차례에 했는지
+var _charges_left := 0
+var _stomped := false
 var _circling := false
 ## 산군 백호 (밀목 대장 tiger): 다음 패턴 차례 (0 도약 · 1 쓰러지는 나무 · 2 포효), 포효 예고 남은 시간(-1 = 아님)
 var _tiger_step := 0
@@ -176,7 +184,12 @@ func setup_zone(zone: int) -> void:
 	flyer = z.get("flyer", false)
 	wisp = z.get("wisp", false)
 	wolf = z.get("wolf", false)
+	lancer = z.get("lancer", false)
 	_angle = randf() * TAU
+	if lancer:
+		_lunge_len = Config.LANCER_DISTANCE
+		_lunge_time = Config.LANCER_TIME
+		_lunge_cd = randf() * Config.LANCER_COOLDOWN
 	if wolf:
 		# 둘러선 늑대가 한꺼번에 달려들지 않게 첫 쿨을 어긋나게
 		_lunge_cd = Config.WOLF_FIRST_GAP + randf() * Config.WOLF_LUNGE_COOLDOWN
@@ -199,6 +212,9 @@ func make_boss(zone := 0) -> void:
 	pattern = z.get("boss_pattern", &"")
 	wisp = false
 	wolf = false
+	lancer = false
+	_lunge_len = Config.LUNGE_DISTANCE
+	_lunge_time = Config.LUNGE_TIME
 	sheet = load(z.boss_sheet)
 	boss_frame = z.get("boss_frame", Vector2i.ZERO)
 	if boss_frame != Vector2i.ZERO:
@@ -233,6 +249,11 @@ func make_partner(zone := 0) -> void:
 	_pattern_cd = 3.0
 	if _sprite:
 		_apply_sheet()
+
+
+## 오른쪽을 보는 네발 짐승 그림 (늑대 · 백호 · 창기병 · 역마 장군)
+func _quad() -> bool:
+	return wolf or lancer or pattern == &"tiger" or pattern == &"general"
 
 
 func sort_y() -> float:
@@ -343,7 +364,7 @@ func telegraphs() -> Array[Dictionary]:
 
 func _telegraph_one() -> Dictionary:
 	if _windup >= 0.0:
-		return {kind = &"lane", from = position, to = position + _lunge_dir * Config.LUNGE_DISTANCE, width = Config.LUNGE_WIDTH * scale.x, progress = 1.0 - _windup / windup_time}
+		return {kind = &"lane", from = position, to = _stand_line(position, _lunge_dir, _lunge_len), width = Config.LUNGE_WIDTH * scale.x, progress = 1.0 - _windup / windup_time}
 	if _air_t >= 0.0:
 		return {kind = &"circle", at = _air_to, radius = Config.SLAM_RADIUS, progress = _air_t}
 	if _aim >= 0.0:
@@ -354,6 +375,10 @@ func _telegraph_one() -> Dictionary:
 		return {kind = &"circle", at = position, radius = Config.WISP_BURST_RADIUS, progress = 1.0 - _burst / windup_time}
 	if _roar >= 0.0:
 		return {kind = &"circle", at = position, radius = Config.TIGER_ROAR_RADIUS, progress = 1.0 - _roar / Config.TIGER_ROAR_WINDUP, roar = true}
+	if _bus_aim >= 0.0 and pattern == &"general":
+		return {kind = &"lane", from = _bus_from, to = _bus_to, width = Config.GENERAL_HIT_RADIUS * 2.0, progress = 1.0 - _bus_aim / _general_windup()}
+	if _bus_t >= 0.0 and pattern == &"general":
+		return {kind = &"lane", from = position, to = _bus_to, width = Config.GENERAL_HIT_RADIUS * 2.0, progress = 1.0}
 	if _bus_aim >= 0.0:
 		return {kind = &"lane", from = _bus_from, to = _bus_to, width = Config.BUS_WIDTH, progress = 1.0 - _bus_aim / Config.BUS_WINDUP}
 	if _bus_t >= 0.0:
@@ -362,6 +387,37 @@ func _telegraph_one() -> Dictionary:
 		# 굴러가는 중: 남은 길을 계속 보여 준다 (봇이 비킬 수 있게)
 		return {kind = &"lane", from = log_at(), to = _log_to, width = Config.LOG_WIDTH, progress = 1.0}
 	return {}
+
+
+## 역마 장군 돌격 예고 시간 (첫 돌격은 길게, 꺾어 잇는 돌격은 짧게)
+func _general_windup() -> float:
+	return Config.GENERAL_WINDUP if _charges_left >= Config.GENERAL_CHARGES else Config.GENERAL_NEXT_WINDUP
+
+
+## from 에서 dir 쪽으로 length 만큼 가되, 막힌 칸 (나무 · 바위 · 마방) 앞에서 멈춘 자리 (창기병 · 장군 돌격 띠 끝)
+func _stand_line(from: Vector2, dir: Vector2, length: float) -> Vector2:
+	var at := from
+	var step := 6.0
+	var went := 0.0
+	while went < length:
+		var nxt := (at + dir * minf(step, length - went)).clamp(area.position, area.end) if area.has_area() else at + dir * minf(step, length - went)
+		if terrain and not terrain.monster_ok(nxt):
+			break
+		if nxt == at:
+			break
+		at = nxt
+		went += step
+	return at
+
+
+## 역마 장군이 사냥꾼 쪽으로 창 돌격을 겨눈다
+func _aim_general(target: Vector2) -> void:
+	var dir := (target - position).normalized()
+	if dir == Vector2.ZERO:
+		dir = Vector2.LEFT
+	_bus_from = position
+	_bus_to = _stand_line(position, dir, Config.GENERAL_LENGTH)
+	_bus_aim = _general_windup()
 
 
 ## 굴러가는 통나무 자리
@@ -424,6 +480,8 @@ func tick(delta: float, target: Vector2) -> void:
 				_start_hop(target)
 	# 돌진·내려찍기도 깡충 그림을 쓴다
 	var hop_t := maxf(_hop_t, maxf(_lunge_t, _air_t))
+	if pattern == &"general" and _bus_t >= 0.0:
+		hop_t = fmod(_bus_t * 3.0, 1.0)
 	var hopping := hop_t >= 0.0
 	var cols := BURIED_COLUMNS if buried else (HOP_COLUMNS if hopping else IDLE_COLUMNS)
 	var col: int = HOP_COLUMNS[mini(int(hop_t * 4), 3)] if hopping else cols[int(_anim_time * 2.0) % 2]
@@ -434,10 +492,10 @@ func tick(delta: float, target: Vector2) -> void:
 		col = HOP_COLUMNS[int(_anim_time * 10.0) % 4] if in_air() else (BURIED_COLUMNS if _rest > 0.0 else IDLE_COLUMNS)[int(_anim_time * 3.0) % 2]
 	elif not _bales.is_empty() or _log_aim >= 0.0 or _log_t >= 0.0 or _roar >= 0.0:
 		col = BURIED_COLUMNS[int(_anim_time * 6.0) % 2]
-	elif (wolf or pattern == &"tiger") and _windup >= 0.0:
-		# 네발 짐승 (밀목): 6열 웅크림 · 7열 지침, 둘러서서 돌 땐 걷기
+	elif _quad() and (_windup >= 0.0 or (pattern == &"general" and _bus_aim >= 0.0)):
+		# 네발 짐승 (밀목 · 역동): 6열 웅크림 (창기병 · 장군은 앞발 들어 발 구름) · 7열 지침, 둘러서서 돌 땐 걷기
 		col = BURIED_COLUMNS[0]
-	elif (wolf or pattern == &"tiger") and (_recover > 0.0 or _stun > 0.0):
+	elif _quad() and (_recover > 0.0 or _stun > 0.0):
 		col = BURIED_COLUMNS[1]
 	elif wolf and _circling:
 		col = HOP_COLUMNS[int(_anim_time * 8.0) % 4]
@@ -460,9 +518,14 @@ func tick(delta: float, target: Vector2) -> void:
 	elif flyer:
 		# 요괴 까마귀 그림은 왼쪽을 본다: 내려찍는 쪽 · 사냥꾼 쪽으로
 		_sprite.flip_h = (_dive_to.x > position.x) if in_air() else (target.x > position.x)
-	if wolf or pattern == &"tiger":
+	if pattern == &"general":
+		_sprite.flip_h = (_bus_to.x < _bus_from.x) if (_bus_aim >= 0.0 or _bus_t >= 0.0) else (target.x < position.x)
+	elif _quad():
 		# 네발 짐승 그림은 오른쪽을 본다: 사냥꾼 쪽 (달려드는 중이면 달려드는 쪽) 으로 뒤집는다
 		_sprite.flip_h = (_lunge_dir.x < 0.0) if (_windup >= 0.0 or _lunge_t >= 0.0) else (target.x < position.x)
+		if lancer and _recover > 0.0:
+			# 돌격 뒤 돌아서는 동안은 달려온 쪽을 그대로 본다
+			_sprite.flip_h = _lunge_dir.x < 0.0
 	if boss_frame != Vector2i.ZERO:
 		z_index = int(sort_y())
 		_sprite.modulate = Color(1, 1, 1) * 2.0 if _flash > 0.0 and int(_flash * 20) % 2 == 0 else _tint
@@ -472,7 +535,7 @@ func tick(delta: float, target: Vector2) -> void:
 	var lift := sin(_air_t * PI) * 60.0 / scale.y if _air_t >= 0.0 else 0.0
 	if flyer and in_air():
 		lift = Config.FLY_HEIGHT * (1.0 - maxf(_dive_t, 0.0)) / scale.y
-	var crouch := _windup >= 0.0 or _aim >= 0.0 or _log_aim >= 0.0
+	var crouch := (_windup >= 0.0 and not lancer) or _aim >= 0.0 or _log_aim >= 0.0
 	_sprite.position = Vector2(-_frame * _px / 2.0, BOTTOM_Y - _frame * _px - lift)
 	# 웅크림: 납작해졌다가 튀어나간다. 대장은 배율을 바꾸면 도트가 깨져서 대신 2px 내려앉는다.
 	if boss:
@@ -507,14 +570,14 @@ func _tick_attack(delta: float, target: Vector2) -> bool:
 			_lunge_t = 0.0
 		return true
 	if _lunge_t >= 0.0:
-		_lunge_t = minf(_lunge_t + delta / Config.LUNGE_TIME, 1.0)
-		var to := _stand(_lunge_from + _lunge_dir * Config.LUNGE_DISTANCE * _lunge_t)
+		_lunge_t = minf(_lunge_t + delta / _lunge_time, 1.0)
+		var to := _stand(_lunge_from + _lunge_dir * _lunge_len * _lunge_t)
 		var blocked := to == position and _lunge_t < 1.0
 		position = to
 		if _lunge_t >= 1.0 or blocked:
 			_lunge_t = -1.0
-			_recover = Config.LUNGE_RECOVER
-			_lunge_cd = Config.WOLF_LUNGE_COOLDOWN if wolf else Config.LUNGE_COOLDOWN
+			_recover = Config.LANCER_RECOVER if lancer else Config.LUNGE_RECOVER
+			_lunge_cd = Config.WOLF_LUNGE_COOLDOWN if wolf else (Config.LANCER_COOLDOWN if lancer else Config.LUNGE_COOLDOWN)
 		return true
 	if _air_t >= 0.0:
 		_air_t = minf(_air_t + delta / Config.SLAM_AIR_TIME, 1.0)
@@ -524,6 +587,9 @@ func _tick_attack(delta: float, target: Vector2) -> bool:
 			position = _stand(_air_to)
 			_recover = Config.SLAM_RECOVER
 			_pattern_cd = Config.TIGER_LEAP_COOLDOWN if pattern == &"tiger" else Config.SLAM_COOLDOWN
+			if pattern == &"general":
+				# 말발굽 쿵 뒤엔 바로 창 돌격으로 잇는다 (헐떡임만 잠깐)
+				_pattern_cd = 0.0
 			slammed.emit(position)
 		return true
 	if _aim >= 0.0:
@@ -569,6 +635,26 @@ func _tick_attack(delta: float, target: Vector2) -> bool:
 			roared.emit(position)
 			_recover = Config.TIGER_ROAR_RECOVER
 			_pattern_cd = Config.TIGER_ROAR_COOLDOWN
+		return true
+	if _bus_t >= 0.0 and pattern == &"general":
+		# 역마 장군 창 돌격: 막힌 칸 앞에서 멈춘다. 다 달리면 사냥꾼 쪽으로 꺾어 다음 돌격, 세 번 뒤 헐떡임.
+		_bus_t = minf(_bus_t + delta / Config.GENERAL_TIME, 1.0)
+		var to := _stand(_bus_from.lerp(_bus_to, _bus_t))
+		var blocked := to == position and _bus_t < 1.0 and _bus_t > 0.2
+		position = to
+		rammed.emit(position)
+		if _bus_t >= 1.0 or blocked:
+			_bus_t = -1.0
+			_charges_left -= 1
+			if _charges_left > 0:
+				_aim_general(target)
+			else:
+				_recover = Config.GENERAL_RECOVER
+				_pattern_cd = Config.GENERAL_COOLDOWN
+				_stomped = false
+				_runs += 1
+				if _runs % 2 == 0:
+					called.emit(position)
 		return true
 	if _bus_t >= 0.0:
 		_bus_t = minf(_bus_t + delta / Config.BUS_TIME, 1.0)
@@ -651,6 +737,17 @@ func _tick_attack(delta: float, target: Vector2) -> bool:
 				2:
 					_roar = Config.TIGER_ROAR_WINDUP
 			return true
+		if pattern == &"general" and _pattern_cd <= 0.0 and d <= Config.GENERAL_RANGE:
+			# 체력 절반 아래면 돌격 앞에 말발굽 쿵 (도약 → 착지 원)
+			if hp * 2 < max_hp and not _stomped:
+				_stomped = true
+				_air_from = position
+				_air_to = _stand(target)
+				_air_t = 0.0
+				return true
+			_charges_left = Config.GENERAL_CHARGES
+			_aim_general(target)
+			return true
 		if pattern == &"tongue" and _pattern_cd <= 0.0 and d <= Config.TONGUE_RANGE:
 			_tongue_to = position + (target - position).normalized() * Config.TONGUE_RANGE
 			_aim = Config.TONGUE_WINDUP
@@ -685,10 +782,14 @@ func _tick_attack(delta: float, target: Vector2) -> bool:
 		position = to
 		_circling = true
 		return true
-	if may_attack and _lunge_cd <= 0.0 and d <= Config.LUNGE_TRIGGER:
+	if may_attack and _lunge_cd <= 0.0 and d <= (Config.LANCER_TRIGGER if lancer else Config.LUNGE_TRIGGER):
 		_lunge_dir = (target - position).normalized()
 		if _lunge_dir == Vector2.ZERO:
 			_lunge_dir = Vector2.DOWN
+		if lancer and position.distance_to(_stand_line(position, _lunge_dir, _lunge_len)) < Config.LANCER_DISTANCE * 0.4:
+			# 창기병: 앞이 나무 · 바위로 막혀 짧으면 돌격하지 않고 자리를 옮긴다
+			_lunge_cd = 0.5
+			return false
 		_windup = windup_time
 		return true
 	return false

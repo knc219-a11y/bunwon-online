@@ -2385,7 +2385,9 @@ func _ready() -> void:
 	GameState.barn_state = 0
 	HuntGround.egg_roll = 0.0
 	mh._defeat(m_boss)
-	_check(GameState.material3 == 1 and GameState.barn_boss_down and not mh.path_open, "산군 백호를 쓰러뜨리면 산군 발톱 1 (더 깊은 곳은 아직 막힘)")
+	_check(GameState.material3 == 1 and GameState.barn_boss_down and mh.path_open and mh.gate_closed() and mh.path_block().contains("축사"), "산군 백호를 쓰러뜨리면 산군 발톱 1, 역동 쪽 목책은 축사를 고쳐야 열림")
+	main.hunter.position = mh.next_area().get_center()
+	_check(not mh.advance() and mh.zone == m_zi, "목책이 닫혀 있으면 역동으로 못 감")
 	_check(mh.drops.size() == 1 and mh.drops[0].species == CreatureCatalog.WHITE_TIGER, "확률에 걸리면 대장 알이 아기 백호")
 	HuntGround.egg_roll = 0.15
 	var m_boss2: WildSlime = mh.spawn_boss()
@@ -2508,7 +2510,7 @@ func _ready() -> void:
 	await get_tree().process_frame
 	TestStarts.apply(ex, &"barn")
 	var ex_idle := Expedition.idle(ex)
-	_check(Expedition.zones() == range(Config.HUNT_ZONES.size()) and ex_idle.size() == 5, "원정: 대장 잡은 구역 %s · 쉬는 · 채집 %d마리" % [Expedition.zones(), ex_idle.size()])
+	_check(Expedition.zones() == range(6) and ex_idle.size() == 5, "원정: 대장 잡은 구역 %s · 쉬는 · 채집 %d마리" % [Expedition.zones(), ex_idle.size()])
 	ex.farmer.position = ex.hunt_gate.position + Vector2(0, 8)
 	ex._set_active(ex.farmer)
 	ex.interact()
@@ -2573,6 +2575,9 @@ func _ready() -> void:
 
 	# 46) 사냥꾼 레벨 · 스킬 (2026-10-02 사용자 선택 B: 무기 트리 셋 + 조련)
 	await _hunter_skill_checks()
+
+	# 47) 4막 첫 구역 역동 (2026-10-02 사용자 선택 A): 켄타우로스 창기병 · 역마 장군 · 아기 망아지 (밭 갈기 · 뒷발차기)
+	await _yeokdong_checks()
 
 	# 41) 저장/불러오기 (2026-09-30 사용자 선택 C 디아2식): 저장 → 장면을 버리고 → 새 장면에 불러오면 모든 상태가 같다
 	await _save_load_checks()
@@ -3141,5 +3146,130 @@ func _hunter_skill_checks() -> void:
 	m.leave_hunt()
 	_check(c1.process_mode == Node.PROCESS_MODE_INHERIT and c2.process_mode == Node.PROCESS_MODE_INHERIT, "돌아오면 두 동행 모두 밭 일로")
 	HuntGround.feel = false
+	m.queue_free()
+	await get_tree().process_frame
+
+
+func _yeokdong_checks() -> void:
+	var m: Node2D = load("res://scenes/main.tscn").instantiate()
+	add_child(m)
+	await get_tree().process_frame
+	var zi := 6
+	var z: Dictionary = Config.HUNT_ZONES[zi]
+	_check(z.name == "역동" and z.monster == "켄타우로스 창기병" and z.boss_monster == "역마 장군" and z.lancer and z.boss_pattern == &"general" and Config.ZONE_MONSTER_LEVEL[zi] == 18, "7구역 역동: 창기병 · 역마 장군 · 몬스터 Lv 18")
+	var ymap := HuntMap.load_map("yeokdong")
+	_check(not ymap.find("K").is_empty() and not ymap.find("W").is_empty() and not ymap.find("S").is_empty() and not ymap.find("H").is_empty(), "역동 칸 지도: 대장 자리 (마방) · 웨이포인트 · 입구")
+	_check(not HunterSkills.is_act_boss_zone(zi), "역동은 막 대장 구역이 아님 (4막 대장은 곤지암)")
+	TestStarts.apply(m, &"yeokdong")
+	_check(GameState.barn_state == 2 and zi in GameState.waypoints and GameState.hunter_level == TestStarts.LEVELS[&"yeokdong"], "시작 지점 역동 앞: 축사 · 역동 웨이포인트 · Lv %d" % TestStarts.LEVELS[&"yeokdong"])
+	# 밀목 윗길: 축사를 고쳤으면 열림
+	GameState.hunts_today = 0
+	m.enter_hunt(null, 5)
+	var mh: HuntGround = m.hunt
+	mh.set_ai(false)
+	mh.set_process(false)
+	mh.path_open = true
+	m.hunter.position = mh.next_area().get_center()
+	_check(not mh.gate_closed() and mh.advance() and mh.zone == zi, "축사를 고쳤으면 밀목 윗길로 역동에 감")
+	m.leave_hunt()
+	# 아기 망아지
+	var foal: Creature = m._hatch(CreatureCatalog.FOAL, Config.FORAGE_CELLS[5])
+	_check(foal.data.species.display_name == "아기 망아지" and foal.data.elements[0].id == &"earth" and HuntCompanion.style_name(foal.data) == "뒷발차기", "아기 망아지 (땅, 동행 뒷발차기)")
+	# 밭 갈기: 깊이 간 칸은 거둘 때 무 +1, 거두면 보통 칸
+	var farm: Farm = m.farm
+	var cell: Vector2i = farm._cells.keys()[0]
+	var c: Farm.Cell = farm.get_cell(cell)
+	c.planted = false
+	c.plowed = false
+	_check(farm.do_work(Farm.Work.PLOW, cell) and c.plowed and c.tilled and not farm.can_do(Farm.Work.PLOW, cell), "밭 갈기: 깊이 간 칸 (다시 못 감)")
+	GameState.seeds = 5
+	farm.do_work(Farm.Work.SOW, cell)
+	c.growth = Config.CROP_GROW_DAYS
+	var crops0 := GameState.crops
+	_check(farm.do_work(Farm.Work.HARVEST, cell) and GameState.crops == crops0 + 1 + Config.PLOW_BONUS and not c.plowed, "깊이 간 칸에서 거두면 무 %d개, 다시 보통 칸" % (1 + Config.PLOW_BONUS))
+	foal.home = cell
+	foal.job = CreatureJobs.FARM
+	foal._busy = false
+	_check(foal._farm_once() and foal.task == CreatureJobs.PLOW, "농사를 맡은 아기 망아지는 거둔 빈 칸을 먼저 깊이 감")
+	# 사냥: 창기병 돌격 · 역마 장군
+	GameState.hunts_today = 0
+	m.enter_hunt(foal, zi)
+	var h: HuntGround = m.hunt
+	h.set_ai(false)
+	h.set_process(false)
+	h.companion_ai = false
+	_check(h.zone == zi and h.slimes.size() == z.count * h.swarm_size() and h.slimes.all(func(o: WildSlime) -> bool: return o.lancer), "역동에 들어옴: 창기병 %d마리 (자리마다 %d)" % [h.slimes.size(), h.swarm_size()])
+	# 넓은 들판 가운데로 (입구는 숲 사이라 돌격 띠가 짧다)
+	m.hunter.position = Vector2(30, 11) * Config.TILE
+	var feet: Vector2 = m.hunter.feet()
+	for o: WildSlime in h.slimes:
+		o.position = feet + Vector2(-600, 0)
+		o.ai_enabled = false
+	var l: WildSlime = h.slimes[0]
+	l.position = feet + Vector2(100, 0)
+	l.ai_enabled = true
+	l._lunge_cd = 0.0
+	l._rest = 0.0
+	l.tick(1.0 / 30.0, feet)
+	var tg := l.telegraph()
+	_check(l.attacking() and not tg.is_empty() and tg.from.distance_to(tg.to) > 120.0, "창기병: %d px 밖에서 긴 띠 예고 (돌격 %d px)" % [100, roundi(tg.from.distance_to(tg.to)) if not tg.is_empty() else 0])
+	var hearts0 := h.hearts
+	for i in 90:
+		h.tick(1.0 / 30.0)
+		if l.recovering():
+			break
+	_check(h.hearts == hearts0 - z.damage and l.recovering() and l.position.x < feet.x, "돌격에 받히면 하트 -%d, 지나쳐서 돌아서는 동안이 칠 틈" % z.damage)
+	l.queue_free()
+	h.slimes.erase(l)
+	for o: WildSlime in h.slimes.duplicate():
+		o.queue_free()
+	h.slimes.clear()
+	var b: WildSlime = h.spawn_boss()
+	_check(b.boss and b.pattern == &"general" and b.title == "역마 장군" and is_equal_approx(b._sprite.scale.x * b.scale.x, 2.0), "역마 장군 (32칸 시트를 정수 2배로)")
+	h._invulnerable = 0.0
+	b.position = m.hunter.feet() + Vector2(120, 0)
+	b.ai_enabled = true
+	b._pattern_cd = 0.0
+	b.tick(1.0 / 30.0, m.hunter.feet())
+	_check(b._charges_left == Config.GENERAL_CHARGES and b._bus_aim > 0.0 and not b.telegraph().is_empty(), "역마 장군: 창 돌격 %d번 예고" % Config.GENERAL_CHARGES)
+	h.hearts = 20  # 돌격 여러 번에 받혀도 쓰러지지 않게 (피해 3)
+	var hearts1 := h.hearts
+	var charges_seen := 0
+	var last := b._charges_left
+	for i in 300:
+		h.tick(1.0 / 30.0)
+		if b._charges_left != last:
+			charges_seen += 1
+			last = b._charges_left
+		if b.recovering():
+			break
+	_check(charges_seen == Config.GENERAL_CHARGES and b.recovering() and h.hearts < hearts1, "꺾이는 돌격 %d번 뒤 헐떡임, 받히면 다침 (하트 %d → %d)" % [charges_seen, hearts1, h.hearts])
+	# 파발 나팔: 창기병이 원래 크기로 달려옴
+	h._on_called(b.position)
+	var calls := h.slimes.filter(func(o: WildSlime) -> bool: return o.minion)
+	_check(calls.size() == Config.GENERAL_CALL and calls.all(func(o: WildSlime) -> bool: return o.lancer and o.scale == Vector2.ONE and o.hp == Config.GENERAL_MINION_HP), "파발 나팔: 창기병 %d (원래 크기, 체력 %d)" % [Config.GENERAL_CALL, Config.GENERAL_MINION_HP])
+	# 체력 절반 아래면 말발굽 쿵 (새끼 없음)
+	b._recover = 0.0
+	b._pattern_cd = 0.0
+	b._charges_left = 0
+	b._bus_aim = -1.0
+	b._bus_t = -1.0
+	b.hp = b.max_hp / 2 - 1
+	b.tick(1.0 / 30.0, m.hunter.feet())
+	_check(b._air_t >= 0.0 and b._stomped, "체력 절반 아래: 돌격 앞에 말발굽 쿵")
+	var n0 := h.slimes.size()
+	h._on_slammed(b.position, b)
+	_check(h.slimes.size() == n0, "말발굽 쿵은 새끼를 부르지 않음")
+	# 뒷발차기
+	var t := WildSlime.new()
+	t.setup_zone(zi)
+	t.area = h.monster_area()
+	t.terrain = h.map
+	t.position = h.companion.position + Vector2(10, 0)
+	h.add_child(t)
+	h.slimes.append(t)
+	h.companion_attack(t, h.companion)
+	_check(t.stunned() and t._pull_to.distance_to(t._pull_from) > 20.0, "뒷발차기: 멀리 밀리며 잠깐 멈춤")
+	m.leave_hunt()
 	m.queue_free()
 	await get_tree().process_frame

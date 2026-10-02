@@ -2,7 +2,8 @@ class_name Farm
 extends Node2D
 ## 농장 타일 상태와 농사 동작. 바닥은 assets/tiles 의 타일셋으로 그린다 (docs/sprites.md "농장 바닥 타일").
 
-enum Work { TILL, SOW, WATER, HARVEST }
+## PLOW 깊이 갈기 (2026-10-02 아기 망아지): 심지 않은 칸을 깊이 갈아 두면 거둘 때 무 Config.PLOW_BONUS 개 더
+enum Work { TILL, SOW, WATER, HARVEST, PLOW }
 
 const TILES := preload("res://assets/tiles/farm_tiles.png")
 const CROPS := preload("res://assets/tiles/crops.png")
@@ -27,6 +28,8 @@ class Cell:
 	var watered := false
 	## 물을 준 채로 지난 날 수
 	var growth := 0
+	## 깊이 간 칸 (아기 망아지 밭 갈기): 거두면 무가 더 나오고 보통 칸으로 돌아간다
+	var plowed := false
 
 	func is_ripe() -> bool:
 		return planted and growth >= Config.CROP_GROW_DAYS
@@ -119,6 +122,8 @@ func can_do(work: Work, cell: Vector2i) -> bool:
 			return c.planted and not c.watered and not c.is_ripe()
 		Work.HARVEST:
 			return c.is_ripe()
+		Work.PLOW:
+			return not c.planted and not c.plowed
 	return false
 
 
@@ -136,11 +141,15 @@ func do_work(work: Work, cell: Vector2i) -> bool:
 			GameState.seeds -= 1
 		Work.WATER:
 			c.watered = true
+		Work.PLOW:
+			c.tilled = true
+			c.plowed = true
 		Work.HARVEST:
 			c.planted = false
 			c.watered = false
 			c.growth = 0
-			GameState.crops += 1
+			GameState.crops += 1 + (Config.PLOW_BONUS if c.plowed else 0)
+			c.plowed = false
 			GameState.seeds += Config.SEEDS_PER_HARVEST
 	queue_redraw()
 	GameState.touch()
@@ -298,6 +307,12 @@ func _draw() -> void:
 		if c.tilled:
 			# 마른 밭과 젖은 밭은 서로 이어진다 (물 주기로 밭 모양이 바뀌지 않게)
 			_tile(cell, TILES, _mask(cell, _is_tilled), ROW_WATERED if c.watered else ROW_TILLED)
+		if c.plowed:
+			# 깊이 간 칸: 흙이 짙고 가장자리에 흙덩이 (거두면 무가 더 나옴)
+			var o := Vector2(cell * Config.TILE)
+			draw_rect(Rect2(o, Vector2(Config.TILE, Config.TILE)), Color(0.22, 0.12, 0.06, 0.24))
+			for k in 3:
+				draw_rect(Rect2(o + Vector2(3 + k * 8, Config.TILE - 4), Vector2(3, 2)), Color(0.36, 0.22, 0.13))
 		if c.planted:
 			_tile(cell, CROPS, crop_stage(c), 0)
 	# 울타리는 위 줄부터 그려 아래 칸 기둥이 위 칸 가로대를 덮게 한다

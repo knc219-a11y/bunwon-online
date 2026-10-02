@@ -543,12 +543,20 @@ func road_dark() -> bool:
 	return zone == Config.YAK_ZONE and GameState.yak_state < 2
 
 
+## 닫힌 역동 길 (2026-10-02 역동, Claude 기본값): 밀목 대장을 잡아도 역동 쪽 목책이 닫혀 있어, 축사를 고쳐야 목축인이
+## 역마 다루는 법을 알려 주고 길을 연다 (대장간 → 광동리, 약방 → 번천 처럼 시설 하나가 다음 막을 연다).
+func gate_closed() -> bool:
+	return zone == Config.BARN_ZONE and GameState.barn_state < 2
+
+
 ## 위쪽 길이 막혔으면 그 까닭 (비었으면 안 막힘)
 func path_block() -> String:
 	if bridge_broken():
 		return "쇠다리가 끊겨 있어 건널 수 없다. 대장간을 고치면 대장장이가 이어 줄 것 같다."
 	if road_dark():
 		return "번천 쪽은 너무 캄캄해서 한 발짝도 못 가겠다. 약방을 고치면 연금술사가 호롱을 만들어 줄 것 같다."
+	if gate_closed():
+		return "역동 쪽 목책이 닫혀 있고, 너머에서 말발굽 소리가 들린다. 축사를 고치면 목축인이 길을 열어 줄 것 같다."
 	return ""
 
 
@@ -914,7 +922,7 @@ func _tick_companion(companion: HuntCompanion, delta: float) -> void:
 		return
 	var target := _nearest_slime(companion.position, true)
 	if companion_ai:
-		var chase := companion.style in [HuntCompanion.Style.BUMP, HuntCompanion.Style.ROAR, HuntCompanion.Style.SPIRIT] and target != null \
+		var chase := companion.style in [HuntCompanion.Style.BUMP, HuntCompanion.Style.ROAR, HuntCompanion.Style.SPIRIT, HuntCompanion.Style.KICK] and target != null \
 			and target.position.distance_to(hunter.feet()) <= Config.COMPANION_CHASE_DISTANCE
 		if chase:
 			companion.move_toward_point(target.position, delta)
@@ -969,6 +977,14 @@ func companion_attack(target: WildSlime, companion: HuntCompanion = null) -> voi
 		target.pull_to((companion.position + toward * Config.COMPANION_PULL_GAP).clamp(target.area.position, target.area.end))
 		target.stun(Config.COMPANION_PULL_STUN)
 		companion.pulling = target
+	elif companion.style == HuntCompanion.Style.KICK:
+		# 아기 망아지 뒷발차기 (2026-10-02 역동): 멀리 밀려나며 잠깐 멈춘다 (대장은 멈추기만)
+		if not target.boss:
+			var away := (target.position - companion.position).normalized()
+			if away == Vector2.ZERO:
+				away = Vector2.UP
+			target.pull_to(target._stand(target.position + away * Config.COMPANION_KICK_PUSH))
+			target.stun(Config.COMPANION_KICK_STUN)
 	elif companion.style == HuntCompanion.Style.BUMP:
 		# 박치기는 더 멀리 밀쳐낸다
 		var away := (target.position - companion.position).normalized()
@@ -1188,6 +1204,8 @@ func _defeat(s: WildSlime) -> void:
 		GameState.notify("%s을(를) 쓰러뜨렸다! 위쪽 길이 보이지만 %d구역 %s로 가는 쇠다리가 끊겨 있다. 대장간을 고치면 이어질 것 같다.%s" % [who, zone + 2, Config.HUNT_ZONES[zone + 1].name, material_text])
 	elif s.boss and road_dark():
 		GameState.notify("%s을(를) 쓰러뜨렸다! 위쪽 길 너머 %d구역 %s 쪽은 캄캄하다. 약방을 고치면 연금술사가 호롱을 만들어 줄 것 같다.%s" % [who, zone + 2, Config.HUNT_ZONES[zone + 1].name, material_text])
+	elif s.boss and gate_closed():
+		GameState.notify("%s을(를) 쓰러뜨렸다! 위쪽 길 너머 %d구역 %s 쪽 목책이 닫혀 있다. 축사를 고치면 목축인이 열어 줄 것 같다.%s" % [who, zone + 2, Config.HUNT_ZONES[zone + 1].name, material_text])
 	elif s.boss and zone + 1 < Config.HUNT_ZONES.size():
 		GameState.notify("%s을(를) 쓰러뜨렸다! 위쪽 길이 열렸다. 길에서 F로 %d구역 %s, 아래 입구 F로 마을.%s" % [who, zone + 2, Config.HUNT_ZONES[zone + 1].name, material_text])
 	elif s.boss:
@@ -1302,8 +1320,8 @@ func _on_slammed(at: Vector2, boss: WildSlime = null) -> void:
 		boss = _boss()
 	if _invulnerable <= 0.0 and d.length() <= Config.SLAM_RADIUS and boss:
 		_hurt(at, boss.damage, boss.title, "%s이(가) 쿵 내려찍었다!" % boss.title)
-	if knocked or (boss and boss.pattern == &"tiger"):
-		# 산군 백호의 도약은 새끼를 부르지 않는다
+	if knocked or (boss and boss.pattern in [&"tiger", &"general"]):
+		# 산군 백호의 도약 · 역마 장군의 말발굽 쿵은 새끼를 부르지 않는다
 		return
 	var minions := slimes.filter(func(o: WildSlime) -> bool: return o.minion).size()
 	for i in mini(Config.SLAM_MINIONS, Config.SLAM_MINION_MAX - minions):
@@ -1351,6 +1369,11 @@ func _on_burst(at: Vector2, s: WildSlime) -> void:
 ## 유령 막차가 달린다: 버스에 닿으면 다친다 (다친 뒤 잠깐 무적이라 한 번만).
 func _on_rammed(at: Vector2, boss: WildSlime) -> void:
 	var feet := hunter.feet()
+	if boss.pattern == &"general":
+		# 역마 장군 창 돌격: 몸 둘레에 닿으면 받힌다
+		if _invulnerable <= 0.0 and not knocked and feet.distance_to(at) <= Config.GENERAL_HIT_RADIUS + 4.0:
+			_hurt(at, boss.damage, boss.title, "%s의 창 돌격에 받혔다!" % boss.title)
+		return
 	var d := feet - at
 	if _invulnerable <= 0.0 and not knocked and absf(d.x) <= 44.0 and absf(d.y) <= Config.BUS_WIDTH / 2.0 + 4.0:
 		_hurt(at, boss.damage, boss.title, "%s에 치였다!" % boss.title)
@@ -1368,6 +1391,25 @@ func _on_called(at: Vector2) -> void:
 	if knocked:
 		return
 	var minions := slimes.filter(func(o: WildSlime) -> bool: return o.minion).size()
+	if Config.HUNT_ZONES[zone].get("boss_pattern") == &"general":
+		# 역마 장군 파발 나팔 (2026-10-02 역동): 창기병이 원래 크기로 달려온다 (작게 줄이면 도트가 깨짐). 체력은 낮고 드롭 · 알 없음.
+		for i in mini(Config.GENERAL_CALL, Config.SLAM_MINION_MAX - minions):
+			var l := WildSlime.new()
+			l.setup_zone(zone)
+			l.minion = true
+			l.title = "파발 " + l.title
+			l.hp = Config.GENERAL_MINION_HP
+			l.max_hp = l.hp
+			l.area = monster_area()
+			l.terrain = map
+			l.position = l._stand(at + Vector2(-50 if i == 0 else 50, 30))
+			l.ai_enabled = _ai_on
+			l._lunge_cd = 1.0 + i * 0.8
+			add_child(l)
+			slimes.append(l)
+		GameState.notify("역마 장군이 파발 나팔을 불자 창기병이 달려왔다!")
+		GameState.touch()
+		return
 	for i in mini(Config.STRAW_CALL, Config.SLAM_MINION_MAX - minions):
 		var m := WildSlime.new()
 		m.setup_zone(zone)
@@ -1687,6 +1729,8 @@ func _draw_ground(n: Node2D) -> void:
 		_draw_labels(n)
 		if zone == Config.FORGE_ZONE:
 			_draw_bridge(n)
+		if gate_closed():
+			_draw_gate(n)
 		_draw_waypoint(n)
 		return
 	var tiles: Texture2D = preload("res://assets/tiles/farm_tiles.png")
@@ -1744,6 +1788,20 @@ func _draw_bridge(n: Node2D) -> void:
 	if broken:
 		n.draw_line(p + Vector2(-16, 0), p + Vector2(-8, 5), Color(0.3, 0.25, 0.22), 1.0)
 		n.draw_line(p + Vector2(10, 1), p + Vector2(16, 6), Color(0.3, 0.25, 0.22), 1.0)
+
+
+## 밀목 윗길 역동 쪽 목책 (임시 그림): 축사를 고치기 전엔 통나무 말뚝이 길을 막고 있다
+func _draw_gate(n: Node2D) -> void:
+	var post := Color(0.48, 0.34, 0.22)
+	var dark := Color(0.3, 0.2, 0.14)
+	for p in map.find("N"):
+		var base := p + Vector2(0, T * 0.5)
+		for i in 4:
+			var x := base.x - T * 0.5 + 3 + i * 6
+			n.draw_rect(Rect2(x, base.y - 18, 4, 18), post)
+			n.draw_rect(Rect2(x, base.y - 20, 4, 2), dark)
+		for y in [-14.0, -7.0]:
+			n.draw_rect(Rect2(base.x - T * 0.5, base.y + y, T, 2), dark)
 
 
 ## 창고 벽 간판 (구역 데이터 labels: 칸 자리 + 글씨)
@@ -1813,6 +1871,8 @@ func _draw_hud() -> void:
 			pt = "▲ 위쪽 길: 쇠다리가 끊김 (대장간을 고치면 이어짐)"
 		elif road_dark():
 			pt = "▲ 위쪽 길: 캄캄함 (약방을 고치면 연금술사가 호롱을 만들어 줌)"
+		elif gate_closed():
+			pt = "▲ 위쪽 길: 목책이 닫힘 (축사를 고치면 목축인이 열어 줌)"
 		var pw := font.get_string_size(pt, HORIZONTAL_ALIGNMENT_LEFT, -1, 9).x
 		_hud.draw_rect(Rect2(13 * T - pw / 2 - 3, 2 * T - 10, pw + 6, 13), Color(0, 0, 0, 0.55))
 		_hud.draw_string(font, Vector2(13 * T - pw / 2, 2 * T), pt, HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(1.0, 0.9, 0.35))

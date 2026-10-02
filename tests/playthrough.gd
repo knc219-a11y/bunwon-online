@@ -97,6 +97,14 @@ var lunches_eaten := 0
 var hen_eggs_sold := 0
 var weasel_nights := 0
 var tigers_got := {}
+## 역동 (2026-10-02, 4막 첫 구역): 첫 도착 · 사냥 수 · 맞은 횟수 · 쓰러짐, 아기 망아지 알 · 깊이 간 칸에서 더 거둔 무
+const YEOKDONG := 6
+var yd_day := -1
+var yd_hunts := 0
+var yd_hurt := 0
+var yd_knocked := 0
+var foals_got := 0
+var plow_bonus := 0
 ## 크리처 원정 + 입양 (2026-10-01). EXPEDITION=0 이면 끈다 (비교용).
 var expedition_on := true
 ## 채집으로 마을에 남겨 두는 크리처 수 (풀밭 들나물이 하루 7~8포기라 그 정도)
@@ -171,15 +179,19 @@ func _ready() -> void:
 		float(mil_hurt) / maxi(mil_hunts, 1), mil_knocked, GameState.material3, "%d일" % barn_site_day if barn_site_day > 0 else "없음",
 		"%d일" % barn_restore_day if barn_restore_day > 0 else "없음", GameState.hens, GameState.chicks.size(), hen_eggs_sold, lunches_eaten, weasel_nights, tigers_got,
 		feed_creature.describe() if feed_creature else "없음"])
+	_log("\n역동: 첫 도착 %s · 역마 장군 첫 처치 %s · 역동 사냥 %d번 · 거기서 맞은 횟수 %d (한 번에 %.1f) · 쓰러짐 %d번 · 아기 망아지 알 %d · 농사 맡은 망아지 %d · 깊이 간 칸에서 더 거둔 무 %d" % [
+		"%d일" % yd_day if yd_day > 0 else "없음", cleared_day.get(Config.HUNT_ZONES[YEOKDONG].name, "없음"), yd_hunts, yd_hurt,
+		float(yd_hurt) / maxi(yd_hunts, 1), yd_knocked, foals_got,
+		main.creatures.filter(func(c: Creature) -> bool: return c.data.species == CreatureCatalog.FOAL and c.job == CreatureJobs.FARM).size(), plow_bonus])
 	var crowd := []
-	for d in [20, 40, 60, 80]:
+	for d in [20, 40, 60, 80, 100]:
 		if crowd_by_day.has(d):
 			var c: Array = crowd_by_day[d]
 			crowd.append("%d일 전체 %d · 놀고 있는 %d · 원정 %d · 입양 %d" % [d, c[0], c[1], c[2], c[3]])
 	_log("\n크리처 원정 · 입양 (%s): %s · 원정 돈 합 %d원 · 원정 장비 %d · 입양 %d마리 %s" % ["켬" if expedition_on else "끔", " / ".join(crowd), expedition_money, expedition_gear, adopted_n,
 		GameState.adopted.map(func(a: Dictionary) -> String: return "%s→%s" % [load(a.species).display_name, a.who])])
 	var lv := []
-	for d in [2, 5, 10, 15, 20, 25, 30, 40, 50, 60, 70, 80]:
+	for d in [2, 5, 10, 15, 20, 25, 30, 40, 50, 60, 70, 80, 90, 100, 110]:
 		if level_by_day.has(d):
 			lv.append("%d일 Lv%d" % [d, level_by_day[d]])
 	_log("\n사냥꾼 레벨 (%s): %s · 끝 Lv %d (남은 포인트 %d) · 찍은 스킬 %s" % ["스킬 찍음" if skills_on else "스킬 안 찍음", " · ".join(lv), GameState.hunter_level, GameState.skill_points, GameState.skills])
@@ -318,6 +330,22 @@ func place_new_creatures() -> void:
 		if s.home != main.HATCH_CELL and s.job == CreatureJobs.FORAGE and s != scrap_creature and s.data.species != CreatureCatalog.SPARROW:
 			_assign(s, CreatureJobs.FARM, farmers)
 			farmers += 1
+	# 아기 망아지 (2026-10-02 역동): 밭이 다 찼으면 슬라임 농사 하나를 채집으로 돌리고 그 밭을 맡긴다 (밭 갈기, 플레이어가 할 법한 배치)
+	for s: Creature in main.creatures:
+		if s.home != main.HATCH_CELL or s.data.species != CreatureCatalog.FOAL or farmers < GameState.open_plots:
+			continue
+		for o: Creature in main.creatures:
+			if o.job != CreatureJobs.FARM or o.data.species != CreatureCatalog.SLIME or o.home == main.HATCH_CELL:
+				continue
+			var plot_i := -1
+			for i in GameState.open_plots:
+				if Config.FIELD_PLOTS[i].has_point(o.home):
+					plot_i = i
+			if plot_i < 0:
+				continue
+			_assign(o, CreatureJobs.FORAGE, 0)
+			_assign(s, CreatureJobs.FARM, plot_i)
+			break
 	for s: Creature in main.creatures:
 		if s.home != main.HATCH_CELL:
 			continue
@@ -432,6 +460,10 @@ func _assign(s: Creature, want: StringName, plot_i: int) -> void:
 
 
 func let_creatures_work() -> void:
+	# 깊이 간 칸의 익은 무 (오늘 거두면 무가 더 나옴, 역동 아기 망아지)
+	for c: Farm.Cell in farm._cells.values():
+		if c.plowed and c.is_ripe():
+			plow_bonus += Config.PLOW_BONUS
 	Engine.time_scale = 20.0
 	for i in 600:
 		await get_tree().process_frame
@@ -440,7 +472,7 @@ func let_creatures_work() -> void:
 		for s: Creature in main.creatures:
 			if s._busy:
 				busy = true
-			elif s.job == CreatureJobs.FARM and CreatureJobs.FARM_ORDER.any(func(t: StringName) -> bool: return farm.find_work(CreatureJobs.FARM_WORK[t], s.home, s.data.work_radius(), [], Farm.center_of(s.home)) != null):
+			elif s.job == CreatureJobs.FARM and (CreatureJobs.PLOW_ORDER if s.data.species.job_aptitude.has(CreatureJobs.PLOW) else CreatureJobs.FARM_ORDER).any(func(t: StringName) -> bool: return farm.find_work(CreatureJobs.FARM_WORK[t], s.home, s.data.work_radius(), [], Farm.center_of(s.home)) != null):
 				busy = true
 			elif s.job in [CreatureJobs.FARM, CreatureJobs.FORAGE] and main.forage.nearest_target(s.position, s.has_element(&"earth")) != null:
 				busy = true
@@ -871,6 +903,7 @@ func hunt_day() -> void:
 	var doma_hurt0 := -1
 	var bun_hurt0 := -1
 	var mil_hurt0 := -1
+	var yd_hurt0 := -1
 	## 가방 · 창고가 차서 못 주운 드롭 자리 (이번 사냥에선 다시 가지 않음. 안 그러면 한 걸음 떨어졌다 돌아가기를 되풀이)
 	var full_at := {}
 	while t < 900.0:
@@ -889,6 +922,11 @@ func hunt_day() -> void:
 			mil_hunts += 1
 			if mil_day < 0:
 				mil_day = GameState.day
+		if h.zone == YEOKDONG and yd_hurt0 < 0:
+			yd_hurt0 = hurt
+			yd_hunts += 1
+			if yd_day < 0:
+				yd_day = GameState.day
 		if h.zone == DOMA and doma_hurt0 < 0:
 			doma_hurt0 = hurt
 			doma_hunts += 1
@@ -1085,8 +1123,11 @@ func hunt_day() -> void:
 		bun_hurt += (mil_hurt0 if mil_hurt0 >= 0 else hurt) - bun_hurt0
 		bun_knocked += int(knocked and h.zone == BUNJEON)
 	if mil_hurt0 >= 0:
-		mil_hurt += hurt - mil_hurt0
+		mil_hurt += (yd_hurt0 if yd_hurt0 >= 0 else hurt) - mil_hurt0
 		mil_knocked += int(knocked and h.zone == MILMOK)
+	if yd_hurt0 >= 0:
+		yd_hurt += hurt - yd_hurt0
+		yd_knocked += int(knocked and h.zone == YEOKDONG)
 	if h.boss_spawned and h._boss() == null:
 		_cleared(h.zone)
 	var comp := h.companion.display_name() if h.companion else "혼자"
@@ -1098,6 +1139,8 @@ func hunt_day() -> void:
 		eggs.append(sp.display_name)
 		if sp == CreatureCatalog.TIGER or sp == CreatureCatalog.WHITE_TIGER:
 			tigers_got[sp.display_name] = tigers_got.get(sp.display_name, 0) + 1
+		if sp == CreatureCatalog.FOAL:
+			foals_got += 1
 	_log("사냥: 시작 %s · 동행 %s · %s · 싸움 %.0f초 · 처치 %d · 맞은 횟수 %d · 비킨 틱 %d · 남은 하트 %d%s · 알 %s · 돈 %+d · 물약 %+d · 젤리 %+d · 장비 %+d · Lv %d" % [
 		Config.HUNT_ZONES[zone].name, comp, " → ".join(zone_times), fight_t, kills, hurt, dodges, hearts_left, " (쓰러짐)" if knocked else "",
 		eggs, GameState.money - money0, GameState.potions - potions0, GameState.junk - junk0, GameState.gear.size() + GameState.owned_wear.size() - gear0, GameState.hunter_level])
