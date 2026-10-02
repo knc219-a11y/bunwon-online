@@ -570,7 +570,65 @@ const HUNT_ZONES: Array[Dictionary] = [
 		money = [45, 90], boss_money = [140, 220],
 		monster_tint = Color.WHITE, boss_tint = Color.WHITE, ground_tint = Color(0.62, 0.76, 0.6), tree_tint = Color(0.42, 0.6, 0.46),
 	},
+	{
+		## 4막 첫 구역 (2026-10-02 사용자: "역동에는 말이 유명하니 켄타우로스 같은 것으로", 후보 A 창기병 + 역마 장군 선택).
+		## 역동 (驛洞) = 옛 경안역 역참, 역마를 두던 마을 (Claude 지식, 광주시 읍면동 유래 페이지엔 없음). 4막 둘째 구역 곤지암 (신립 장군 · 고양이 바위,
+		## 말굽이 땅에서 안 떨어졌다는 설화) 과 "말" 로 이어진다.
+		## 아래 입구 → 옛 역로 (모래길) → 넓은 말 들판 (숨을 데가 적음) → 위 왼쪽 경안역 마방 (대장 자리) → 위 오른쪽 곤지암 쪽 길. 오른쪽 아래 경안천.
+		## 켄타우로스 창기병 (lancer): 발을 구르며 긴 띠 예고 (구역 windup) → 들판을 가로질러 긴 돌격 (LANCER_DISTANCE), 지나친 뒤
+		## 돌아서는 동안 (LANCER_RECOVER, 7열) 이 칠 틈. 구르기로 피하고 돌아서는 틈에 친다.
+		## 대장 역마 장군 (general): 사냥꾼 쪽으로 꺾이는 창 돌격 세 번 → 크게 헐떡임, 두 번에 한 번 파발 나팔 (창기병 둘).
+		## 체력 절반부터 돌격 전에 말발굽 쿵 (내려찍기 원).
+		name = "역동", junk_name = "말갈기", monster = "켄타우로스 창기병", boss_monster = "역마 장군", waypoint = true,
+		map = "yeokdong",
+		labels = [[Vector2(10, 2.4), "경안역 마방"]],
+		sheet = "res://assets/creatures/wild_lancer.png", boss_sheet = "res://assets/creatures/wild_post_general.png", burrow = false,
+		lancer = true,
+		## 알: 4막 일반 알 = 아기 망아지 (땅, 밭 갈기). 대장도 가끔 같은 알.
+		egg = "res://data/creatures/species/foal.tres", boss_egg = "res://data/creatures/species/foal.tres",
+		## 창기병이 둘씩 다녀 마릿수가 많으므로 알 확률을 반으로 (첫 봇: 0.03 이면 110일에 망아지 알 17~29개).
+		egg_chance = 0.015, boss_egg_chance = 0.2,
+		## 밀목보다 한 계단 (임시, 봇으로 맞춤). 창기병은 둘씩 짝지어 (떼 2). 첫 봇에서 51번 사냥에 맞은 횟수 0~2 → 예고를 짧게, 더 단단하게.
+		count = 10, hp = 13, speed = 1.3, boss_hp = 80,
+		swarm = 2,
+		damage = 3, knockback = 4.0, windup = 0.4, pack = false, boss_pattern = &"general",
+		advice = "권장: 하트 13 · 사냥 도시락",
+		loot = {&"money": 34, &"potion": 26, &"junk": 20, &"gear": 20},
+		rarity = {&"normal": 22, &"magic": 46, &"rare": 32}, boss_rarity = {&"normal": 5, &"magic": 48, &"rare": 47},
+		money = [50, 95], boss_money = [150, 240],
+		monster_tint = Color.WHITE, boss_tint = Color.WHITE, ground_tint = Color(0.86, 0.9, 0.7), tree_tint = Color(0.66, 0.82, 0.6),
+	},
 ]
+## 켄타우로스 창기병 (역동 lancer, 2026-10-02): 사냥꾼이 LANCER_TRIGGER 안이면 발을 구르며 (구역 windup) 긴 띠 예고 →
+## LANCER_TIME 동안 LANCER_DISTANCE 만큼 돌격 (나무 · 바위에 막히면 거기서 멈춤). 돌격 뒤 LANCER_RECOVER 초 돌아섬 = 칠 틈.
+const LANCER_TRIGGER := 150.0
+const LANCER_DISTANCE := 170.0
+const LANCER_TIME := 0.45
+const LANCER_RECOVER := 1.1
+const LANCER_COOLDOWN := 1.8
+## 역마 장군 (역동 대장 general): GENERAL_RANGE 안이면 창 돌격 GENERAL_CHARGES 번. 첫 돌격 예고 GENERAL_WINDUP, 다음은 GENERAL_NEXT_WINDUP
+## (그때 사냥꾼 쪽으로 다시 꺾음). 돌격에 닿으면 (GENERAL_HIT_RADIUS) 하트 -피해. 다 달린 뒤 GENERAL_RECOVER 초 헐떡임 = 칠 틈.
+## 두 번에 한 번 파발 나팔: 창기병 GENERAL_CALL 마리 (원래 크기, 체력 낮음, 드롭 · 알 없음, 최대 SLAM_MINION_MAX).
+## 체력이 절반 아래면 돌격 앞에 말발굽 쿵 (내려찍기 원 SLAM_RADIUS, 새끼 안 나옴).
+const GENERAL_RANGE := 240.0
+const GENERAL_CHARGES := 3
+const GENERAL_WINDUP := 0.8
+const GENERAL_NEXT_WINDUP := 0.35
+const GENERAL_LENGTH := 150.0
+const GENERAL_TIME := 0.45
+const GENERAL_HIT_RADIUS := 20.0
+const GENERAL_RECOVER := 1.8
+const GENERAL_COOLDOWN := 2.2
+const GENERAL_CALL := 2
+const GENERAL_MINION_HP := 3
+## 아기 망아지 동행 뒷발차기 (kick): 맞은 몬스터가 KICK_PUSH 만큼 밀려나며 KICK_STUN 초 멈춤 (대장은 안 밀림)
+const COMPANION_KICK_PUSH := 44.0
+const COMPANION_KICK_STUN := 0.5
+const COMPANION_KICK_INTERVAL := 1.3
+const COMPANION_KICK_RANGE := 18.0
+## 아기 망아지 밭 갈기 (plow, 2026-10-02): 농사를 맡으면 수확한 빈 칸을 깊이 갈아 둔다 (안 간 칸이면 갈기까지).
+## 깊이 간 칸에서 거둔 무는 PLOW_BONUS 개 더 (거두면 다시 보통 칸).
+const PLOW_BONUS := 1
 ## 그림자 늑대 (밀목 wolf, 2026-09-30): 사냥꾼이 WOLF_NOTICE 안이면 사냥꾼 둘레 WOLF_RING 거리에 둘러서서 천천히 돈다.
 ## 돌다가 달려들기 쿨이 끝나면 (첫 쿨은 늑대마다 어긋나게) 보통 달려들기 (구역 windup 예고 → 돌진). 달려든 뒤 WOLF_LUNGE_COOLDOWN.
 ## 하나가 쓰러지면 WOLF_FLINCH_RANGE 안의 늑대가 WOLF_FLINCH 초 멈칫 (칠 틈).
@@ -756,6 +814,7 @@ const EXPEDITION_ZONES: Array[Dictionary] = [
 	{money = [70, 120], elements = [&"earth"], species = [&"tree_spirit"], hint = "땅 · 아기 나무 정령"},
 	{money = [75, 125], elements = [&"fire"], species = [&"will_o"], hint = "불 · 아기 도깨비불"},
 	{money = [55, 100], elements = [&"spirit"], species = [&"tiger", &"white_tiger"], hint = "신령 · 아기 호랑이"},
+	{money = [60, 110], elements = [&"earth"], species = [&"foal"], hint = "땅 · 아기 망아지"},
 ]
 ## 원정대 하나가 하룻밤에 가져오는 잡템 (그 구역 잡템, 공급함에서 사냥꾼 잡템처럼 판다)
 const EXPEDITION_JUNK := [1, 2]

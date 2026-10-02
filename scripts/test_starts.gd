@@ -9,7 +9,7 @@ extends RefCounted
 ## 농사 크리처는 열린 밭 구역 가운데에 차례로, 채집은 공급함 옆 풀밭, 고철 줍기는 고물 더미 옆에 놓는다.
 ## 무기: 앞의 것부터 얻어 첫 무기를 든다. 사냥꾼 방어구: [기본 장비, 등급]. 농부 제작품: 대장간 기본 장비.
 ## 시작 지점마다 사냥꾼 레벨
-const LEVELS := {&"hunter": 1, &"day5": 7, &"forge_ready": 10, &"forge_done": 13, &"doma": 15, &"act3": 18, &"milmok": 20, &"barn": 22}
+const LEVELS := {&"hunter": 1, &"day5": 7, &"forge_ready": 10, &"forge_done": 13, &"doma": 15, &"act3": 18, &"milmok": 20, &"barn": 22, &"yeokdong": 23}
 
 const STARTS: Array[Dictionary] = [
 	{id = &"fresh", name = "처음부터", note = "지금과 똑같이 1일째"},
@@ -106,6 +106,21 @@ const STARTS: Array[Dictionary] = [
 		armor = [[&"leather_hood", &"rare"], [&"hunter_jerkin", &"rare"], [&"leather_shoes", &"rare"]],
 		crafted = [&"work_cap", &"rain_suit", &"work_boots"],
 	},
+	{
+		## 2026-10-02 역동 스레드: 4막 첫 구역을 바로 해 보는 자리 (축사를 고쳐 밀목 윗길 목책이 열리고 역동 웨이포인트가 켜진 뒤)
+		id = &"yeokdong", name = "역동 앞", note = "75일 · 축사 · 역동 웨이포인트 · 도시락 2",
+		day = 75, money = 4500, seeds = 20, crops = 10, plots = 4, planted = true, scrap = 6, roots = 8, junk = 10, potions = 6, lamp_oil = 1, strength = 2,
+		creatures = [
+			[&"slime", &"farm", &"water", 2, 2], [&"slime", &"farm", &"", 2, 2], [&"slime", &"farm", &"", 2, 2], [&"tree_spirit", &"farm", &"", 2, 1],
+			[&"slime", &"forage", &"earth", 1, 1], [&"slime", &"forage", &"water", 0, 0], [&"gold_toad", &"forage", &"", 1, 0],
+			[&"gold_toad", &"forage", &"", 0, 0], [&"sparrow", &"forage", &"", 0, 0], [&"will_o", &"herb", &"", 1, 0],
+			[&"tiger", &"feed", &"", 1, 0], [&"tiger", &"forage", &"", 0, 0], [&"slime", &"scrap", &"earth", 1, 1], [&"slime", &"herb", &"earth", 0, 0],
+		],
+		waypoints = [0, 1, 2, 3, 4, 5, 6], forge = 2, yak = 2, barn = 2, hens = 4, lunches = 2, tools = true, knife = true,
+		weapons = [&"hunting_bow", &"water_staff", &"long_sword", &"crossbow", &"long_bow"], shop = [&"straw_hat", &"ball_cap"],
+		armor = [[&"leather_hood", &"rare"], [&"hunter_jerkin", &"rare"], [&"leather_shoes", &"rare"]],
+		crafted = [&"work_cap", &"rain_suit", &"work_boots"],
+	},
 ]
 
 const SPECIES := {
@@ -115,6 +130,7 @@ const SPECIES := {
 	&"tree_spirit": "res://data/creatures/species/tree_spirit.tres",
 	&"will_o": "res://data/creatures/species/will_o.tres",
 	&"tiger": "res://data/creatures/species/tiger.tres",
+	&"foal": "res://data/creatures/species/foal.tres",
 }
 const ELEMENTS := {
 	&"water": "res://data/creatures/elements/water.tres",

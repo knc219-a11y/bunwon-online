@@ -23,6 +23,9 @@ const HERB := &"herb"
 ## 모이 주기 (2026-09-30 축사 닭장): 축사를 고치면 생기는 닭장에서 암탉에게 모이를 하나씩 준다 (Creature._feed_once).
 ## 무 없이 먹인다. 아기 호랑이가 두 배 빠르고, 모이를 주는 아기 호랑이가 있으면 밤에 족제비가 안 온다.
 const FEED := &"feed"
+## 밭 갈기 (2026-10-02 역동 아기 망아지): 농사를 맡은 아기 망아지가 수확한 빈 칸을 깊이 갈아 둔다 (거두면 무 하나 더).
+## 따로 고르는 일이 아니라 농사 안의 작은 일. 종의 job_aptitude 에 이 id 가 있는 크리처만 한다.
+const PLOW := &"plow"
 
 const NAMES := {
 	REST: "쉬는 중",
@@ -34,6 +37,7 @@ const NAMES := {
 	SCRAP: "고철 줍기",
 	HERB: "도라지밭",
 	FEED: "모이 주기",
+	PLOW: "밭 갈기",
 	&"expedition": "원정",
 }
 
@@ -42,12 +46,15 @@ const FARM_JOBS: Array[StringName] = [REST, FARM, FORAGE]
 
 ## 농사가 밭 일을 찾는 순서 (익은 무 먼저 거두고, 빈 칸에 심고, 마른 칸에 물)
 const FARM_ORDER: Array[StringName] = [HARVEST, SOW, WATER]
+## 밭 갈기를 하는 크리처 (아기 망아지): 거둔 뒤 심기 전에 깊이 간다
+const PLOW_ORDER: Array[StringName] = [HARVEST, PLOW, SOW, WATER]
 
 ## 농사 안의 일 id → 밭 작업
 const FARM_WORK := {
 	SOW: Farm.Work.SOW,
 	WATER: Farm.Work.WATER,
 	HARVEST: Farm.Work.HARVEST,
+	PLOW: Farm.Work.PLOW,
 }
 
 

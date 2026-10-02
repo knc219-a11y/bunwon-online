@@ -1,0 +1,29 @@
+[gd_resource type="Resource" script_class="CreatureSpecies" load_steps=7 format=3]
+
+[ext_resource type="Script" path="res://scripts/creatures/creature_species.gd" id="1"]
+[ext_resource type="Resource" path="res://data/creatures/traits/ordinary.tres" id="2"]
+[ext_resource type="Resource" path="res://data/creatures/traits/diligent.tres" id="3"]
+[ext_resource type="Resource" path="res://data/creatures/traits/keen_eye.tres" id="4"]
+[ext_resource type="Resource" path="res://data/creatures/elements/earth.tres" id="5"]
+[ext_resource type="Texture2D" path="res://assets/creatures/baby_foal.png" id="6"]
+
+[resource]
+script = ExtResource("1")
+id = &"foal"
+display_name = "아기 망아지"
+faces = 1
+possible_elements = Array[Resource]([ExtResource("5")])
+job_aptitude = {
+&"plow": 1.0
+}
+work_speed_range = Vector2(0.8, 1.2)
+radius_range = Vector2i(1, 2)
+move_speed = 1.2
+traits = Array[Resource]([ExtResource("2"), ExtResource("3"), ExtResource("4")])
+companion_style = &"kick"
+sprite_sheets = {
+&"earth": ExtResource("6")
+}
+egg_color = Color(0.82, 0.62, 0.42, 1)
+egg_spot_color = Color(0.36, 0.24, 0.18, 1)
+color = Color(0.7, 0.46, 0.28, 1)

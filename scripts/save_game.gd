@@ -90,7 +90,7 @@ static func snapshot(main: Node2D) -> Dictionary:
 	for cell: Vector2i in farm._cells:
 		var c: Farm.Cell = farm._cells[cell]
 		if c.tilled or c.planted or c.watered or c.growth > 0:
-			cells[cell] = [c.tilled, c.planted, c.watered, c.growth]
+			cells[cell] = [c.tilled, c.planted, c.watered, c.growth, c.plowed]
 	var forage: Forage = main.forage
 	var creatures: Array = []
 	for s: Creature in main.creatures:
@@ -182,6 +182,8 @@ static func apply(main: Node2D, d: Dictionary) -> void:
 		c.planted = v[1]
 		c.watered = v[2]
 		c.growth = v[3]
+		# 깊이 간 칸 (2026-10-02 역동, 옛 저장 파일엔 없음)
+		c.plowed = v[4] if v.size() > 4 else false
 	farm.queue_redraw()
 
 	# 시설: 터 → 고친 모습 (값은 이미 GameState 에 있으니 치르지 않는다)
