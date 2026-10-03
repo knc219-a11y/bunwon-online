@@ -33,6 +33,10 @@ class Cell:
 	## 심은 작물 (Config.CROPS id) · 이번에 심고 딴 횟수 (고추처럼 여러 번 따는 작물)
 	var kind := &"radish"
 	var picks := 0
+	## 돌봄 점수 (2026-10-03 작물 등급): 자라는 동안 물 없이 지난 밤이 있었나 · 퇴비 준 칸 · 속성 맞는 크리처가 돌봄
+	var missed := false
+	var fert := false
+	var matched := false
 
 	func days() -> int:
 		return int(Crops.info(kind).days)
@@ -42,6 +46,9 @@ class Cell:
 
 
 var _cells: Dictionary[Vector2i, Cell] = {}
+## 거둘 때 등급 굴림 · 마지막으로 거둔 등급 (알림용)
+var _grade_rng := RandomNumberGenerator.new()
+var last_grade := 0
 var _path: Dictionary[Vector2i, bool] = {}
 var _fence: Dictionary[Vector2i, bool] = {}
 ## 캐릭터·크리처가 지나갈 수 없는 영역 (월드 좌표 px). 울타리 칸과 집·나무·마을 오브젝트의 막는 범위.
@@ -133,8 +140,8 @@ func can_do(work: Work, cell: Vector2i) -> bool:
 	return false
 
 
-## 작업을 수행한다. 성공하면 true.
-func do_work(work: Work, cell: Vector2i) -> bool:
+## 작업을 수행한다. 성공하면 true. element 는 크리처가 할 때 그 속성들 (속성 맞는 작물이면 등급 확률이 오름).
+func do_work(work: Work, cell: Vector2i, elements: Array[StringName] = []) -> bool:
 	if not can_do(work, cell):
 		return false
 	var c := get_cell(cell)
@@ -146,6 +153,9 @@ func do_work(work: Work, cell: Vector2i) -> bool:
 			c.growth = 0
 			c.kind = Crops.kind_at(cell)
 			c.picks = 0
+			c.missed = false
+			c.fert = false
+			c.matched = false
 			Crops.add_seeds(c.kind, -1)
 		Work.WATER:
 			c.watered = true
@@ -154,9 +164,12 @@ func do_work(work: Work, cell: Vector2i) -> bool:
 			c.plowed = true
 		Work.HARVEST:
 			var d := Crops.info(c.kind)
-			Crops.add_held(c.kind, int(d.amount) + (Config.PLOW_BONUS if c.plowed else 0))
+			var grade := Crops.harvest_grade(c, _grade_rng.randf())
+			Crops.add_graded(c.kind, int(d.amount) + (Config.PLOW_BONUS if c.plowed else 0), grade)
+			last_grade = grade
 			c.plowed = false
 			c.watered = false
+			c.missed = false
 			c.picks += 1
 			if c.picks < int(d.picks):
 				# 여러 번 따는 작물 (고추): 그대로 서서 regrow 날 뒤 또 익는다
@@ -165,7 +178,23 @@ func do_work(work: Work, cell: Vector2i) -> bool:
 				c.planted = false
 				c.growth = 0
 				c.picks = 0
+				c.fert = false
+				c.matched = false
 				Crops.add_seeds(c.kind, Config.SEEDS_PER_HARVEST)
+	if c.planted and not elements.is_empty() and Config.CROP_ELEMENTS.get(c.kind, &"") in elements:
+		c.matched = true
+	queue_redraw()
+	GameState.touch()
+	return true
+
+
+## 퇴비 한 줌 (씨앗 주머니를 이미 심은 칸에): 거둘 때 ★ +1. 퇴비를 하나 쓴다.
+func fertilize(cell: Vector2i) -> bool:
+	var c := get_cell(cell)
+	if c == null or not c.planted or c.fert or c.is_ripe() or GameState.compost <= 0:
+		return false
+	c.fert = true
+	GameState.compost -= 1
 	queue_redraw()
 	GameState.touch()
 	return true
@@ -179,6 +208,8 @@ func advance_day() -> int:
 		if c.planted and c.watered:
 			c.growth += 1
 			grown += 1
+		elif c.planted and not c.is_ripe():
+			c.missed = true
 		c.watered = false
 	queue_redraw()
 	return grown
@@ -341,6 +372,11 @@ func _draw() -> void:
 			draw_rect(Rect2(o, Vector2(Config.TILE, Config.TILE)), Color(0.22, 0.12, 0.06, 0.24))
 			for k in 3:
 				draw_rect(Rect2(o + Vector2(3 + k * 8, Config.TILE - 4), Vector2(3, 2)), Color(0.36, 0.22, 0.13))
+		if c.fert:
+			# 퇴비 준 칸: 짙은 거름 알갱이 (거두면 ★ +1)
+			var o2 := Vector2(cell * Config.TILE)
+			for k in 4:
+				draw_rect(Rect2(o2 + Vector2(2 + k * 6, 2 + (k % 2) * 3), Vector2(2, 2)), Color(0.27, 0.2, 0.1))
 		if c.planted:
 			_tile(cell, CROPS, crop_stage(c), int(Crops.info(c.kind).row))
 	# 울타리는 위 줄부터 그려 아래 칸 기둥이 위 칸 가로대를 덮게 한다

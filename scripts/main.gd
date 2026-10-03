@@ -446,9 +446,23 @@ func cycle_tool(step: int) -> void:
 func use_tool() -> void:
 	var work := TOOLS[tool_index]
 	var done := 0
+	var fert := 0
+	var grades: Array[int] = []
 	for cell in tool_cells(work):
 		if farm.do_work(work, cell):
 			done += 1
+			if work == Farm.Work.HARVEST:
+				grades.append(farm.last_grade)
+		elif work == Farm.Work.SOW and farm.fertilize(cell):
+			# 이미 심은 칸에 씨앗 주머니 = 퇴비 한 줌 (2026-10-03 작물 등급)
+			done += 1
+			fert += 1
+	if fert > 0:
+		GameState.notify("퇴비를 %d칸에 줬다 (남은 퇴비 %d). 거둘 때 ★ +1." % [fert, GameState.compost])
+	if not grades.is_empty():
+		grades.sort()
+		GameState.notify("%s ★%d 을(를) 거뒀다%s." % [Crops.display_name(farm.get_cell(player.facing_cell()).kind), grades[-1],
+			" · 물을 빠뜨린 날이 없어야 ★2, 퇴비까지 주면 ★3" if grades[-1] < 2 else ""])
 	if done > 0:
 		match work:
 			Farm.Work.TILL:
@@ -460,9 +474,9 @@ func use_tool() -> void:
 			Farm.Work.HARVEST:
 				Sound.sfx(&"harvest")
 	if done == 0:
-		var kind := Crops.kind_at(farmer.facing_cell())
+		var kind := Crops.kind_at(player.facing_cell())
 		if work == Farm.Work.SOW and Crops.seeds(kind) <= 0:
-			GameState.notify("%s 씨앗이 없다. (이 구역 작물은 공급함 \"밭 작물 · 씨앗\" 에서 바꾼다)" % Crops.display_name(kind))
+			GameState.notify("%s 씨앗이 없다. (이 구역 작물은 공급함 \"밭 작물 · 씨앗 · 음식\" 에서 바꾼다)" % Crops.display_name(kind))
 		else:
 			GameState.notify("여기서는 %s을(를) 쓸 수 없다." % tool_name(work))
 
@@ -738,6 +752,10 @@ func enter_hunt(companion: Creature = null, zone := 0) -> bool:
 		GameState.stews -= 1
 		hunt.eat_stew()
 		drank.append("매운탕")
+	# 사냥 음식 (2026-10-03 사용자 선택): 종류마다 가장 좋은 것 하나씩
+	for e: Array in Crops.eat_for_hunt():
+		hunt.eat_food(e[0], e[1])
+		drank.append("%s ★%d" % [Config.FOODS[e[0]].name, e[1]])
 	hunt.knocked_out.connect(leave_hunt)
 	var drank_text := (" %s을(를) 먹었다." % " · ".join(drank)) if not drank.is_empty() else ""
 	if companion:
@@ -832,8 +850,8 @@ func supply_options() -> Array[StringName]:
 	if GameState.fish > 0:
 		options.append(&"display_fish")
 	options.append(&"buy_seeds")
-	if not GameState.crop_unlocked.is_empty():
-		options.append(&"crops")
+	# 퇴비 (2026-10-03 작물 등급) 는 처음부터 만들 수 있어 늘 보인다
+	options.append(&"crops")
 	if not creatures.is_empty():
 		options.append(&"train")
 	if Expedition.any_villager() and not Expedition.idle(self).is_empty():
@@ -867,7 +885,7 @@ func supply_option_text(id: StringName) -> String:
 		&"buy_seeds":
 			return "무 씨앗 %d개 사기 (%d원)" % [Config.SEED_PACK_SIZE, Config.SEED_PACK_PRICE]
 		&"crops":
-			return "밭 작물 · 씨앗 (구역마다 심을 작물) ▶"
+			return "밭 작물 · 씨앗 · 음식 (구역 작물 · 퇴비 · 사냥 음식) ▶"
 		&"train":
 			return "크리처 훈련 (%d마리) ▶" % creatures.size()
 		&"adopt":
@@ -1650,6 +1668,11 @@ func _barn_morning() -> String:
 		parts.append("병아리 %d마리가 암탉이 됨" % r.grown)
 	if r.hungry > 0:
 		parts.append("모이를 못 먹은 암탉 %d마리" % r.hungry)
+	# 닭똥 퇴비 (2026-10-03 작물 등급): 암탉 COMPOST_PER_HENS 마리당 하나
+	var dung := GameState.hens / Config.COMPOST_PER_HENS
+	if dung > 0:
+		GameState.compost += dung
+		parts.append("닭똥 퇴비 %d (퇴비 %d)" % [dung, GameState.compost])
 	return ("닭장: " + " · ".join(parts)) if not parts.is_empty() else ""
 
 
@@ -2344,7 +2367,7 @@ func _rebuild_menu() -> void:
 	if training:
 		head = "크리처 훈련   가진 돈 %d원" % GameState.money
 	if cropping:
-		head = "밭 작물 · 씨앗   가진 돈 %d원" % GameState.money
+		head = "밭 작물 · 씨앗 · 음식   돈 %d원 · 퇴비 %d" % [GameState.money, GameState.compost]
 	if expedition:
 		head = "사냥터 입구 · 크리처 원정   쉬는 · 채집 %d마리 · 원정 중 %d마리" % [Expedition.idle(self).size(), Expedition.away_count(self)]
 	if adopting:

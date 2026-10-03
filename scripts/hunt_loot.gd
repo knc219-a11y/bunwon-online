@@ -80,7 +80,7 @@ static func pick_kind(roll: float, weights := {}) -> StringName:
 
 ## 드롭 확률 (사냥꾼이 입은 "드롭 확률 +%p" 옵션을 더한다)
 static func loot_chance() -> float:
-	return Config.HUNT_LOOT_CHANCE + Wearables.stat_sum(&"hunter", "find") / 100.0
+	return (Config.HUNT_LOOT_CHANCE + Wearables.stat_sum(&"hunter", "find") / 100.0) * (1.0 + HuntGround.food_luck)
 
 
 ## 땅에 보이는 이름 색

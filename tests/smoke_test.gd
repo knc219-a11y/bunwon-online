@@ -420,13 +420,14 @@ func _ready() -> void:
 
 	# 15) 경제 첫 단계 (C): 공급함에 무 진열 → 밤사이 팔림 → 아침 정산, 씨앗은 공급함에서 바로 산다
 	GameState.crops = 3
+	GameState.crop_stars = {}
 	GameState.money = 0
 	GameState.displayed_crops = 0
 	var seeds_before := GameState.seeds
 	farmer.position = main.supply_box.position
 	main.interact()
 	_check(main.menu_open and farmer.frozen, "선택창이 열리면 캐릭터는 멈춤")
-	_check(main.supply_options() == [&"display_crops", &"buy_seeds", &"train", &"close"], "알이 없으면 진열·씨앗·크리처 훈련·닫기만")
+	_check(main.supply_options() == [&"display_crops", &"buy_seeds", &"crops", &"train", &"close"], "알이 없으면 진열·씨앗·밭 작물(퇴비)·크리처 훈련·닫기만")
 	_check(not main.supply_action(&"buy_seeds") and GameState.seeds == seeds_before, "돈이 모자라면 씨앗을 못 삼")
 	main._unhandled_input(_action(&"move_down"))
 	_check(main.menu_index == 1, "W/S로 고르기")
@@ -434,7 +435,7 @@ func _ready() -> void:
 	main._unhandled_input(_action(&"interact"))
 	_check(GameState.crops == 0 and GameState.displayed_crops == 3, "F로 무 3개 진열")
 	_check(main.supply_box.badge.contains("무 3"), "공급함에 진열한 무 표시")
-	_check(main.menu_open and main.supply_options() == [&"buy_seeds", &"train", &"close"], "진열 뒤에도 선택창은 열려 있음")
+	_check(main.menu_open and main.supply_options() == [&"buy_seeds", &"crops", &"train", &"close"], "진열 뒤에도 선택창은 열려 있음")
 	main._unhandled_input(_action(&"menu_close"))
 	_check(not main.menu_open and not farmer.frozen, "Esc로 선택창 닫기")
 	var money_lines: Array[String] = main.next_day()
@@ -2666,6 +2667,8 @@ func _ready() -> void:
 
 	# 52) 밭 작물 (2026-10-03 백로그 5번): 감자 · 고추 · 배추, 대장 땅 씨앗 · 구역 작물 · 여러 번 따기 · 진열
 	await _crop_checks()
+	# 53) 작물 등급 (돌봄 점수) · 퇴비 · 사냥 음식 (2026-10-03 사용자 선택)
+	await _grade_checks()
 
 	# 41) 저장/불러오기 (2026-09-30 사용자 선택 C 디아2식): 저장 → 장면을 버리고 → 새 장면에 불러오면 모든 상태가 같다
 	await _save_load_checks()
@@ -4116,7 +4119,7 @@ func _crop_checks() -> void:
 	await get_tree().process_frame
 	GameState.reset()
 	var farm: Farm = m.farm
-	_check(Crops.unlocked() == [&"radish"] and not m.supply_options().has(&"crops"), "처음엔 무만 (밭 작물 메뉴 없음)")
+	_check(Crops.unlocked() == [&"radish"] and Crops.options() == [&"compost", &"back"], "처음엔 무만 (밭 작물 메뉴엔 퇴비만)")
 	GameState.bosses_beaten.append(Config.FORGE_ZONE)
 	var lines: Array[String] = m.next_day()
 	_check(&"potato" in GameState.crop_unlocked and GameState.potato_seeds == Config.CROP_UNLOCK_SEEDS and lines.any(func(l: String) -> bool: return l.contains("감자 씨앗")), "금사리 대장 다음 아침 감자 씨앗")
@@ -4154,6 +4157,7 @@ func _crop_checks() -> void:
 	_check(picks == 4 and GameState.peppers == 4 and not c.planted and GameState.pepper_seeds == Config.SEEDS_PER_HARVEST, "고추 한 번 심어 네 번 따고 끝")
 	# 진열: 무 · 감자 · 고추 한꺼번에, 아침에 값대로
 	GameState.crops = 2
+	GameState.crop_stars = {}
 	var money0 := GameState.money
 	_check(m.supply_action(&"display_crops") and Crops.held_total() == 0, "작물 한꺼번에 진열")
 	m.next_day()
@@ -4189,6 +4193,114 @@ func _crop_checks() -> void:
 	_check(SaveGame.load_into(b, 3), "불러오기")
 	var bc: Farm.Cell = b.farm.get_cell(cell)
 	_check(bc.kind == &"pepper" and bc.picks == 2 and Crops.plot_kind(0) == &"potato" and &"pepper" in GameState.crop_unlocked and SaveGame.snapshot(b).farm == snap.farm, "불러오면 칸 작물 · 구역 작물 · 열린 작물 그대로")
+	SaveGame.erase(3)
+	b.queue_free()
+	await get_tree().process_frame
+
+
+## 53) 작물 등급 (돌봄 점수) · 퇴비 · 사냥 음식 (2026-10-03 사용자 선택)
+func _grade_checks() -> void:
+	var m: Node2D = load("res://scenes/main.tscn").instantiate()
+	add_child(m)
+	await get_tree().process_frame
+	GameState.reset()
+	var farm: Farm = m.farm
+	var cell := fc(1, 2)
+	var c := farm.get_cell(cell)
+	# 물을 하루도 안 빠뜨리면 ★2
+	farm.do_work(Farm.Work.TILL, cell)
+	farm.do_work(Farm.Work.SOW, cell)
+	for d in Config.CROP_GROW_DAYS:
+		farm.do_work(Farm.Work.WATER, cell)
+		farm.advance_day()
+	_check(farm.do_work(Farm.Work.HARVEST, cell) and farm.last_grade == 2 and Crops.stars(&"radish") == [0, 1, 0], "물을 하루도 안 빠뜨린 무는 ★2")
+	# 하루 빠뜨리면 ★1
+	farm.do_work(Farm.Work.SOW, cell)
+	farm.advance_day()
+	_check(c.missed, "물 없이 지난 밤은 빠뜨린 날")
+	for d in Config.CROP_GROW_DAYS:
+		farm.do_work(Farm.Work.WATER, cell)
+		farm.advance_day()
+	_check(farm.do_work(Farm.Work.HARVEST, cell) and farm.last_grade == 1 and Crops.stars(&"radish") == [1, 1, 0], "하루 빠뜨리면 ★1")
+	# 퇴비: 들나물 3 → 1, 심은 칸에 주면 ★3
+	GameState.herbs = Config.COMPOST_COST
+	_check(Crops.act(&"compost") and GameState.compost == 1 and GameState.herbs == 0, "들나물로 퇴비 만들기")
+	_check(not Crops.make_compost(), "재료가 없으면 퇴비를 못 만듦")
+	_check(not farm.fertilize(cell), "안 심은 칸엔 퇴비를 못 줌")
+	farm.do_work(Farm.Work.SOW, cell)
+	_check(farm.fertilize(cell) and c.fert and GameState.compost == 0 and not farm.fertilize(cell), "심은 칸에 퇴비 한 줌 (한 번만)")
+	for d in Config.CROP_GROW_DAYS:
+		farm.do_work(Farm.Work.WATER, cell)
+		farm.advance_day()
+	_check(farm.do_work(Farm.Work.HARVEST, cell) and farm.last_grade == 3 and not c.fert, "물 + 퇴비 = ★3, 거두면 퇴비는 다시 없음")
+	# 씨앗 주머니로 퇴비 주기 (주인공 손)
+	GameState.compost = 1
+	farm.do_work(Farm.Work.SOW, cell)
+	m.player.position = Farm.center_of(cell + Vector2i.UP)
+	m.player.facing = Vector2i.DOWN
+	m.tool_index = m.TOOLS.find(Farm.Work.SOW)
+	m.use_tool()
+	_check(c.fert and GameState.compost == 0, "이미 심은 칸에 씨앗 주머니를 쓰면 퇴비")
+	# 속성 맞는 크리처가 돌본 칸
+	farm.do_work(Farm.Work.WATER, cell, [&"fire"] as Array[StringName])
+	_check(not c.matched, "속성이 안 맞으면 그대로")
+	c.watered = false
+	farm.do_work(Farm.Work.WATER, cell, [&"spirit"] as Array[StringName])
+	_check(c.matched, "무는 정령 속성 크리처가 돌보면 잘 큼")
+	c.fert = false
+	_check(Crops.harvest_grade(c, 0.0) == 3 and Crops.harvest_grade(c, 0.99) == 2, "속성 맞으면 확률로 한 단계 더")
+	# 다른 데 쓰면 ★1 부터
+	GameState.crops = 0
+	GameState.crop_stars = {}
+	Crops.add_graded(&"radish", 2, 1)
+	Crops.add_graded(&"radish", 1, 3)
+	GameState.crops -= 2
+	_check(Crops.stars(&"radish") == [0, 0, 1], "공사 · 모이로 쓰면 ★1 부터 씀")
+	GameState.crops -= 1
+	_check(Crops.stars(&"radish") == [0, 0, 0], "다 쓰면 ★ 도 없어짐")
+	# 팔면 ★ 웃돈
+	Crops.add_graded(&"radish", 1, 3)
+	Crops.add_graded(&"radish", 1, 2)
+	var money0 := GameState.money
+	m.supply_action(&"display_crops")
+	var lines: Array[String] = m.next_day()
+	var want := Config.CROP_PRICE * (Config.STAR_PRICE_PCT[2] + Config.STAR_PRICE_PCT[1]) / 100
+	_check(GameState.money - money0 == want and lines.any(func(l: String) -> bool: return l.contains("값을 더 쳐")), "★3 · ★2 무는 더 비싸게 팔림 (%d원)" % want)
+	# 사냥 음식: 찐 감자는 가장 좋은 감자 등급
+	GameState.crop_unlocked.append(&"potato")
+	Crops.add_graded(&"potato", 2, 1)
+	Crops.add_graded(&"potato", 1, 3)
+	_check(Crops.options().has(&"food_steamed_potato") and not Crops.options().has(&"food_kimchi"), "열린 작물의 음식만 메뉴에")
+	_check(Crops.act(&"food_steamed_potato") and GameState.foods[&"steamed_potato"] == [0, 0, 1] and Crops.stars(&"potato") == [1, 0, 0], "찐 감자 ★3 (★3 감자 하나 + ★1 하나)")
+	_check(not Crops.act(&"food_steamed_potato"), "감자가 모자라면 못 만듦")
+	GameState.crop_unlocked.append(&"pepper")
+	GameState.peppers = 2
+	_check(Crops.cook(&"pepper_rice") == 1, "고추장 주먹밥 ★1")
+	GameState.hunts_today = 0
+	m.enter_hunt()
+	var hunt: HuntGround = m.hunt
+	_check(hunt.food_hp == 40 and is_equal_approx(hunt.food_attack, 0.1) and Crops.food_count(&"steamed_potato") == 0 and Crops.food_count(&"pepper_rice") == 0, "사냥에 들어가면 음식마다 하나씩 먹음 (체력 +40 · 공격 +10%)")
+	_check(hunt.life == hunt.max_life(), "찐 감자로 늘어난 체력만큼 참")
+	m.leave_hunt()
+	await get_tree().process_frame
+	# 저장: 퇴비 칸 · 음식 · ★
+	SaveGame.dir = "user://smoke_saves"
+	DirAccess.make_dir_recursive_absolute(SaveGame.dir)
+	farm.do_work(Farm.Work.SOW, cell)
+	c.fert = true
+	c.missed = true
+	GameState.foods = {&"kimchi": [0, 1, 0]}
+	Crops.add_graded(&"potato", 3, 2)
+	_check(SaveGame.save(m, 3), "저장")
+	m.queue_free()
+	await get_tree().process_frame
+	GameState.reset()
+	var b: Node2D = load("res://scenes/main.tscn").instantiate()
+	add_child(b)
+	await get_tree().process_frame
+	_check(SaveGame.load_into(b, 3), "불러오기")
+	var bc: Farm.Cell = b.farm.get_cell(cell)
+	_check(bc.fert and bc.missed and Crops.food_count(&"kimchi") == 1 and Crops.stars(&"potato")[1] == 3, "불러오면 퇴비 칸 · 음식 · ★ 그대로")
 	SaveGame.erase(3)
 	b.queue_free()
 	await get_tree().process_frame

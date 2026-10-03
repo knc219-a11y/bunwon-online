@@ -1215,3 +1215,26 @@ const CROPS := {
 	&"cabbage": {name = "배추", row = 3, days = 6, picks = 1, regrow = 0, amount = 1, price = 110,
 		held = "cabbages", seed_var = "cabbage_seeds", pack = 5, pack_price = 200, zone = BARN_ZONE, note = "6일 · 비쌈 · 김치"},
 }
+
+## 작물 등급 ★1~3 (2026-10-03 사용자 선택: 돌봄 점수). 값은 모두 임시.
+## 등급 = 1 + (자라는 동안 물을 하루도 안 빠뜨림) + (퇴비 준 칸). 속성이 맞는 크리처가 돌본 칸은 거둘 때
+## CROP_MATCH_CHANCE 로 한 단계 더 (3 까지). 여러 번 따는 고추는 딸 때마다 물 빠짐을 새로 센다 (퇴비는 그대로).
+const CROP_MATCH_CHANCE := 0.3
+## 작물 → 돌보면 잘 크는 속성
+const CROP_ELEMENTS := {&"radish": &"spirit", &"potato": &"earth", &"pepper": &"fire", &"cabbage": &"water"}
+## 등급별 판매값 (★1 값의 %, ★1 · ★2 · ★3). 크리처가 돌보는 밭은 거의 ★2 라 웃돈은 작게 (돈 흐름이 크게 바뀌지 않게)
+const STAR_PRICE_PCT: Array[int] = [100, 130, 200]
+## 퇴비: 공급함 "밭 작물 · 씨앗 · 음식" 에서 들나물 또는 사냥 잡템 COMPOST_COST 개 → 1. 축사가 열리면 아침마다 암탉 COMPOST_PER_HENS 마리당 1.
+## 씨앗 주머니(심기 도구)를 이미 심은 칸에 쓰면 퇴비를 한 줌 준다. 크리처는 퇴비를 쓰지 않는다 (주인공 손일의 몫).
+const COMPOST_COST := 3
+const COMPOST_PER_HENS := 2
+
+## 사냥 음식 (2026-10-03 사용자 선택: 사냥 음식). 공급함에서 만들고, 사냥에 들어갈 때 종류마다 가장 좋은 것 하나씩 먹는다.
+## 음식 등급 = 주재료 (main) 중 가장 좋은 등급. 다른 재료는 낮은 등급부터 쓴다.
+## effect: hp 최대 체력 + (늘어난 만큼 참) · attack 사냥꾼 피해 x(1 + 값) · luck 경험치 · 드롭 확률 x(1 + 값). values = ★1 · ★2 · ★3.
+const FOODS := {
+	&"steamed_potato": {name = "찐 감자", main = &"potato", cost = {potato = 2}, effect = &"hp", values = [15, 25, 40]},
+	&"pepper_rice": {name = "고추장 주먹밥", main = &"pepper", cost = {pepper = 2}, effect = &"attack", values = [0.1, 0.2, 0.3]},
+	&"kimchi": {name = "김치", main = &"cabbage", cost = {cabbage = 1, pepper = 1}, effect = &"luck", values = [0.1, 0.2, 0.35]},
+}
+const FOOD_ORDER: Array[StringName] = [&"steamed_potato", &"pepper_rice", &"kimchi"]

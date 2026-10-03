@@ -28,6 +28,12 @@ var displayed_harvest := {}
 ## 열린 작물 (무 빼고, 씨앗을 얻은 순서) · 밭 구역마다 심을 작물 (번호 = Config.FIELD_PLOTS, 없으면 무)
 var crop_unlocked: Array[StringName] = []
 var plot_crops: Array[StringName] = []
+## 작물 등급 (2026-10-03 돌봄 점수): 가진 작물 중 ★2 · ★3 수 (작물 id → [★2, ★3]). ★1 = 가진 수 - 둘. Crops.stars 로 읽는다.
+var crop_stars := {}
+## 진열한 작물의 등급 웃돈 (밤사이 값과 함께 들어옴) · 퇴비 · 사냥 음식 (음식 id → [★1, ★2, ★3])
+var displayed_star_bonus := 0
+var compost := 0
+var foods := {}
 ## 열린 밭 구역 수 (Config.FIELD_PLOTS 앞에서부터)
 var open_plots := Config.START_FIELD_PLOTS
 ## 알은 종 정보만 가진다. 능력치와 Trait은 부화할 때 정해진다.
@@ -210,6 +216,10 @@ func reset() -> void:
 	displayed_harvest = {}
 	crop_unlocked = []
 	plot_crops = []
+	crop_stars = {}
+	displayed_star_bonus = 0
+	compost = 0
+	foods = {}
 	open_plots = Config.START_FIELD_PLOTS
 	farmer_eggs = []
 	village_eggs = []
