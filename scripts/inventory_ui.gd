@@ -38,6 +38,8 @@ var outfit: StringName = &"farmer"
 var with_stash := false
 ## 공급함에서 장비 팔기로 열었는지
 var sell_mode := false
+## 대장장이 장비 갈기로 열었는지 (2026-10-03 백로그 8, 가방 칸 클릭 = 고철로)
+var salvage_mode := false
 ## 고른 칸: {kind = &"equip"/&"bag"/&"stash", index}
 var cursor := {kind = &"bag", index = 0}
 
@@ -47,11 +49,12 @@ func _init() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
 
 
-func open(c: Character, stash := false, sell := false, which := &"") -> void:
+func open(c: Character, stash := false, sell := false, which := &"", salvage := false) -> void:
 	character = c
 	outfit = which if which != &"" else (c.outfit if c.outfit != &"" else &"farmer")
 	with_stash = stash
 	sell_mode = sell and not stash
+	salvage_mode = salvage and not stash and not sell
 	cursor = {kind = &"bag", index = 0}
 	size = Vector2(STASH_AT.x + Config.STASH_COLUMNS * (CELL + GAP) + 8 if stash else BAG_AT.x + Config.BAG_COLUMNS * (CELL + GAP) + 8, 240)
 	position = ((Vector2(640, 360) - size) / 2).round()
@@ -130,7 +133,16 @@ func primary(kind: StringName, i: int) -> bool:
 			if not ok and item_in(kind, i) != &"":
 				GameState.notify("가방과 창고가 모두 차서 벗을 수 없다.")
 		&"bag":
-			if sell_mode:
+			if salvage_mode:
+				var id := item_in(kind, i)
+				if id != &"" and not Wearables.is_rolled(id):
+					GameState.notify("%s은(는) 갈 수 없다 (사냥터 · 대장간 등급 장비만 간다)." % Wearables.item(id).name)
+				elif id != &"":
+					var what := "%s %s" % [Wearables.RARITY_NAMES[Wearables.rarity(id)], Wearables.item(id).name]
+					var got := Wearables.salvage(who, i)
+					ok = got > 0
+					GameState.notify("%s을(를) 갈았다. 고철 +%d (고철 %d)" % [what, got, GameState.scrap])
+			elif sell_mode:
 				var id := item_in(kind, i)
 				if id != &"" and not Wearables.is_rolled(id):
 					GameState.notify("%s은(는) 팔 수 없다 (사냥터에서 주운 등급 장비만 판다)." % Wearables.item(id).name)
@@ -282,7 +294,7 @@ func _draw() -> void:
 	var who := outfit
 	draw_rect(Rect2(Vector2.ZERO, size), PAPER)
 	draw_rect(Rect2(Vector2.ZERO, size), EDGE, false, 1.0)
-	_text(Vector2(10, 16), "%s%s" % [Wearables.OUTFIT_NAMES[who], " · 장비 팔기" if sell_mode else " (Tab 바꾸기)"], 10)
+	_text(Vector2(10, 16), "%s%s" % [Wearables.OUTFIT_NAMES[who], " · 장비 팔기" if sell_mode else (" · 장비 갈기 (Tab 바꾸기)" if salvage_mode else " (Tab 바꾸기)")], 10)
 	_text(Vector2(BAG_AT.x, 16), "가방 %d/%d" % [(GameState.bag[who] as Array).size(), Config.BAG_SIZE], 8, SUB)
 	if with_stash:
 		_text(Vector2(STASH_AT.x, 16), "공용 창고 %d/%d" % [GameState.stash.size(), Config.STASH_SIZE], 8, SUB)
@@ -330,6 +342,8 @@ func _draw() -> void:
 	var picked_text := Wearables.describe(picked) if picked != &"" else ""
 	if sell_mode and picked != &"" and Wearables.is_rolled(picked) and cursor.kind == &"bag":
 		picked_text += " · %d원" % Wearables.sell_price(picked)
+	if salvage_mode and picked != &"" and Wearables.is_rolled(picked) and cursor.kind == &"bag":
+		picked_text += " · 고철 %d" % Wearables.salvage_scrap(picked)
 	# 옵션이 많아 창보다 길면 이름과 효과를 두 줄로 나눈다
 	# 옵션이 많아 창보다 길면 이름과 효과를 나누고, 효과도 " · " 마디로 줄을 바꾼다 (무기는 옵션 줄이 길다)
 	var cut := picked_text.find(") · ")
@@ -355,4 +369,6 @@ func _draw() -> void:
 	var help := "클릭: 창고로 넣기/꺼내기 · 오른쪽 클릭(R): 입기 · 입은 칸 클릭: 벗기 · I 닫기" if with_stash else "클릭(F): 입기/벗기 · WASD 칸 고르기 · I 닫기"
 	if sell_mode:
 		help = "클릭(F): 팔기 (사냥터 등급 장비만) · 오른쪽 클릭(R): 입기 · I 닫기"
+	if salvage_mode:
+		help = "클릭(F): 갈아서 고철 (등급 장비만) · 오른쪽 클릭(R): 입기 · I 닫기"
 	_text(Vector2(10, size.y - 6), help, 8, SUB)

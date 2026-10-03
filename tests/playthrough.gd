@@ -609,7 +609,7 @@ func let_creatures_work() -> void:
 				busy = true
 			elif s.job in [CreatureJobs.FARM, CreatureJobs.FORAGE] and main.forage.nearest_target(s.position, s.has_element(&"earth")) != null:
 				busy = true
-			elif s.job == CreatureJobs.SCRAP and (GameState.scrap_pile > 0 or s.position.distance_to(Farm.center_of(s.home)) > 1.0):
+			elif s.job == CreatureJobs.SCRAP and (s.dug_today < s.dig_cap() or s.position.distance_to(Farm.center_of(s.home)) > 1.0):
 				busy = true
 			elif s.job == CreatureJobs.HERB and (GameState.herb_bed > 0 or s.position.distance_to(Farm.center_of(s.home)) > 1.0):
 				busy = true

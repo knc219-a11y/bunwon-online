@@ -436,6 +436,8 @@ const GEAR_AFFIX_COUNT := {&"normal": [0, 0], &"magic": [1, 2], &"rare": [3, 4]}
 const SET_PIECE_SHARE := 0.5
 ## 공급함에서 장비를 팔 때 값 (바로 돈)
 const GEAR_SELL_PRICES := {&"normal": 5, &"magic": 20, &"rare": 60, &"crafted": 40}
+## 장비 갈기 (2026-10-03 백로그 8 "아이템을 갈아서 고철 얻기"): 대장장이 창 → 가방에서 장비를 누르면 고철. 등급별 고철 수 (임시).
+const SALVAGE_SCRAP := {&"normal": 1, &"magic": 2, &"rare": 3, &"crafted": 3, &"set": 5}
 
 ## 대장 슬라임 (2026-09-28 사용자 선택 B, 디아블로2 챔피언처럼). 값은 전부 임시.
 ## 야생 슬라임을 다 쓰러뜨리면 공터 가운데에 대장 1마리가 나온다 (사냥 한 번에 한 마리).
@@ -951,8 +953,9 @@ const BOSS_MATERIAL_NAME := "사금 덩이"
 const FORGE_COST_MONEY := 2000
 const FORGE_COST_CROPS := 40
 const FORGE_COST_MATERIAL := 12
-## 고물 더미: 아침마다 이만큼 쌓인다 (안 가져간 것은 그대로 두지 않고 새로 채움). 농부가 F로 하나씩 주워도 된다.
-const SCRAP_PER_DAY := 6
+## 고물 캐기 (2026-10-03 백로그 3 "고철이 하루 6개 그냥 생기는 게 별로 → 남는 크리처로 고철"): 고물 더미는 저절로 차지 않는다.
+## 고물 캐기를 맡은 크리처 한 마리가 하루 SCRAP_DIG_PER_DAY x 고물 캐기 재능 (땅 1.5) 개를 캐 대장간에 둔다 (반올림, 최소 1).
+const SCRAP_DIG_PER_DAY := 2
 ## 제작 (대장장이 모루 F). 기본 장비마다 고철 · 돈. 옵션 수는 무게로 굴린다 {개수: 무게}.
 const CRAFT_COSTS := {
 	&"work_cap": [3, 200], &"rain_suit": [5, 300], &"work_boots": [4, 250],

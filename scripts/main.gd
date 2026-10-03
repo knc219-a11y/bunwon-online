@@ -1000,6 +1000,9 @@ func menu_confirm() -> void:
 			if restore_forge():
 				close_menu()
 				return
+		elif id == &"salvage":
+			open_inventory(false, false, true)
+			return
 		else:
 			craft(id)
 		_rebuild_menu()
@@ -1174,14 +1177,15 @@ func buy_wear(id: StringName) -> bool:
 
 ## 가방 창을 연다. stash 면 창고 칸도 옆에 붙인다 (마을 창고 궤짝에서 F).
 ## sell 이면 공급함 장비 팔기 창 (가방 칸 클릭 = 팔기).
-func open_inventory(stash := false, sell := false) -> void:
+## salvage 면 대장장이 장비 갈기 창 (가방 칸 클릭 = 고철로, 2026-10-03 백로그 8).
+func open_inventory(stash := false, sell := false, salvage := false) -> void:
 	close_menu()
 	player.frozen = true
 	if hunt:
 		hunt.set_process(false)
-	# 장비 팔기는 팔 것이 있는 벌부터 (사냥터 등급 장비는 사냥 옷 가방에 쌓인다)
-	var which := &"hunter" if sell and Wearables.rolled_in_bag(&"hunter") > 0 else &""
-	inventory.open(player, stash, sell, which)
+	# 장비 팔기 · 갈기는 그런 장비가 있는 벌부터 (사냥터 등급 장비는 사냥 옷 가방에 쌓인다)
+	var which := &"hunter" if (sell or salvage) and Wearables.rolled_in_bag(&"hunter") > 0 else &""
+	inventory.open(player, stash, sell, which, salvage)
 
 
 ## 사냥꾼 스킬 창 (T). 사냥터에선 여는 동안 멈춘다.
@@ -1238,13 +1242,10 @@ func open_site(fac: StringName) -> bool:
 # --- 대장간 복구 · 대장장이 (2026-09-29 사용자 선택 A: 한 번에 복구 + 사람 장비 제작) ---
 
 ## 아침에 대장간 쪽에서 생긴 일 (아침 카드 한 줄, 없으면 ""). 1막 대장을 처음 잡은 다음 날 터가 드러나고,
-## 고친 뒤로는 고물 더미에 고철이 다시 쌓인다.
 func _forge_morning() -> String:
 	if GameState.forge_state == 0 and GameState.forge_boss_down:
 		show_forge_site()
 		return "금사리 대장이 쓰러진 뒤, 마을 아랫길 왼쪽 풀밭에 무너진 대장간 터가 드러났다. 터에서 F. 이제 금사리 몬스터도 사금 덩이를 가끔 떨어뜨린다."
-	if GameState.forge_state >= 2:
-		GameState.scrap_pile = Config.SCRAP_PER_DAY
 	return ""
 
 
@@ -1280,6 +1281,8 @@ func forge_options() -> Array[StringName]:
 
 func craft_options() -> Array[StringName]:
 	var out: Array[StringName] = Wearables.craft_bases()
+	if Wearables.rolled_in_bag(&"hunter") > 0 or Wearables.rolled_in_bag(&"farmer") > 0:
+		out.append(&"salvage")
 	out.append(&"close")
 	return out
 
@@ -1290,6 +1293,9 @@ func forge_option_text(id: StringName) -> String:
 			return SiteWork.option_text(&"forge", can_restore_forge())
 		&"close":
 			return "닫기"
+		&"salvage":
+			var g: Dictionary = Config.SALVAGE_SCRAP
+			return "가방에서 장비 갈기 ▶ (고철: 일반 %d · 마법 %d · 레어 %d · 제작 %d · 세트 %d)" % [g[&"normal"], g[&"magic"], g[&"rare"], g[&"crafted"], g[&"set"]]
 	var it: Dictionary = Wearables.ITEMS[id]
 	var cost: Array = Config.CRAFT_COSTS[id]
 	if it.slot == &"weapon":
@@ -1330,9 +1336,8 @@ func restore_forge() -> bool:
 		GameState.notify(SiteWork.start_text(&"forge"))
 		return false
 	GameState.forge_state = 2
-	GameState.scrap_pile = Config.SCRAP_PER_DAY
 	show_forge_restored()
-	GameState.notify("대장간을 고쳤다! 대장장이가 왔다. 고물 더미의 고철로 모루에서 장비를 만든다. 크리처에게 고철 줍기(R)도 맡길 수 있다. 금사리 윗길 쇠다리도 이어 줘서 이제 광동리로 건너갈 수 있다.")
+	GameState.notify("대장간을 고쳤다! 대장장이가 왔다. 고철로 모루에서 장비를 만들고, 안 쓰는 장비는 갈아서 고철로 바꿔 준다. 고물 더미의 고철은 크리처가 캐 온다 (고물 캐기). 금사리 윗길 쇠다리도 이어 줘서 이제 광동리로 건너갈 수 있다.")
 	return true
 
 
@@ -1350,15 +1355,28 @@ func show_forge_restored() -> void:
 	_refresh_props()
 
 
-## 고물 더미에서 손으로 고철 하나
+## 고물 더미에서 F: 고철은 크리처가 캔다 (2026-10-03 백로그 3, 손으로 줍던 것은 없앰). 오늘 캔 양을 알려 준다.
 func pick_scrap() -> bool:
-	if GameState.scrap_pile <= 0:
-		GameState.notify("고물 더미가 비었다. 내일 아침 다시 쌓인다.")
-		return false
-	GameState.scrap_pile -= 1
-	GameState.scrap += 1
-	GameState.notify("고철을 하나 주웠다 (고철 %d). 크리처에게 고철 줍기(R)를 맡기면 알아서 주워 온다." % GameState.scrap)
-	return true
+	var diggers := scrap_diggers()
+	if diggers.is_empty():
+		GameState.notify("고물 더미는 손으로 못 판다. 크리처에게 고물 캐기를 맡기면 하루 몇 개씩 고철을 캐 온다 (땅속성이 잘 캔다).")
+	else:
+		var dug := 0
+		var cap := 0
+		for c in diggers:
+			dug += c.dug_today
+			cap += c.dig_cap()
+		GameState.notify("크리처 %d마리가 고물을 캔다: 오늘 %d/%d개 (가진 고철 %d)." % [diggers.size(), dug, cap, GameState.scrap])
+	return false
+
+
+## 고물 캐기를 맡은 크리처 (원정 · 들림 제외)
+func scrap_diggers() -> Array[Creature]:
+	var out: Array[Creature] = []
+	for c in creatures:
+		if c.job == CreatureJobs.SCRAP and c.expedition_zone < 0:
+			out.append(c)
+	return out
 
 
 ## 대장장이가 모루에서 base 장비를 하나 만든다. 만든 장비 id (못 만들면 &"").
@@ -2624,6 +2642,8 @@ func next_day() -> Array[String]:
 	GameState.minutes = float(Config.DAY_START_MINUTE)
 	var built_yesterday := GameState.build_today
 	GameState.build_today = 0
+	for c in creatures:
+		c.dug_today = 0
 	_update_dusk()
 	var lines: Array[String] = []
 	var sold := 0
@@ -2874,7 +2894,8 @@ func _refresh_props() -> void:
 	if forge:
 		forge.set_badge(SiteWork.badge(&"forge") if GameState.forge_state == 1 else ("고철 %d" % GameState.scrap))
 	if scrap_heap:
-		scrap_heap.set_badge("고철 %d" % GameState.scrap_pile if GameState.scrap_pile > 0 else "비었음")
+		var diggers := scrap_diggers().size()
+		scrap_heap.set_badge("캐는 크리처 %d" % diggers if diggers > 0 else "캘 크리처 없음")
 	if yak:
 		# 고친 뒤엔 도라지밭 남은 수도 여기 함께 (도라지밭 배지가 약방 옆 배지와 겹쳐서, 2026-10-01)
 		yak.set_badge(SiteWork.badge(&"yak") if GameState.yak_state == 1 else ("%s %d · 밭 %d" % [Config.ROOT_NAME, GameState.roots, GameState.herb_bed]))

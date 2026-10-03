@@ -342,6 +342,23 @@ static func sell(who: StringName, i: int) -> int:
 	return price
 
 
+static func salvage_scrap(id: StringName) -> int:
+	return Config.SALVAGE_SCRAP.get(rarity(id), 1)
+
+
+## who 가방 i 번째 장비를 갈아 고철로 (2026-10-03 백로그 8). 받은 고철, 못 갈면 0. 마을 가게 장비 (굴리지 않은 것) 는 갈지 않는다.
+static func salvage(who: StringName, i: int) -> int:
+	var b: Array[StringName] = GameState.bag[who]
+	if i < 0 or i >= b.size() or not is_rolled(b[i]):
+		return 0
+	var id := b[i]
+	var n := salvage_scrap(id)
+	b.remove_at(i)
+	GameState.gear.erase(id)
+	GameState.scrap += n
+	return n
+
+
 ## 가방의 일반 장비를 한꺼번에 판다. [판 개수, 받은 돈]
 static func sell_all_normal(who: StringName) -> Array[int]:
 	var b: Array[StringName] = GameState.bag[who]

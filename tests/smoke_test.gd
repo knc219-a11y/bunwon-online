@@ -1690,40 +1690,58 @@ func _ready() -> void:
 	_check(not GameState.site_work.has(&"forge") and not CreatureJobs.BUILD in CreatureJobs.jobs(), "문을 열면 공사 기록 · 터 공사 일이 사라짐")
 	main.creatures.erase(bc)
 	bc.queue_free()
-	_check(main.smith.visible and main.scrap_heap != null and GameState.scrap_pile == Config.SCRAP_PER_DAY, "대장장이와 고물 더미가 생김")
-	_check(CreatureJobs.SCRAP in CreatureJobs.jobs(), "R 일 목록에 고철 줍기")
+	_check(main.smith.visible and main.scrap_heap != null and true, "대장장이와 고물 더미가 생김")
+	_check(CreatureJobs.SCRAP in CreatureJobs.jobs(), "R 일 목록에 고물 캐기")
 	_check(main.smith.npc and main.player.active and not main.smith.active, "대장장이는 말 거는 마을 사람 (조작 안 함)")
 	main.player.position = Farm.center_of(Config.SMITH_CELL) + Vector2(0, 10)
 	_check(main.nearby_villager() == main.smith, "대장장이 옆에 서면 말 걸 사람")
 	main.interact()
 	_check(main.menu_open and main.menu_kind == &"craft", "대장장이에게 F → 제작 창")
 	main.close_menu()
-	# 크리처 고철 줍기: 땅속성이 빠르다
+	# 크리처 고물 캐기 (2026-10-03 백로그 3): 더미는 저절로 안 차고, 한 마리가 하루 dig_cap() 개. 땅속성이 빠르다
 	var fs: Creature = main._hatch(CreatureCatalog.SLIME, Config.FORAGE_CELLS[2])
 	fs.data.set_element(load("res://data/creatures/elements/earth.tres"))
 	fs.auto_work = false
 	while fs.job != CreatureJobs.SCRAP:
 		fs.next_job()
-	_check(is_equal_approx(fs.data.work_speed(CreatureJobs.SCRAP), fs.data.work_speed(CreatureJobs.WATER) * 1.5), "땅속성은 고철 줍기 1.5배")
+	_check(is_equal_approx(fs.data.work_speed(CreatureJobs.SCRAP), fs.data.work_speed(CreatureJobs.WATER) * 1.5), "땅속성은 고물 캐기 1.5배")
 	GameState.scrap = 0
-	_check(fs.work_once(), "고철 줍기 크리처가 고물 더미로")
+	_check(fs.dig_cap() == maxi(1, roundi(Config.SCRAP_DIG_PER_DAY * fs.data.work_speed(CreatureJobs.SCRAP))) and fs.dig_cap() >= 3, "땅속성 하루 캐는 수 %d개" % fs.dig_cap())
+	_check(fs.work_once(), "고물 캐기 크리처가 고물 더미로")
 	Engine.time_scale = 20.0
 	while fs._busy:
 		await get_tree().process_frame
 	Engine.time_scale = 1.0
-	_check(GameState.scrap == 1 and GameState.scrap_pile == Config.SCRAP_PER_DAY - 1, "고철 하나를 주워 옴")
-	GameState.scrap_pile = 0
-	_check(fs.work_once() and fs._busy, "더미가 비면 제자리로 돌아감")
+	_check(GameState.scrap == 1 and fs.dug_today == 1, "고철 하나를 캐 옴")
+	fs.dug_today = fs.dig_cap()
+	_check(fs.work_once() and fs._busy, "오늘 몫을 다 캐면 제자리로 돌아감")
 	Engine.time_scale = 20.0
 	while fs._busy:
 		await get_tree().process_frame
 	Engine.time_scale = 1.0
 	_check(not fs.work_once(), "제자리에서 쉼")
 	main.next_day()
-	_check(GameState.scrap_pile == Config.SCRAP_PER_DAY, "아침마다 고물 더미가 다시 쌓임")
+	_check(fs.dug_today == 0, "아침마다 캔 수를 새로 셈")
 	main.player.position = Farm.center_of(Config.SCRAP_RECT.position + Vector2i(Config.SCRAP_RECT.size.x, 0))
 	main.interact()
-	_check(GameState.scrap == 2, "농부가 F로 고철을 손으로 주움")
+	_check(GameState.scrap == 1, "고물 더미는 손으로 못 팜 (크리처 몫)")
+	main.creatures.erase(fs)
+	fs.queue_free()
+	# 장비 갈기 (2026-10-03 백로그 8): 대장장이 창 → 가방에서 장비 클릭 = 고철
+	var sv_roll := Wearables.roll_gear(RandomNumberGenerator.new(), &"rare")
+	var sv_where := Wearables.gain_rolled(sv_roll)
+	var sv_who: StringName = Wearables.ITEMS[sv_roll.base].who
+	if sv_where == &"worn":
+		Wearables.take_off(sv_who, Wearables.ITEMS[sv_roll.base].slot)
+	_check(sv_where != &"" and (GameState.bag[sv_who] as Array).size() > 0, "갈 장비를 하나 얻어 가방에")
+	var sv_i := (GameState.bag[sv_who] as Array).size() - 1
+	_check(&"salvage" in main.craft_options(), "대장장이 창에 장비 갈기")
+	GameState.scrap = 0
+	main.open_inventory(false, false, true)
+	main.inventory.outfit = sv_who
+	_check(main.inventory.salvage_mode, "갈기 창으로 열림")
+	_check(main.inventory.primary(&"bag", sv_i) and GameState.scrap == Config.SALVAGE_SCRAP[&"rare"], "레어 장비를 갈면 고철 %d" % Config.SALVAGE_SCRAP[&"rare"])
+	main.close_inventory()
 	# 제작: 주인공이 대장간 모루에서 F → 대장장이 제작 창
 	GameState.scrap = 20
 	GameState.money = 1000
