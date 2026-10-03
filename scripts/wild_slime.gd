@@ -157,7 +157,7 @@ var variant := &""
 var _dragon_step := 0
 ## 방금 떨어진 짚단 · 기둥 · 날개 바람 · 금화 (bale_landed 를 받는 HuntGround 가 종류를 본다)
 var landing := {}
-## 귀여리 방패 도마뱀 (shield, 2026-10-03 임시 A): 바라보는 쪽 (_face) 에서 친 공격은 방패에 막힌다.
+## 귀여리 방패 도마뱀 (shield, 2026-10-03 사용자 선택 A): 바라보는 쪽 (_face) 에서 친 공격은 방패에 막힌다.
 ## 창을 찌른 뒤 (_recover 동안) 방패가 내려가고, 옆 · 등 뒤는 늘 열려 있다. gold_t 동안 (족장 전쟁 북) 금빛 방패 = 찌른 뒤에도 앞 · 옆을 막음.
 var shield := false
 var gold_t := 0.0

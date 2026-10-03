@@ -521,7 +521,7 @@ DK = 1.5
 WY = ((80, 140, 110), (50, 96, 80), (210, 214, 160), (110, 170, 130), (230, 230, 190))
 GL_ = ((88, 140, 76), (56, 98, 58), (214, 206, 146))
 out = {
-    # 귀여리 (임시: 추천 A 방패 도마뱀 + 족장, 사용자가 고르면 그 안으로 다시 만듦)
+    # 귀여리 (2026-10-03 사용자 선택 A 방패 도마뱀 + 족장)
     "wild_shield_lizard": sheet(frames8(lambda **k: lizard(*GL_, "shield", **k)), 48),
     "wild_lizard_chief": sheet(frames8(lambda **k: chieftain(**k)), 64),
     "baby_lizard": sheet(frames10(lambda **k: baby_lizard(**k)), 32),

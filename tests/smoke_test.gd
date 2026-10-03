@@ -3802,7 +3802,7 @@ func _guiyeo_checks() -> void:
 	await get_tree().process_frame
 	var zi := 8
 	var z: Dictionary = Config.HUNT_ZONES[zi]
-	_check(z.monster == "방패 도마뱀" and z.boss_monster == "도마뱀 족장" and z.shield and z.boss_pattern == &"chief", "귀여리: 방패 도마뱀 · 도마뱀 족장 (임시 A)")
+	_check(z.monster == "방패 도마뱀" and z.boss_monster == "도마뱀 족장" and z.shield and z.boss_pattern == &"chief", "귀여리: 방패 도마뱀 · 도마뱀 족장 (A)")
 	GameState.reset()
 	TestStarts.apply(m, &"guiyeo")
 	var baby: Creature = m._hatch(CreatureCatalog.LIZARD, Config.FORAGE_CELLS[5])

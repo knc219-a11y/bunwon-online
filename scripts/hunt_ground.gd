@@ -1624,7 +1624,7 @@ func _on_called(at: Vector2) -> void:
 		GameState.touch()
 		return
 	if Config.HUNT_ZONES[zone].get("boss_pattern") == &"chief":
-		# 도마뱀 족장 전쟁 북 (2026-10-03 귀여리 임시 A): 방패 도마뱀 둘이 달려오고, 모든 방패가 한동안 금빛
+		# 도마뱀 족장 전쟁 북 (2026-10-03 귀여리 사용자 선택 A): 방패 도마뱀 둘이 달려오고, 모든 방패가 한동안 금빛
 		for i in mini(Config.CHIEF_CALL, Config.SLAM_MINION_MAX - minions):
 			var l := WildSlime.new()
 			l.setup_zone(zone)
@@ -1778,7 +1778,7 @@ func _hurt(from: Vector2, damage := 1, who := "야생 슬라임", what := "") ->
 	# 조련 크리처 방패 (2026-10-02): 동행이 한 번 대신 맞아 준다 (다시 막기까지 쿨)
 	var guard := HunterSkills.rank(&"creature_guard")
 	if companion != null and companion.data.species.lid and lid_cd <= 0.0:
-		# 아기 도마뱀 냄비뚜껑 방패 (2026-10-03 귀여리 임시 A): 몇 초마다 한 번 대신 막아 준다
+		# 아기 도마뱀 냄비뚜껑 방패 (2026-10-03 귀여리 사용자 선택 A): 몇 초마다 한 번 대신 막아 준다
 		lid_cd = Config.LID_COOLDOWN
 		guard_blocks += 1
 		_invulnerable = Config.HURT_INVULNERABLE_TIME

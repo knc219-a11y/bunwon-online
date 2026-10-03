@@ -671,7 +671,7 @@ const HUNT_ZONES: Array[Dictionary] = [
 		map = "guiyeo", from_village = true,
 		labels = [[Vector2(26.5, 7.3), "도마뱀 야영지"]],
 		sheet = "res://assets/creatures/wild_shield_lizard.png", boss_sheet = "res://assets/creatures/wild_lizard_chief.png", burrow = false,
-		## 방패 도마뱀 (shield, 2026-10-03 귀여리 카드 추천 A, 사용자 선택 전 임시): 바라보는 쪽에서 친 공격은 방패에 막힘 (팅!).
+		## 방패 도마뱀 (shield, 2026-10-03 사용자 선택 A): 바라보는 쪽에서 친 공격은 방패에 막힘 (팅!).
 		## 창을 당겼다 (구역 windup) 길게 찌른 뒤 (LIZARD_THRUST) 방패가 내려간 틈 (LIZARD_SHIELD_DOWN) · 옆 · 등 뒤를 노린다. 떼 4.
 		## 대장 도마뱀 족장 (chief): 전쟁 북 (모든 방패 금빛 CHIEF_GOLD_TIME + 도마뱀 CHIEF_CALL 마리) → 꼬리 휘두르기 (둘레 원),
 		## 체력 절반부터 창 던지기 CHIEF_SPEARS 개.
@@ -752,7 +752,7 @@ const GENERAL_RECOVER := 1.8
 const GENERAL_COOLDOWN := 2.2
 const GENERAL_CALL := 2
 const GENERAL_MINION_HP := 3
-## 귀여리 방패 도마뱀 (shield, 2026-10-03 임시 A): 창 찌르기 길이 · 시간, 찌른 뒤 방패가 내려가 있는 시간 (= 앞에서도 칠 틈).
+## 귀여리 방패 도마뱀 (shield, 2026-10-03 사용자 선택 A): 창 찌르기 길이 · 시간, 찌른 뒤 방패가 내려가 있는 시간 (= 앞에서도 칠 틈).
 ## 방패는 바라보는 쪽 LIZARD_FRONT_DOT (cos, 약 ±70도) 안을 막고, 금빛 (족장 북) 이면 LIZARD_GOLD_DOT (약 ±115도) 까지 · 찌른 뒤에도 막음.
 const LIZARD_THRUST := 64.0
 const LIZARD_THRUST_TIME := 0.22

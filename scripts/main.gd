@@ -2620,7 +2620,7 @@ func gather_gold_dust() -> int:
 	return total
 
 
-## 장보기 (아기 도마뱀, 2026-10-03 귀여리 임시 A): 일을 맡은 (쉬지 않고 원정도 안 간) 아기 도마뱀이 있으면 밤사이 판매값 +MARKET_BONUS.
+## 장보기 (아기 도마뱀, 2026-10-03 귀여리 사용자 선택 A): 일을 맡은 (쉬지 않고 원정도 안 간) 아기 도마뱀이 있으면 밤사이 판매값 +MARKET_BONUS.
 ## 더 받은 돈을 돌려준다 (돈통에 이미 넣음).
 func market_bonus(sold: int) -> int:
 	if sold <= 0:
