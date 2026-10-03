@@ -225,7 +225,7 @@ static func buy_seeds(kind: StringName) -> bool:
 ## 가진 작물의 등급별 수 [★1, ★2, ★3]. 다른 곳에서 가진 수를 그냥 줄이면 (공사 · 모이 · 미끼 · 잔치상)
 ## ★1 부터 쓴 것으로 보고, ★1 이 모자라면 ★2, ★3 순으로 깎는다.
 static func stars(kind: StringName) -> Array[int]:
-	var total := held(kind)
+	var total := maxi(held(kind), 0)
 	var s: Array = GameState.crop_stars.get(kind, [0, 0])
 	var n2: int = s[0]
 	var n3: int = s[1]
@@ -233,7 +233,7 @@ static func stars(kind: StringName) -> Array[int]:
 	if over > 0:
 		var cut := mini(over, n2)
 		n2 -= cut
-		n3 -= over - cut
+		n3 = maxi(n3 - (over - cut), 0)
 	if n2 != s[0] or n3 != s[1]:
 		GameState.crop_stars[kind] = [n2, n3]
 	return [total - n2 - n3, n2, n3]
