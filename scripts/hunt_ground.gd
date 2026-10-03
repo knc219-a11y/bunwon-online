@@ -1681,9 +1681,10 @@ func _on_lashed(from: Vector2, to: Vector2) -> void:
 func _reachable(p: Vector2) -> Vector2:
 	if map == null:
 		return p
-	for r in [0.0, 6.0, 12.0, 18.0, 24.0, 36.0]:
-		for k in 8:
-			var q: Vector2 = p + Vector2.RIGHT.rotated(k * TAU / 8.0) * r
+	# 2026-10-03 소내섬: 와이번 · 용이 넓은 물 (용소) 위에서 쓰러지면 물가까지 멀리 찾는다 (못 줍는 자리에 떨어지지 않게)
+	for r in [0.0, 6.0, 12.0, 18.0, 24.0, 36.0, 48.0, 72.0, 96.0, 128.0, 168.0, 216.0]:
+		for k in (8 if r <= 36.0 else 16):
+			var q: Vector2 = p + Vector2.RIGHT.rotated(k * TAU / (8.0 if r <= 36.0 else 16.0)) * r
 			if map.is_free(Rect2(q - Character.FEET_BOX / 2.0, Character.FEET_BOX)):
 				return q
 			if r == 0.0:

@@ -3733,6 +3733,10 @@ func _sonae_checks() -> void:
 	for o: WildSlime in h.slimes.duplicate():
 		o.queue_free()
 	h.slimes.clear()
+	# 용소 깊은 물 위에서 쓰러져도 줍는 자리는 물가 (2026-10-03 봇이 물 위 전리품에 막힘)
+	var deep := Vector2(25.5, 3.5) * Config.TILE
+	var dry_at := h._reachable(deep)
+	_check(not h.map.is_free(Rect2(deep - Character.FEET_BOX / 2.0, Character.FEET_BOX)) and h.map.is_free(Rect2(dry_at - Character.FEET_BOX / 2.0, Character.FEET_BOX)), "용소 물 위 전리품은 물가로 (%d px)" % roundi(deep.distance_to(dry_at)))
 	# 희귀 용 셋: 자기 기술
 	var expect := {&"blue": "팔당 청룡", &"cloud": "운룡", &"gold": "황금 드래곤"}
 	for id: StringName in expect:
