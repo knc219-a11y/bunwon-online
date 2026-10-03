@@ -503,7 +503,7 @@ func companions() -> Array[HuntCompanion]:
 ## 입은 장비와 세트 보너스까지 더한 하트 칸 수
 func max_life() -> int:
 	return Config.HUNTER_HP + Config.HP_PER_LEVEL * (GameState.hunter_level - 1) + Config.HP_PER_HEART * Wearables.bonus_hearts(&"hunter") \
-		+ (Config.LUNCH_HP if lunch else 0) + (Config.STEW_HP if stew else 0)
+		+ (Config.LUNCH_HP if lunch else 0) + (Config.STEW_HP if stew else 0) + HunterClass.bonus_hp()
 
 
 ## 사냥 도시락을 먹는다: 하트 칸이 늘고 늘어난 만큼 찬다.
@@ -755,7 +755,7 @@ func _tick_dash(delta: float) -> void:
 	if dash_t < 0.0:
 		return
 	_trail.append({at = hunter.position, t = 0.18})
-	var mult := Wearables.speed_mult(&"hunter") * (Config.SPEED_POTION_MULT if quick else 1.0)
+	var mult := Wearables.speed_mult(&"hunter") * (Config.SPEED_POTION_MULT if quick else 1.0) * HunterClass.move_mult()
 	hunter.step(_dash_dir * Config.DASH_DISTANCE * mult / Config.DASH_TIME * delta)
 	dash_t += delta
 	if dash_t >= Config.DASH_TIME:
@@ -852,9 +852,11 @@ func swing(dir := Vector2.ZERO) -> int:
 
 
 ## 한 번 맞힌다 (피해 숫자를 띄우고, 쓰러지면 처치). 쓰러뜨렸으면 true.
-func _strike(s: WildSlime, from: Vector2, amount: int) -> bool:
+## units = 옛 피해 (1 · 2 ...). 실제 피해는 x DMG_UNIT x 스탯 · 직업 (2026-10-03). by_companion = 동행 크리처가 침 (교감)
+func _strike(s: WildSlime, from: Vector2, units: int, by_companion := false) -> bool:
+	var amount := HunterClass.companion_damage(units) if by_companion else HunterClass.hunter_damage(units, Wearables.weapon().kind)
 	if feel:
-		_pops.append({at = s.position + Vector2(randf_range(-4, 4), -18 * s.scale.y), text = str(amount), t = 0.5, big = amount > 1})
+		_pops.append({at = s.position + Vector2(randf_range(-4, 4), -18 * s.scale.y), text = str(amount), t = 0.5, big = units > 1})
 	if s.hit(from, amount):
 		_defeat(s)
 		return true
@@ -876,7 +878,7 @@ func _tick_shots(delta: float) -> void:
 			continue
 		_burns.remove_at(i)
 		var s: WildSlime = b.slime
-		if is_instance_valid(s) and s in slimes and hittable(s) and s.hit(s.position + Vector2(0, -4)):
+		if is_instance_valid(s) and s in slimes and hittable(s) and s.hit(s.position + Vector2(0, -4), b.amount):
 			_defeat(s)
 	for i in range(shots.size() - 1, -1, -1):
 		var sh: Dictionary = shots[i]
@@ -932,16 +934,17 @@ func _burst(at: Vector2, radius: float, element: StringName) -> void:
 		if _strike(s, at, power()):
 			continue
 		# 속성 강화: 효과 시간 +20%/단계, 5단계면 불이 두 번
-		var boost := 1.0 + Config.ELEMENT_BOOST_STEP * HunterSkills.rank(&"element_boost")
+		var boost := (1.0 + Config.ELEMENT_BOOST_STEP * HunterSkills.rank(&"element_boost")) * HunterClass.element_mult()
 		match element:
 			&"water":
 				s.slow(Config.STAFF_SLOW_TIME * boost)
 			&"earth":
 				s.stun(Config.STAFF_STUN_TIME * boost)
 			&"fire":
-				_burns.append({slime = s, t = Config.STAFF_BURN_DELAY})
+				var burn := HunterClass.hunter_damage(1, &"staff")
+				_burns.append({slime = s, t = Config.STAFF_BURN_DELAY, amount = burn})
 				if HunterSkills.rank(&"element_boost") >= 5:
-					_burns.append({slime = s, t = Config.STAFF_BURN_DELAY * 2.0})
+					_burns.append({slime = s, t = Config.STAFF_BURN_DELAY * 2.0, amount = burn})
 
 
 
@@ -980,7 +983,7 @@ func companion_attack(target: WildSlime, companion: HuntCompanion = null) -> voi
 		companion = self.companion
 	# 조련 함께 싸우기 (2026-10-02): 공격 빠르기 +10%/단계, 5단계면 피해 +1
 	var together := HunterSkills.rank(&"fight_together")
-	companion.cooldown = companion.attack_interval() / (1.0 + Config.FIGHT_TOGETHER_SPEED * together)
+	companion.cooldown = companion.attack_interval() / ((1.0 + Config.FIGHT_TOGETHER_SPEED * together) * HunterClass.companion_speed())
 	companion.play_attack(target.position)
 	# 아기 백호 번개 발톱 (2026-09-30): 한 방이 2 피해
 	var claw := (2 if companion.style == HuntCompanion.Style.SPIRIT else 1) + (1 if together >= 5 else 0)
@@ -989,7 +992,7 @@ func companion_attack(target: WildSlime, companion: HuntCompanion = null) -> voi
 		for o in slimes:
 			if not o.boss and o != target and o.position.distance_to(companion.position) <= Config.COMPANION_ROAR_RADIUS:
 				o.stun(Config.COMPANION_ROAR_STUN)
-	if target.hit(companion.position, claw):
+	if target.hit(companion.position, HunterClass.companion_damage(claw)):
 		_defeat(target)
 	elif companion.style == HuntCompanion.Style.ROAR or companion.style == HuntCompanion.Style.SPIRIT:
 		if not target.boss:
@@ -998,7 +1001,7 @@ func companion_attack(target: WildSlime, companion: HuntCompanion = null) -> voi
 		pass
 	elif companion.style == HuntCompanion.Style.EMBER:
 		# 불씨: 잠시 뒤 한 번 더 맞는다 (불의 지팡이와 같은 불붙음)
-		_burns.append({slime = target, t = Config.STAFF_BURN_DELAY})
+		_burns.append({slime = target, t = Config.STAFF_BURN_DELAY, amount = HunterClass.companion_damage(1)})
 	elif companion.style == HuntCompanion.Style.BIND:
 		# 덩굴 묶기: 잠깐 붙잡는다 (못 움직이고 부딪혀도 안 다침, 사냥꾼 칼 칠 틈)
 		target.stun(Config.COMPANION_BIND_STUN)
@@ -1019,7 +1022,7 @@ func companion_attack(target: WildSlime, companion: HuntCompanion = null) -> voi
 			target.stun(Config.COMPANION_KICK_STUN)
 	elif companion.style == HuntCompanion.Style.SCARE:
 		# 아기 악귀 불 할퀴기 + 겁주기 (2026-10-02 곤지암): 불씨가 한 번 더 붙고, 맞은 몬스터는 잠깐 사냥꾼에게서 달아난다 (대장은 안 겁먹음)
-		_burns.append({slime = target, t = Config.STAFF_BURN_DELAY})
+		_burns.append({slime = target, t = Config.STAFF_BURN_DELAY, amount = HunterClass.companion_damage(1)})
 		target.scare(Config.IMP_FEAR)
 	elif companion.style == HuntCompanion.Style.BUMP:
 		# 박치기는 더 멀리 밀쳐낸다
@@ -1143,7 +1146,7 @@ func _tick_charge(delta: float) -> void:
 	var r := HunterSkills.rank(&"charge_order")
 	c.play_attack(target.position)
 	_shake = 0.08
-	if _strike(target, c.position, 1 + (1 if r >= 3 else 0) + (1 if r >= 5 else 0)):
+	if _strike(target, c.position, 1 + (1 if r >= 3 else 0) + (1 if r >= 5 else 0), true):
 		return
 	if not target.boss:
 		target.stun(Config.CHARGE_STUN + 0.2 * (r - 1))
@@ -1372,7 +1375,7 @@ func _on_slammed(at: Vector2, boss: WildSlime = null) -> void:
 		var m := WildSlime.new()
 		m.setup_zone(zone)
 		m.buried = false
-		m.make_minion()
+		m.make_minion(zone)
 		m.area = monster_area()
 		m.terrain = map
 		m.position = m._stand(at + Vector2(-34 if i == 0 else 34, 10))
@@ -1437,7 +1440,7 @@ func _on_dimmed(_at: Vector2, boss: WildSlime) -> void:
 		m.setup_zone(zone)
 		m.minion = true
 		m.title = "소환된 " + m.title
-		m.hp = Config.ARCH_MINION_HP
+		m.hp = HunterSkills.minion_hp(zone, Config.ARCH_MINION_HP)
 		m.max_hp = m.hp
 		m.area = monster_area()
 		m.terrain = map
@@ -1501,7 +1504,7 @@ func _on_called(at: Vector2) -> void:
 			l.setup_zone(zone)
 			l.minion = true
 			l.title = "파발 " + l.title
-			l.hp = Config.GENERAL_MINION_HP
+			l.hp = HunterSkills.minion_hp(zone, Config.GENERAL_MINION_HP)
 			l.max_hp = l.hp
 			l.area = monster_area()
 			l.terrain = map
@@ -1516,7 +1519,7 @@ func _on_called(at: Vector2) -> void:
 	for i in mini(Config.STRAW_CALL, Config.SLAM_MINION_MAX - minions):
 		var m := WildSlime.new()
 		m.setup_zone(zone)
-		m.make_minion()
+		m.make_minion(zone)
 		m.area = monster_area()
 		m.terrain = map
 		m.position = (at + Vector2(-40 if i == 0 else 40, -20)).clamp(m.area.position, m.area.end)
@@ -1579,7 +1582,7 @@ func _tick_dust(delta: float) -> void:
 			dust.remove_at(i)
 		elif (dust[i].at as Vector2).distance_to(hunter.feet()) <= Config.GOLD_DUST_RADIUS:
 			slow = true
-	hunter.slow_mult = (Config.GOLD_DUST_SLOW if slow else 1.0) * (Config.SPEED_POTION_MULT if quick else 1.0)
+	hunter.slow_mult = (Config.GOLD_DUST_SLOW if slow else 1.0) * (Config.SPEED_POTION_MULT if quick else 1.0) * HunterClass.move_mult()
 
 
 ## 드롭을 줍는다. 장비면 바로 입거나 가방에 넣고, 늘어난 하트 칸만큼 하트도 채운다.

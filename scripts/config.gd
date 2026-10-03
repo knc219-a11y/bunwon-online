@@ -212,6 +212,28 @@ const MON_HP_PER_LV := 0.09
 const MON_DMG_PER_LV := 0.05
 ## 막 대장 (막의 두 번째 구역 대장: 금사리 · 도마리 · 밀목) 을 처음 잡으면 스킬 포인트 하나 더 (디아2 퀘스트 보상처럼)
 const ACT_BOSS_SKILL_POINT := 1
+## 직업 · 스탯 · 초기화 (2026-10-03 2단계, 사용자: "직업도 마법사 궁수 전사로 나누고 … 스텟이랑 스킬 초기화는 조금 자유롭게 가능하도록(골드소모)"). 값은 전부 임시.
+## 피해 숫자 단위: 한 대 1 → DMG_UNIT. 몬스터 체력 · 크리처 피해도 같은 배수 (스탯 % 가 숫자로 보이게, 난이도는 그대로).
+const DMG_UNIT := 10
+## 자기 직업 무기를 들면 피해 + CLASS_WEAPON_BONUS
+const CLASS_WEAPON_BONUS := 0.2
+## 레벨업마다 스탯 포인트
+const STAT_POINTS_PER_LEVEL := 3
+## 스탯 1점: 힘 근거리 피해 + · 최대 체력 + / 솜씨 활 피해 + · 걷기 · 구르기 + / 지혜 지팡이 피해 + · 속성 효과 시간 + / 교감 동행 피해 · 공격 빠르기 +
+const STAT_DMG := 0.02
+const STR_HP := 2
+const DEX_SPEED := 0.005
+const WIS_ELEMENT := 0.02
+const BOND_DMG := 0.04
+const BOND_SPEED := 0.01
+## 몬스터 체력은 "보통 빌드" (레벨마다 주 스탯 2점 = STAT_DMG x 2, 직업 무기) 가 그 몬스터 레벨에서 낼 피해만큼 함께 오른다.
+## = (1 + CLASS_WEAPON_BONUS) x (1 + MON_HP_STAT_PER_LV x (몬스터 Lv - 1)). 스탯 · 직업으로 난이도가 확 쉬워지지 않게.
+const MON_HP_STAT_PER_LV := 0.04
+## 동행 크리처 피해도 같은 바탕 (x COMPANION_BASE). 교감을 레벨마다 1점 (보통 빌드) 찍으면 몬스터 체력과 함께 오른다.
+## (처음엔 바탕 1 · 교감 3% 였더니 봇 근거리 도마리 · 밀목이 한 번에 체력 +35% 더 깎임: 동행이 덜 잡아서)
+const COMPANION_BASE := 1.2
+## 초기화 (스탯 · 스킬 모두 돌려받기) · 직업 바꾸기: 첫 번은 공짜, 그 뒤 Lv x RESPEC_PRICE_PER_LV 원. 사냥터 입구 메뉴에서.
+const RESPEC_PRICE_PER_LV := 100
 ## 스킬 값 (B 무기 트리 셋 + 조련, 단계마다 per). 전부 임시.
 ## 활 부채살 · 3연사 쿨 배율이 단계마다 이만큼 (3연사는 두 배) 줄어든다
 const SKILL_COOLDOWN_STEP := 0.04
