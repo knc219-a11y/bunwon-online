@@ -110,7 +110,7 @@ static func snapshot(main: Node2D) -> Dictionary:
 			expedition = s.expedition_zone,
 		})
 	var people := {}
-	for c: Character in [main.farmer, main.hunter, main.smith, main.alchemist, main.rancher, main.ferryman]:
+	for c: Character in main.people():
 		people[c.who] = [c.position, c.facing]
 	# 사냥터 안이면 사냥꾼은 사냥터 입구 앞에 선 것으로 (돌아온 채로 저장)
 	if main.hunt:
@@ -203,6 +203,15 @@ static func apply(main: Node2D, d: Dictionary) -> void:
 		main.show_naru_restored()
 	elif GameState.naru_state == 1:
 		main.show_naru_site()
+	# 마을회관 · 잔치상 (2026-10-03 시설 5 · 엔딩)
+	if GameState.hall_state >= 2:
+		VillageHall.show_restored(main)
+	elif GameState.hall_state == 1:
+		VillageHall.show_site(main)
+	if GameState.feast_state >= 1:
+		VillageHall.show_feast(main)
+	if GameState.feast_state >= 2:
+		main.ambience.add_light(Vector2(Config.FEAST_RECT.position * Config.TILE) + Vector2(30, -30), 60, Color(1.0, 0.7, 0.45))
 
 	# 들나물 자리 (시설 터를 놓은 뒤에 넣어야 막힌 칸에서 지워지지 않는다)
 	var forage: Forage = main.forage
@@ -237,13 +246,13 @@ static func apply(main: Node2D, d: Dictionary) -> void:
 	main.incubating_species = load(inc) if inc != "" else null
 
 	var people: Dictionary = d.get("people", {})
-	for c: Character in [main.farmer, main.hunter, main.smith, main.alchemist, main.rancher, main.ferryman]:
+	for c: Character in main.people():
 		if people.has(c.who):
 			c.position = people[c.who][0]
 			c.facing = people[c.who][1]
 		c.refresh_wear()
 	var who: StringName = d.get("active", &"farmer")
-	for c: Character in [main.farmer, main.hunter, main.smith, main.alchemist, main.rancher, main.ferryman]:
+	for c: Character in main.people():
 		if c.who == who and c.visible:
 			main._set_active(c)
 	main.tool_index = d.get("tool_index", 0)

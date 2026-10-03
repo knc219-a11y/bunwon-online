@@ -62,6 +62,15 @@ var barn: Prop
 var ferryman: Character
 ## 나루터 (터 → 나룻집). 나타나기 전에는 null. 잔교 · 나룻배 · 통발은 물가 그림(_lake)이 함께 그린다.
 var naru: Prop
+## 이장 (2026-10-03 시설 5 마을회관): 일곱째 캐릭터. 회관을 고치면 나타나고 Tab 으로 바꾼다.
+var chief: Character
+## 마을회관 (터 → 회관) · 당산나무 앞 잔치상 (VillageHall). 나타나기 전에는 null.
+var hall: Prop
+var feast_table: Prop
+## 잔치상 위 음식 · 잔치 뒤 청사초롱을 그리는 노드 (VillageHall.draw_feast)
+var _feast_node: Node2D
+## 잔치 장면이 도는 동안 (FeastScene). F 만 받는다.
+var _feast_scene: FeastScene
 var _lake: Node2D
 var _flock: Node2D
 var incubator: Prop
@@ -166,6 +175,11 @@ func _ready() -> void:
 	rancher.visible = false
 	ferryman = _add_character("뱃사공", preload("res://assets/characters/ferryman.png"), Config.FERRYMAN_CELL, &"ferryman")
 	ferryman.visible = false
+	chief = _add_character("이장", preload("res://assets/characters/chief.png"), Config.CHIEF_CELL, &"chief")
+	chief.visible = false
+	_feast_node = Node2D.new()
+	_feast_node.draw.connect(func() -> void: VillageHall.draw_feast(self, _feast_node))
+	add_child(_feast_node)
 	camera = Camera2D.new()
 	camera.limit_left = 0
 	camera.limit_top = 0
@@ -215,6 +229,11 @@ func _add_character(display_name: String, sheet: Texture2D, cell: Vector2i, who:
 	return c
 
 
+## 마을 사람 일곱 (나타나지 않은 사람도 포함, 저장 · 잔치가 함께 쓴다)
+func people() -> Array[Character]:
+	return [farmer, hunter, smith, alchemist, rancher, ferryman, chief]
+
+
 func _set_active(c: Character) -> void:
 	if active:
 		active.active = false
@@ -243,6 +262,8 @@ func view_center() -> Vector2:
 
 ## 마을 카메라를 조작 중인 캐릭터에게 맞춘다 (가장자리에서는 맵 밖이 안 보이게 멈춘다)
 func follow_camera() -> void:
+	if _feast_scene:
+		return
 	if camera and active and hunt == null:
 		camera.position = active.position.round()
 
@@ -288,7 +309,7 @@ func update_fading() -> void:
 			continue
 		var pic := Rect2(p.picture_rect().position + p.position, p.picture_rect().size)
 		var hidden := false
-		for c: Character in [farmer, hunter, smith, alchemist, rancher, ferryman]:
+		for c: Character in people():
 			if not c.visible:
 				continue
 			hidden = hidden or (c.sort_y() < p.sort_y() and pic.intersects(Rect2(c.position + Vector2(-8, -30), Vector2(16, 40))))
@@ -303,6 +324,10 @@ func _unhandled_input(event: InputEvent) -> void:
 	if sleeping:
 		if event.is_action_pressed("interact"):
 			interact()
+		return
+	if _feast_scene:
+		if event.is_action_pressed("interact") or event.is_action_pressed("use_tool"):
+			_feast_scene.press()
 		return
 	if inventory.visible:
 		if event.is_action_pressed("inventory") or event.is_action_pressed("menu_close") or event.is_action_pressed("switch_character"):
@@ -407,6 +432,8 @@ func switch_character() -> void:
 		order.append(rancher)
 	if GameState.naru_state >= 2:
 		order.append(ferryman)
+	if GameState.hall_state >= 2:
+		order.append(chief)
 	_set_active(order[(order.find(active) + 1) % order.size()])
 	if active == smith:
 		GameState.notify("대장장이로 전환했다. 대장간 모루에서 F로 장비를 만든다.")
@@ -416,6 +443,8 @@ func switch_character() -> void:
 		GameState.notify("목축인으로 전환했다. 축사에서 F로 달걀 꺼내기 · 모이 주기 · 사냥 도시락 싸기.")
 	elif active == ferryman:
 		GameState.notify("뱃사공으로 전환했다. 나루터에서 F로 통발 놓기 · 물고기 꺼내기 · 매운탕 끓이기.")
+	elif active == chief:
+		GameState.notify("이장으로 전환했다. 마을회관 게시판에서 F로 부탁 들어주기 · 바꾸기, 잔치상에서 떡 · 막걸리.")
 	else:
 		GameState.notify("%s(으)로 전환했다." % active.display_name)
 
@@ -498,6 +527,10 @@ func interact() -> void:
 		_ferry_interact()
 	elif naru and _near(naru) and _carried_creature() == null and active != hunter:
 		open_menu(&"naru" if GameState.naru_state == 1 else &"dock")
+	elif feast_table and _near(feast_table) and _carried_creature() == null and GameState.feast_state == 1:
+		open_menu(&"feast")
+	elif hall and _near(hall) and _carried_creature() == null:
+		open_menu(&"hall" if GameState.hall_state == 1 else &"board")
 	elif scrap_heap and _near(scrap_heap) and _carried_creature() == null and active != hunter:
 		pick_scrap()
 	elif herb_bed and _near(herb_bed) and _carried_creature() == null and active != hunter:
@@ -510,6 +543,8 @@ func interact() -> void:
 		GameState.notify("목축인은 축사에서 F로 달걀 꺼내기 · 모이 주기 · 사냥 도시락 싸기를 한다.")
 	elif active == ferryman:
 		GameState.notify("뱃사공은 나루터에서 F로 통발 놓기 · 물고기 꺼내기 · 매운탕 끓이기를 한다.")
+	elif active == chief:
+		GameState.notify("이장은 마을회관 게시판에서 F로 부탁을 들어주거나 바꾼다. 잔치상에서 F로 떡 · 막걸리를 올린다.")
 	elif active == alchemist:
 		GameState.notify("연금술사는 약방에서 F로 물약 · 크리처 보약을 만든다. 도라지는 도라지밭에서 F로 캐거나 크리처에게 맡긴다.")
 	else:
@@ -937,6 +972,15 @@ func menu_confirm() -> void:
 			brew(id)
 		_rebuild_menu()
 		return
+	if menu_kind == &"hall" or menu_kind == &"board" or menu_kind == &"feast":
+		var kind := menu_kind
+		if VillageHall.act(self, kind, id):
+			if menu_kind == kind:
+				close_menu()
+			return
+		_rebuild_menu()
+		_refresh_props()
+		return
 	if menu_kind == &"naru" or menu_kind == &"dock":
 		if id == &"close":
 			close_menu()
@@ -1147,7 +1191,7 @@ func buy_wear(id: StringName) -> bool:
 ## 가방 창을 연다. stash 면 창고 칸도 옆에 붙인다 (마을 창고 궤짝에서 F).
 ## sell 이면 공급함 장비 팔기 창 (가방 칸 클릭 = 팔기).
 func open_inventory(stash := false, sell := false) -> void:
-	if active == smith or active == alchemist or active == rancher or active == ferryman:
+	if active == smith or active == alchemist or active == rancher or active == ferryman or active == chief:
 		GameState.notify("%s는 가방이 없다. 가방은 농부 · 사냥꾼만 든다." % active.display_name)
 		return
 	close_menu()
@@ -2164,6 +2208,7 @@ func _rebuild_menu() -> void:
 	var starting := menu_kind == &"start"
 	var ranching := menu_kind == &"barn" or menu_kind == &"coop"
 	var docking := menu_kind == &"naru" or menu_kind == &"dock"
+	var halling := menu_kind == &"hall" or menu_kind == &"board" or menu_kind == &"feast"
 	var expedition := menu_kind == &"expedition"
 	var adopting := menu_kind == &"adopt"
 	var classing := menu_kind == &"class" or menu_kind == &"respec"
@@ -2178,6 +2223,8 @@ func _rebuild_menu() -> void:
 		_menu_options = barn_options() if menu_kind == &"barn" else coop_options()
 	elif docking:
 		_menu_options = naru_options() if menu_kind == &"naru" else dock_options()
+	elif halling:
+		_menu_options = VillageHall.options(self, menu_kind)
 	elif forging:
 		_menu_options = forge_options() if menu_kind == &"forge" else craft_options()
 	elif training:
@@ -2225,6 +2272,8 @@ func _rebuild_menu() -> void:
 		head = "무너진 나루터 터"
 	elif menu_kind == &"dock":
 		head = "분원나루   통발 %d/%d · 바구니 물고기 %d" % [GameState.traps, Config.TRAP_MAX, GameState.basket]
+	elif halling:
+		head = VillageHall.head(menu_kind)
 	elif menu_kind == &"brew":
 		head = "약방   나물 %d · %s %d · 잡템 %d · 무 %d" % [GameState.herbs, Config.ROOT_NAME, GameState.roots, GameState.junk, GameState.crops]
 	var lines: Array[String] = [head]
@@ -2256,6 +2305,8 @@ func _rebuild_menu() -> void:
 			text = coop_option_text(o)
 		elif docking:
 			text = dock_option_text(o)
+		elif halling:
+			text = VillageHall.option_text(self, o)
 		else:
 			text = companion_option_text(o) if companion else (waypoint_option_text(o) if waypoint else supply_option_text(o))
 		lines.append(("▶ " if i == menu_index else "   ") + text)
@@ -2271,6 +2322,8 @@ func _rebuild_menu() -> void:
 		lines.append_array(barn_cost_lines())
 	elif menu_kind == &"naru":
 		lines.append_array(naru_cost_lines())
+	elif halling:
+		lines.append_array(VillageHall.lines(menu_kind))
 	elif menu_kind == &"dock":
 		lines.append("든 물고기 %d · 무 %d · 매운탕 %d · 오늘 물고기 몰기 %d/%d" % [GameState.fish, GameState.crops, GameState.stews, GameState.fish_drive, Config.FISH_DRIVE_CAP])
 		lines.append("놓은 통발은 다음 날 아침 하나에 물고기 0~2마리 (걷히면 다시 놓기)")
@@ -2324,6 +2377,8 @@ func _rebuild_menu() -> void:
 		at = barn.position + Vector2(-300, 20)
 	if docking:
 		at = naru.position + Vector2(-320, -170)
+	if halling:
+		at = (feast_table.position + Vector2(-330, -170)) if menu_kind == &"feast" else hall.position + Vector2(-60, -190)
 	# 오브젝트 자리(월드)를 화면 자리로 (마을 카메라가 움직여도 오브젝트 옆에 뜨게)
 	at = to_screen(at)
 	if starting or saving:
@@ -2440,6 +2495,44 @@ func save_and_quit() -> void:
 	get_tree().reload_current_scene()
 
 
+# --- 잔치 (2026-10-03 엔딩, 사용자 선택 B 잔치상 차리기) --------------------------
+
+## 잔치 장면을 띄우지 않고 상태만 넘긴다 (테스트 · 봇)
+static var feast_instant := false
+
+
+## 잔치상이 다 찼으면 잔치를 연다: 잔치 장면 + 크레딧 (FeastScene) → F → 다음 날 아침 (end_feast).
+func start_feast() -> bool:
+	if GameState.feast_state != 1 or not VillageHall.feast_full() or _feast_scene or hunt:
+		return false
+	close_menu()
+	GameState.feast_state = 2
+	GameState.feast_day = GameState.day
+	_feast_node.queue_redraw()
+	# 잔치 뒤로는 청사초롱 불빛이 밤마다 켜진다
+	ambience.add_light(Vector2(Config.FEAST_RECT.position * Config.TILE) + Vector2(30, -30), 60, Color(1.0, 0.7, 0.45))
+	_refresh_props()
+	if feast_instant:
+		return true
+	active.frozen = true
+	_feast_scene = FeastScene.new()
+	add_child(_feast_scene)
+	_feast_scene.begin(self)
+	return true
+
+
+## 잔치가 끝나고 다음 날 아침 (잠든 것처럼 아침 카드). 엔딩 뒤에도 평소대로 계속한다.
+func end_feast() -> void:
+	_feast_scene = null
+	sleeping = true
+	active.active = false
+	_night.color.a = Config.NIGHT_ALPHA
+	var lines := next_day()
+	lines.push_front("어젯밤 잔치가 끝났다. 분원리는 다시 사람과 크리처가 사는 마을이 되었다. (엔딩 · 앞으로도 계속 놀 수 있다)")
+	autosave()
+	show_morning_card(lines)
+
+
 func change_creature_job() -> void:
 	var s := _nearest_creature()
 	if s == null or active != farmer:
@@ -2553,6 +2646,9 @@ func next_day() -> Array[String]:
 	var naru_line := _naru_morning()
 	if naru_line != "":
 		lines.append(naru_line)
+	var hall_line := VillageHall.morning(self, _rng)
+	if hall_line != "":
+		lines.append(hall_line)
 	forage.sprout(_rng)
 	var herb_line := "밭 밖 풀밭에 들나물 %d포기가 돋았다." % forage.herbs.size()
 	if forage.bonus_today > 0:
@@ -2756,6 +2852,11 @@ func _refresh_props() -> void:
 		naru.set_badge("%s %d/%d" % [Config.BOSS_MATERIAL4_NAME, GameState.material4, Config.NARU_COST_MATERIAL] if GameState.naru_state == 1 else ("물고기 %d" % GameState.basket if GameState.basket > 0 else ""))
 	if _lake:
 		_lake.queue_redraw()
+	if hall:
+		hall.set_badge(VillageHall.badge_text(&"hall"))
+	if feast_table:
+		feast_table.set_badge(VillageHall.badge_text(&"feast"))
+		_feast_node.queue_redraw()
 
 
 func _build_hud() -> void:
@@ -2858,6 +2959,8 @@ func _refresh_hud() -> void:
 		tool_text = "모이 바가지"
 	if active == ferryman:
 		tool_text = "삿대"
+	if active == chief:
+		tool_text = "확성기"
 	if hunt:
 		var buddy := hunt.companion.display_name() if hunt.companion else "혼자"
 		_status.text = "%d일째 %s | %s | 도구: %s | 동행: %s | 남은 몬스터 %d | 주운 알 %d | 돈 %d원 · 잡템 %d" % [GameState.day, GameState.clock_text(GameState.minutes), Config.HUNT_ZONES[hunt.zone].name, tool_text, buddy, hunt.slimes.size(), hunt.picked.size(), GameState.money, GameState.junk]
@@ -2898,6 +3001,10 @@ func _refresh_hud() -> void:
 		_status.text += " | %s %d/%d" % [Config.BOSS_MATERIAL4_NAME, GameState.material4, Config.NARU_COST_MATERIAL]
 	elif GameState.naru_state >= 2:
 		_status.text += " | 물고기 %d" % GameState.fish
+	if GameState.hall_state == 1 or (GameState.hall_state == 0 and GameState.material5 > 0):
+		_status.text += " | %s %d/%d" % [Config.BOSS_MATERIAL5_NAME, GameState.material5, Config.HALL_COST_MATERIAL]
+	elif GameState.feast_state == 1:
+		_status.text += " | 잔치상 %d/%d" % [GameState.feast_dishes.size(), Config.FEAST_DISHES.size()]
 	# 대장간 · 약방 · 축사 단계에 붙은 것은 잡템 알약 하나로 모은다
 	var extra := _status.text.substr(status_before.length()).trim_prefix(" | ").replace(" | ", " · ")
 	if extra != "":

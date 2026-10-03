@@ -100,8 +100,23 @@ var naru_state := 0
 var naru_boss_down := false
 ## 4막 대장 재료
 var material4 := 0
-## 5막 대장 (소내섬, 마지막 대장) 을 쓰러뜨린 적이 있는지 (2026-10-03). 잔치 엔딩 · 시설 5 는 다음 주제.
+## 5막 대장 (소내섬, 마지막 대장) 을 쓰러뜨린 적이 있는지 (2026-10-03). 다음 날 아침 마을회관 터가 드러난다 (VillageHall).
 var final_boss_down := false
+## 마을회관 (2026-10-03 시설 5): 0 = 없음, 1 = 무너진 터, 2 = 고침 (이장 열림). 터는 final_boss_down 다음 날 아침에 드러난다.
+var hall_state := 0
+## 5막 대장 재료 (용 비늘)
+var material5 := 0
+## 게시판 오늘 부탁: {id = Config.HALL_REQUESTS 키, count = 개수} (없으면 {}), 오늘 크리처 심부름으로 모인 수, 이장이 오늘 부탁을 바꿨는지
+var hall_request := {}
+var errands := 0
+var hall_rerolled := false
+## 들어준 부탁 수 (모두)
+var requests_done := 0
+## 잔치 (2026-10-03 엔딩 B 잔치상 차리기): 0 = 아직, 1 = 잔치상 차리는 중, 2 = 잔치를 열었음 (엔딩 봄).
+## feast_dishes = 차린 상 id (Config.FEAST_DISHES), feast_day = 잔치를 연 날
+var feast_state := 0
+var feast_dishes: Array[StringName] = []
+var feast_day := -1
 ## 통발: 지금 물에 놓은 수 · 나루터 바구니의 물고기 · 꺼내 든 물고기 · 공급함에 진열한 물고기 · 뱃사공 매운탕
 var traps := 0
 var basket := 0
@@ -223,6 +238,15 @@ func reset() -> void:
 	naru_boss_down = false
 	material4 = 0
 	final_boss_down = false
+	hall_state = 0
+	material5 = 0
+	hall_request = {}
+	errands = 0
+	hall_rerolled = false
+	requests_done = 0
+	feast_state = 0
+	feast_dishes = []
+	feast_day = -1
 	traps = 0
 	basket = 0
 	fish = 0

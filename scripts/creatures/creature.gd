@@ -115,7 +115,38 @@ func work_once() -> bool:
 		return _feed_once()
 	if job == CreatureJobs.FISH:
 		return _fish_once()
+	if job == CreatureJobs.ERRAND:
+		return _errand_once()
 	return false
+
+
+## 오늘 심부름을 더 할 수 있는지 (회관 · 부탁이 있고, 하루 ERRAND_CAP 번 · 부탁 개수까지)
+static func errand_open() -> bool:
+	if GameState.hall_state < 2 or GameState.hall_request.is_empty():
+		return false
+	return GameState.errands < mini(Config.ERRAND_CAP, int(GameState.hall_request.count))
+
+
+## 심부름 한 번 (2026-10-03 마을회관): 회관 게시판 앞까지 건너가 오늘 부탁 물건을 하나 대신 모아 둔다 (GameState.errands).
+## 할 게 없으면 제자리로 돌아가 쉰다. 아침마다 새로 센다.
+func _errand_once() -> bool:
+	if not errand_open():
+		if position.distance_to(Farm.center_of(home)) > 1.0:
+			_hop_to(Farm.center_of(home), func() -> void: pass)
+			return true
+		return false
+	var at := Farm.center_of(errand_spot()) + Vector2((scraps % 3 - 1) * 5, 0)
+	_hop_to(at, func() -> void:
+		if errand_open():
+			GameState.errands += 1
+			scraps += 1
+			GameState.touch())
+	return true
+
+
+## 회관 게시판 오른쪽 칸 (크리처가 서서 부탁 물건을 내려놓는 자리)
+static func errand_spot() -> Vector2i:
+	return Config.HALL_RECT.position + Vector2i(Config.HALL_RECT.size.x, Config.HALL_RECT.size.y - 1)
 
 
 ## 물고기 몰기 한 번 (2026-10-02 나루터 통발): 물가까지 건너가 물고기를 통발 쪽으로 몬다 (GameState.fish_drive = 내일 아침 물고기 +1).
@@ -250,6 +281,10 @@ func night_work() -> int:
 				if GameState.naru_state >= 2 and GameState.traps > 0 and GameState.fish_drive < Config.FISH_DRIVE_CAP:
 					GameState.fish_drive += 1
 					did = true
+			CreatureJobs.ERRAND:
+				if errand_open():
+					GameState.errands += 1
+					did = true
 		if not did:
 			break
 		done += 1
@@ -381,6 +416,9 @@ func _reset_timer() -> void:
 	# 크리처 보약 (연금술사, 2026-09-29): 먹인 날은 모두 두 배 빠르다
 	if GameState.tonic_day == GameState.day:
 		_timer /= Config.TONIC_SPEED_MULT
+	# 마을회관 확성기 아침 방송 (2026-10-03 시설 5): 회관을 고친 뒤로 날마다 조금 빠르다
+	if GameState.hall_state >= 2:
+		_timer /= Config.HALL_BROADCAST_MULT
 
 
 func _process(delta: float) -> void:
@@ -426,7 +464,7 @@ func _draw() -> void:
 		label += " ★%d" % data.train_total()
 	UiSkin.draw_tag(self, Vector2(-30, -26), label, 60, Color(0.85, 1.0, 0.95))
 	# 채집은 범위 없이 마을 풀밭 전체를 돌므로 범위 네모를 그리지 않는다
-	if carried_by == null and job != CreatureJobs.FORAGE and job != CreatureJobs.SCRAP and job != CreatureJobs.HERB and job != CreatureJobs.FEED and job != CreatureJobs.FISH:
+	if carried_by == null and job != CreatureJobs.FORAGE and job != CreatureJobs.SCRAP and job != CreatureJobs.HERB and job != CreatureJobs.FEED and job != CreatureJobs.FISH and job != CreatureJobs.ERRAND:
 		# 작업 범위 표시
 		var radius := data.work_radius()
 		var r := Rect2(Vector2((home - Vector2i(radius, radius)) * Config.TILE), Vector2.ONE * (radius * 2 + 1) * Config.TILE)

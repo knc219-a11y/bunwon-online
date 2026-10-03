@@ -2610,6 +2610,9 @@ func _ready() -> void:
 	await _sonae_checks()
 	await _guiyeo_checks()
 
+	# 51) 시설 5 마을회관 · 이장 + 잔치상 엔딩 (2026-10-03 사용자 선택 A + B)
+	await _hall_checks()
+
 	# 41) 저장/불러오기 (2026-09-30 사용자 선택 C 디아2식): 저장 → 장면을 버리고 → 새 장면에 불러오면 모든 상태가 같다
 	await _save_load_checks()
 
@@ -3899,4 +3902,113 @@ func _guiyeo_checks() -> void:
 	_check(b.telegraphs().filter(func(t: Dictionary) -> bool: return t.get("spear", false)).size() == Config.CHIEF_SPEARS, "체력 절반 아래: 창 던지기 %d" % Config.CHIEF_SPEARS)
 	m.leave_hunt()
 	m.queue_free()
+	await get_tree().process_frame
+
+
+## 51) 마을회관 · 이장 · 게시판 · 심부름 · 잔치상 · 잔치 장면 · 저장
+func _hall_checks() -> void:
+	var m: Node2D = load("res://scenes/main.tscn").instantiate()
+	add_child(m)
+	await get_tree().process_frame
+	GameState.reset()
+	TestStarts.apply(m, &"sonae")
+	# 용을 잡으면 용 비늘 + final_boss_down, 다음 날 아침 회관 터
+	GameState.hunts_today = 0
+	m.enter_hunt(null, 9)
+	var h: HuntGround = m.hunt
+	h.set_ai(false)
+	h.set_process(false)
+	for o: WildSlime in h.slimes.duplicate():
+		o.queue_free()
+	h.slimes.clear()
+	h._defeat(h.spawn_boss())
+	_check(GameState.final_boss_down and GameState.material5 == 1, "용 처치: 마지막 대장 · 용 비늘 1")
+	m.leave_hunt()
+	_check(m.hall == null, "회관 터는 그날 바로는 안 나옴")
+	var lines: Array[String] = m.next_day()
+	_check(GameState.hall_state == 1 and m.hall != null and lines.any(func(l: String) -> bool: return l.contains("마을회관 터")), "용 첫 처치 다음 날 아침 마을회관 터")
+	_check(not Config.HALL_RECT.intersects(Config.FEAST_RECT) and not Config.HALL_RECT.has_point(Config.CHIEF_CELL) and not Config.HALL_RECT.has_point(Creature.errand_spot()), "회관 · 잔치상 · 이장 · 심부름 칸이 안 겹침")
+	_check(not VillageHall.restore(m) and GameState.hall_state == 1, "모자라면 못 고침")
+	GameState.money += Config.HALL_COST_MONEY
+	GameState.crops += Config.HALL_COST_CROPS
+	GameState.material5 += Config.HALL_COST_MATERIAL
+	_check(VillageHall.restore(m) and GameState.hall_state == 2 and m.chief.visible and GameState.feast_state == 1 and m.feast_table != null, "돈 · 무 · 용 비늘로 고침 → 이장 · 잔치상")
+	_check(not GameState.hall_request.is_empty() and VillageHall.request_pool().has(&"fish"), "게시판 부탁이 붙음 (나루터를 고쳤으니 물고기 부탁도)")
+	m._set_active(m.farmer)
+	for i in 8:
+		m.switch_character()
+		if m.active == m.chief:
+			break
+	_check(m.active == m.chief, "Tab 으로 이장")
+	_check(CreatureJobs.jobs().has(CreatureJobs.ERRAND), "크리처 일에 심부름")
+	# 게시판: 무 부탁으로 고정해 보고 심부름 · 들어주기
+	GameState.hall_request = {id = &"crops", count = 20}
+	GameState.errands = 0
+	var c: Creature = m.creatures[0]
+	c.job = CreatureJobs.ERRAND
+	for i in 6:
+		c.night_work()
+	_check(GameState.errands == 0 or not c.data.species.job_aptitude.has(CreatureJobs.NIGHT), "밤일 없는 크리처는 밤 심부름 안 함")
+	GameState.errands = Config.ERRAND_CAP
+	_check(not Creature.errand_open(), "심부름은 하루 ERRAND_CAP 번")
+	GameState.crops = 20
+	var money0 := GameState.money
+	_check(VillageHall.turn_in(m) and GameState.crops == 20 - (20 - Config.ERRAND_CAP) and GameState.money == money0 + roundi(20 * Config.CROP_PRICE * Config.HALL_REWARD_MULT) and GameState.hall_request.is_empty(), "부탁 들어주기: 심부름 몫을 빼고 내고 보상")
+	GameState.hall_request = {id = &"crops", count = 20}
+	_check(VillageHall.reroll(m) and GameState.hall_request.id != &"crops" and not VillageHall.reroll(m), "이장은 하루 한 번 부탁 바꾸기")
+	var lines2: Array[String] = m.next_day()
+	_check(not GameState.hall_request.is_empty() and GameState.errands == 0 and not GameState.hall_rerolled and lines2.any(func(l: String) -> bool: return l.contains("게시판")), "아침마다 새 부탁 · 방송")
+	# 잔치상: 그 사람만 차림
+	GameState.crops = 50
+	m._set_active(m.hunter)
+	_check(not VillageHall.set_dish(m, &"greens") and GameState.feast_dishes.is_empty(), "농부 상은 사냥꾼이 못 차림")
+	m._set_active(m.farmer)
+	_check(VillageHall.set_dish(m, &"greens") and GameState.crops == 10, "농부가 무생채 · 뭇국")
+	_check(not VillageHall.set_dish(m, &"greens"), "같은 상은 한 번")
+	_check(not VillageHall.options(m, &"feast").has(&"open_feast"), "다 안 찼으면 잔치 열기 없음")
+	GameState.junk = 20
+	GameState.scrap = 20
+	GameState.roots = 10
+	GameState.hen_eggs = 12
+	GameState.fish = 8
+	GameState.money += 3000
+	for w: Array in [[&"skewer", m.hunter], [&"cauldron", m.smith], [&"wine", m.alchemist], [&"eggs", m.rancher], [&"stew_pot", m.ferryman], [&"rice_cake", m.chief]]:
+		m._set_active(w[1])
+		VillageHall.set_dish(m, w[0])
+	_check(VillageHall.feast_full() and VillageHall.options(m, &"feast").has(&"open_feast"), "일곱 상이 다 차면 잔치 열기")
+	var credits := FeastScene.credit_lines(m)
+	_check(credits.any(func(l: String) -> bool: return l.contains("이장")) and credits.any(func(l: String) -> bool: return l.contains("소내섬")), "크레딧: 사람 일곱 · 걸어온 길")
+	# 잔치 장면: 연 뒤 F 두 번 (넘기기 · 다음 날 아침)
+	var day0 := GameState.day
+	m._set_active(m.farmer)
+	_check(m.start_feast() and GameState.feast_state == 2 and m._feast_scene != null, "잔치 열기 → 잔치 장면")
+	await get_tree().process_frame
+	_check(m.farmer.position.distance_to(m.feast_table.position) < 120 and m.creatures.all(func(x: Creature) -> bool: return not x.visible), "사람은 잔치상 뒤, 크리처는 손님 그림으로")
+	m._feast_scene.press()
+	m._feast_scene.press()
+	await get_tree().process_frame
+	_check(m._feast_scene == null and GameState.day == day0 + 1 and m.sleeping and m._morning_text.text.contains("잔치가 끝났다"), "F 로 다음 날 아침 (엔딩 카드)")
+	_check(m.creatures.all(func(x: Creature) -> bool: return x.visible or x.expedition_zone >= 0) and m.farmer.position.distance_to(m.feast_table.position) > 0, "잔치 뒤 크리처 · 사람 제자리")
+	m.wake_up()
+	# 저장 → 불러오기
+	SaveGame.dir = "user://smoke_saves"
+	DirAccess.make_dir_recursive_absolute(SaveGame.dir)
+	_check(SaveGame.save(m, 2), "잔치 뒤 저장")
+	m.queue_free()
+	await get_tree().process_frame
+	var b: Node2D = load("res://scenes/main.tscn").instantiate()
+	add_child(b)
+	await get_tree().process_frame
+	_check(SaveGame.load_into(b, 2) and b.hall != null and b.chief.visible and b.feast_table != null and GameState.feast_state == 2 and GameState.feast_dishes.size() == 7, "불러오면 회관 · 이장 · 잔치상 · 잔치 뒤 그대로")
+	SaveGame.erase(2)
+	b.queue_free()
+	await get_tree().process_frame
+	# 시작 지점 잔치 준비
+	var c2: Node2D = load("res://scenes/main.tscn").instantiate()
+	add_child(c2)
+	await get_tree().process_frame
+	GameState.reset()
+	TestStarts.apply(c2, &"feast")
+	_check(GameState.hall_state == 2 and GameState.feast_state == 1 and c2.chief.visible and c2.creatures.any(func(x: Creature) -> bool: return x.job == CreatureJobs.ERRAND), "시작 지점 잔치 준비: 이장 · 잔치상 · 심부름 크리처")
+	c2.queue_free()
 	await get_tree().process_frame
