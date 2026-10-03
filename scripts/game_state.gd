@@ -117,6 +117,12 @@ var hunter_xp := 0
 var skill_points := 0
 var skills := {}
 var skill_left := {}
+## 직업 · 스탯 (2026-10-03 2단계). hunter_class = &"warrior" / &"archer" / &"mage" (&"" = 아직 안 고름),
+## stats = {&"str" · &"dex" · &"wis" · &"bond": 찍은 점}, free_respec_used = 공짜 초기화를 썼는지
+var hunter_class := &""
+var stats := {}
+var stat_points := 0
+var free_respec_used := false
 
 
 func _ready() -> void:
@@ -225,6 +231,10 @@ func reset() -> void:
 	hunter_xp = 0
 	skill_points = 0
 	skills = {}
+	hunter_class = &""
+	stats = {}
+	stat_points = 0
+	free_respec_used = false
 	skill_left = {}
 	changed.emit()
 

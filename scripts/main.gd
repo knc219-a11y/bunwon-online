@@ -558,12 +558,11 @@ func _farmer_interact() -> void:
 
 func _hunter_interact() -> void:
 	if _near(hunt_gate):
-		# 켜진 웨이포인트가 있으면 어디서 시작할지 먼저 고른다 (2026-09-28 사용자 선택 B + 웨이포인트)
-		_pending_zone = 0
-		if GameState.hunts_today < Config.HUNTS_PER_DAY and GameState.waypoints.size() > 1:
-			open_menu(&"waypoint")
-		else:
-			_open_companion_or_enter()
+		# 직업을 아직 안 골랐으면 먼저 고른다 (2026-10-03 2단계)
+		if not HunterClass.chosen():
+			open_menu(&"class")
+			return
+		_gate_menus()
 	elif _near_stash():
 		open_inventory(true)
 	elif _near(supply_box):
@@ -600,6 +599,19 @@ func _hunter_interact() -> void:
 
 ## 사냥터 입구에서 고른 시작 구역 (웨이포인트). 동행을 고른 뒤 enter_hunt 에 넘긴다.
 var _pending_zone := 0
+
+
+## 사냥터 입구: 켜진 웨이포인트가 있으면 어디서 시작할지 먼저 고른다 (2026-09-28 사용자 선택 B + 웨이포인트)
+func _gate_menus() -> void:
+	_pending_zone = 0
+	if GameState.hunts_today >= Config.HUNTS_PER_DAY:
+		# 오늘 사냥을 마쳤으면 입구에서 할 일은 직업 · 초기화뿐
+		GameState.notify("오늘은 이미 사냥을 다녀왔다. 내일 다시 가자.")
+		open_menu(&"respec")
+	elif GameState.waypoints.size() > 1:
+		open_menu(&"waypoint")
+	else:
+		_open_companion_or_enter()
 
 
 ## 밭에 크리처가 있으면 누구랑 갈지 먼저 고른다 (2026-09-27 결정 A. 따라오는 동료)
@@ -849,6 +861,31 @@ func menu_confirm() -> void:
 		close_menu()
 		TestStarts.apply(self, id)
 		autosave()
+		return
+	if menu_kind == &"class":
+		if id == &"close":
+			close_menu()
+			return
+		var text := HunterClass.choose(id, _rng)
+		close_menu()
+		Sound.sfx(&"hatch", 0.0, 1.2)
+		GameState.notify(text)
+		_gate_menus()
+		return
+	if menu_kind == &"respec":
+		if id == &"close":
+			close_menu()
+			return
+		var r := HunterClass.respec(&"" if id == &"reset" else StringName(String(id).trim_prefix("to_")))
+		GameState.notify(r.text)
+		if r.ok:
+			Sound.sfx(&"coin", 0.0, 1.0, 0.0)
+		_rebuild_menu()
+		return
+	if id == &"respec" and (menu_kind == &"companion" or menu_kind == &"waypoint"):
+		menu_kind = &"respec"
+		menu_index = 0
+		_rebuild_menu()
 		return
 	if menu_kind == &"companion":
 		var pick := companion_from_option(id)
@@ -1953,6 +1990,7 @@ func companion_options() -> Array[StringName]:
 	var options: Array[StringName] = []
 	for i in companion_candidates().size():
 		options.append(StringName("companion_%d" % i))
+	options.append(&"respec")
 	options.append(&"solo")
 	return options
 
@@ -1966,6 +2004,8 @@ func companion_from_option(id: StringName) -> Creature:
 
 
 func companion_option_text(id: StringName) -> String:
+	if id == &"respec":
+		return respec_option_text(id)
 	var s := companion_from_option(id)
 	if s == null:
 		return "혼자 가기"
@@ -1978,6 +2018,7 @@ func waypoint_options() -> Array[StringName]:
 	var options: Array[StringName] = []
 	for z in GameState.waypoints:
 		options.append(StringName("zone_%d" % z))
+	options.append(&"respec")
 	options.append(&"close")
 	return options
 
@@ -1985,6 +2026,8 @@ func waypoint_options() -> Array[StringName]:
 func waypoint_option_text(id: StringName) -> String:
 	if id == &"close":
 		return "닫기"
+	if id == &"respec":
+		return respec_option_text(id)
 	var z := String(id).trim_prefix("zone_").to_int()
 	if z == 0:
 		return "1구역 %s부터 걸어가기" % Config.HUNT_ZONES[0].name
@@ -1992,6 +2035,47 @@ func waypoint_option_text(id: StringName) -> String:
 	if Config.HUNT_ZONES[z].has("advice"):
 		text += " · " + Config.HUNT_ZONES[z].advice
 	return text
+
+
+# --- 사냥꾼 직업 · 초기화 (2026-10-03 2단계, HunterClass) -----------------------
+
+## 직업 고르기 창: 전사 · 궁수 · 마법사, 마지막에 닫기 (나중에)
+func class_options() -> Array[StringName]:
+	var options: Array[StringName] = []
+	options.append_array(HunterClass.ORDER)
+	options.append(&"close")
+	return options
+
+
+func class_option_text(id: StringName) -> String:
+	if id == &"close":
+		return "나중에 (직업을 골라야 사냥을 갈 수 있다)"
+	var c: Dictionary = HunterClass.CLASSES[id]
+	return "%s · %s (피해 +%d%%)" % [c.name, c.desc, roundi(Config.CLASS_WEAPON_BONUS * 100)]
+
+
+## 초기화 창: 초기화 · 다른 직업으로 바꾸기 · 닫기
+func respec_options() -> Array[StringName]:
+	var options: Array[StringName] = [&"reset"]
+	for c in HunterClass.ORDER:
+		if c != GameState.hunter_class:
+			options.append(StringName("to_%s" % c))
+	options.append(&"close")
+	return options
+
+
+func respec_option_text(id: StringName) -> String:
+	var price := HunterClass.respec_price()
+	var cost := "공짜 (첫 번)" if price == 0 else "%d원" % price
+	match id:
+		&"respec":
+			return "직업 · 초기화 (%s · 다음 초기화 %s)" % [HunterClass.class_name_of(GameState.hunter_class), cost]
+		&"reset":
+			return "스탯 · 스킬 초기화 (%s)" % cost
+		&"close":
+			return "닫기"
+	var to := StringName(String(id).trim_prefix("to_"))
+	return "%s로 바꾸기 · %s (%s, 초기화 함께)" % [HunterClass.CLASSES[to].name, HunterClass.CLASSES[to].desc, cost]
 
 
 # --- 크리처 원정 · 입양 (2026-10-01 사용자 선택 B + D, Expedition) ----------
@@ -2046,6 +2130,7 @@ func _rebuild_menu() -> void:
 	var docking := menu_kind == &"naru" or menu_kind == &"dock"
 	var expedition := menu_kind == &"expedition"
 	var adopting := menu_kind == &"adopt"
+	var classing := menu_kind == &"class" or menu_kind == &"respec"
 	var saving := menu_kind == &"title" or menu_kind == &"delete" or menu_kind == &"pause"
 	if saving:
 		_menu_options = save_menu_options()
@@ -2065,6 +2150,8 @@ func _rebuild_menu() -> void:
 		_menu_options = expedition_options()
 	elif adopting:
 		_menu_options = adopt_options()
+	elif classing:
+		_menu_options = class_options() if menu_kind == &"class" else respec_options()
 	else:
 		_menu_options = companion_options() if companion else (waypoint_options() if waypoint else supply_options())
 	menu_index = clampi(menu_index, 0, _menu_options.size() - 1)
@@ -2076,6 +2163,10 @@ func _rebuild_menu() -> void:
 	if adopting:
 		var who := Expedition.next_villager()
 		head = "크리처 입양 보내기 → %s" % (Expedition.gift_text(who) if who != &"" else "받아 줄 주민이 없다")
+	if menu_kind == &"class":
+		head = "사냥터 입구 · 어떤 사냥꾼이 될까?"
+	elif menu_kind == &"respec":
+		head = "사냥터 입구 · 직업 · 초기화   %s Lv %d · 가진 돈 %d원" % [HunterClass.class_name_of(GameState.hunter_class), GameState.hunter_level, GameState.money]
 	if starting:
 		head = "테스트용 시작 지점 (개발용 빌드에서만)"
 	if menu_kind == &"title":
@@ -2119,6 +2210,8 @@ func _rebuild_menu() -> void:
 			text = expedition_option_text(o)
 		elif adopting:
 			text = adopt_option_text(o)
+		elif classing:
+			text = class_option_text(o) if menu_kind == &"class" else respec_option_text(o)
 		elif forging:
 			text = forge_option_text(o)
 		elif brewing:
@@ -2166,6 +2259,11 @@ func _rebuild_menu() -> void:
 		lines.append("주민마다 %d마리까지 · 입양 수가 적은 주민에게 먼저" % Config.ADOPT_CAP)
 	if companion:
 		lines.append("데려간 크리처는 돌아오면 제자리에서 다시 일한다")
+	if menu_kind == &"class":
+		lines.append("무기는 아무거나 들 수 있지만 스킬은 자기 무기 트리 + 조련만 찍힌다")
+		lines.append("레벨업마다 스탯 %d점 (T 창 아래 줄) · 나중에 이 입구에서 직업을 바꿀 수 있다" % Config.STAT_POINTS_PER_LEVEL)
+	elif menu_kind == &"respec":
+		lines.append("찍은 스탯 · 스킬을 모두 포인트로 돌려받는다 (첫 번 공짜, 그 뒤 Lv x %d원)" % Config.RESPEC_PRICE_PER_LV)
 	if waypoint:
 		lines.append("대장을 쓰러뜨리면 위쪽 길로 더 깊이 갈 수 있다")
 	if starting:
@@ -2181,7 +2279,7 @@ func _rebuild_menu() -> void:
 	_menu_text.text = "\n".join(lines)
 	_menu.size = _menu_text.get_minimum_size() + Vector2(22, 16)
 	# 공급함(또는 사냥터 입구) 옆에 띄우되 화면 밖으로 나가지 않게
-	var at := (hunt_gate.position + Vector2(-200, 8)) if companion or waypoint or expedition else supply_box.position + Vector2(36, -80)
+	var at := (hunt_gate.position + Vector2(-200, 8)) if companion or waypoint or expedition or classing else supply_box.position + Vector2(36, -80)
 	if forging:
 		at = forge.position + Vector2(40, -150)
 	if brewing:

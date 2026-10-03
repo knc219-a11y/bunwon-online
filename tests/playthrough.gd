@@ -229,6 +229,7 @@ func _ready() -> void:
 		if level_by_day.has(d):
 			lv.append("%d일 Lv%d" % [d, level_by_day[d]])
 	_log("\n사냥꾼 레벨 (%s): %s · 끝 Lv %d (남은 포인트 %d) · 찍은 스킬 %s" % ["스킬 찍음" if skills_on else "스킬 안 찍음", " · ".join(lv), GameState.hunter_level, GameState.skill_points, GameState.skills])
+	_log("직업 %s · 스탯 %s (남은 %d)" % [HunterClass.class_name_of(GameState.hunter_class), GameState.stats, GameState.stat_points])
 	_log("무기 (봇이 즐겨 듦: %s): 처음 든 날 %s · 쏜 화살 · 구슬 %d" % [weapon_pref, "%d일" % weapon_day if weapon_day > 0 else "없음", shots_fired])
 	_log("입은 장비: 농부 %s · 사냥꾼 %s" % [_worn_text(&"farmer"), _worn_text(&"hunter")])
 	_log("\n최종: %d일째, 돈 %d원, 씨앗 %d, 크리처 %d (훈련 단계 합 %d), 밭 구역 %d, 웨이포인트 %s" % [GameState.day, GameState.money, GameState.seeds, main.creatures.size(), trained, GameState.open_plots, GameState.waypoints])
@@ -855,6 +856,23 @@ func spend_skill_points() -> void:
 	GameState.skill_left[kind] = modes[-1]
 
 
+## 직업 (2026-10-03 B): 봇이 즐겨 드는 무기의 직업. 스탯은 "보통 빌드" (주 스탯 2 : 교감 1, 몬스터 체력이 이 빌드에 맞춰 오름)
+const CLASS_FOR := {&"melee": &"warrior", &"bow": &"archer", &"staff": &"mage"}
+
+
+func choose_class() -> void:
+	if not HunterClass.chosen():
+		HunterClass.choose(CLASS_FOR.get(weapon_pref, &"warrior"), main._rng)
+
+
+func spend_stat_points() -> void:
+	if not skills_on:
+		return
+	var main_stat: StringName = HunterClass.CLASSES[GameState.hunter_class].stat if HunterClass.chosen() else &"str"
+	while GameState.stat_points > 0:
+		HunterClass.spend(main_stat if HunterClass.stat(main_stat) < 2 * HunterClass.stat(&"bond") + 2 else &"bond")
+
+
 func pick_weapon() -> void:
 	var worn: StringName = GameState.worn[&"hunter"].get(&"weapon", &"")
 	if worn != &"" and not _wanted_weapon(worn):
@@ -968,8 +986,10 @@ func hunt_day() -> void:
 		for s: Creature in pool:
 			if s.data.species == CreatureCatalog.WHITE_TIGER or (s.data.species == CreatureCatalog.TIGER and (pick == null or pick.data.species != CreatureCatalog.WHITE_TIGER)):
 				pick = s
+	choose_class()
 	pick_weapon()
 	spend_skill_points()
+	spend_stat_points()
 	if GameState.lunches > 0:
 		lunches_eaten += 1
 	if GameState.stews > 0:

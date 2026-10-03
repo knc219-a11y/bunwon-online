@@ -1,7 +1,8 @@
 class_name HunterSkills
 extends RefCounted
 ## 사냥꾼 레벨 · 스킬 (2026-10-02 사용자 선택: 디아2식 사냥꾼 레벨 + 스킬 포인트).
-## 레벨은 사냥꾼만. 처치하면 경험치, 레벨업마다 스킬 포인트 1, 막 대장을 처음 잡으면 1 더.
+## 레벨은 사냥꾼만. 처치하면 경험치, 레벨업마다 스킬 포인트 1 · 스탯 포인트 (HunterClass), 막 대장을 처음 잡으면 스킬 1 더.
+## 2026-10-03: 무기 트리는 자기 직업 것만 찍힌다 (HunterClass.tree_open).
 ## 상태는 GameState (hunter_level · hunter_xp · skill_points · skills · skill_left) 라 저장 파일에 이름으로 담긴다.
 
 
@@ -15,9 +16,15 @@ static func monster_level(zone: int) -> int:
 	return t[zone] if zone < t.size() else t[-1] + 3 * (zone - t.size() + 1)
 
 
-## 몬스터 체력: 구역 값 x (1 + MON_HP_PER_LV x (몬스터 Lv - MON_LV_BASE, 0 아래는 0)). 2026-10-02 사용자: "몬스터의 체력을 늘리는거어때"
+## 몬스터 체력: 구역 값 x DMG_UNIT x (1 + MON_HP_PER_LV x (몬스터 Lv - MON_LV_BASE, 0 아래는 0)). 2026-10-02 사용자: "몬스터의 체력을 늘리는거어때"
+## 2026-10-03 직업 · 스탯: 보통 빌드의 피해만큼 더 (HunterClass.monster_hp_mult)
 static func monster_hp(zone: int, base: int) -> int:
-	return maxi(1, roundi(base * (1.0 + Config.MON_HP_PER_LV * _over_base(zone))))
+	return maxi(1, roundi(base * Config.DMG_UNIT * (1.0 + Config.MON_HP_PER_LV * _over_base(zone)) * HunterClass.monster_hp_mult(monster_level(zone))))
+
+
+## 대장이 부르는 새끼 · 졸개 체력 (구역 레벨 체력 배율 없이 고정 값이던 것): 값 x DMG_UNIT x 보통 빌드 배율
+static func minion_hp(zone: int, base: int) -> int:
+	return maxi(1, roundi(base * Config.DMG_UNIT * HunterClass.monster_hp_mult(monster_level(zone))))
 
 
 ## 몬스터 피해 (체력): 구역 damage (옛 하트 단위) x HP_PER_HEART x (1 + MON_DMG_PER_LV x (몬스터 Lv - MON_LV_BASE, 0 아래는 0))
@@ -61,6 +68,7 @@ static func gain(amount: int) -> int:
 		GameState.hunter_xp -= xp_to_next(GameState.hunter_level)
 		GameState.hunter_level += 1
 		GameState.skill_points += 1
+		GameState.stat_points += Config.STAT_POINTS_PER_LEVEL
 		ups += 1
 	if GameState.hunter_level >= Config.LEVEL_CAP:
 		GameState.hunter_xp = 0
@@ -143,6 +151,12 @@ static func why_not(id: StringName) -> String:
 	var s: Dictionary = f.skill
 	if rank(id) >= s.max:
 		return "다 찍음"
+	if not HunterClass.tree_open(f.tree.id):
+		if not HunterClass.chosen():
+			return "직업을 먼저 고르기 (사냥터 입구)"
+		for c: StringName in HunterClass.CLASSES:
+			if HunterClass.CLASSES[c].tree == f.tree.id:
+				return "%s만" % HunterClass.CLASSES[c].name
 	if GameState.hunter_level < s.req:
 		return "Lv %d 부터" % s.req
 	if f.index > 0 and rank(f.tree.skills[f.index - 1].id) < 1:

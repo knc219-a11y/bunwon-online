@@ -13,8 +13,8 @@ const IDLE_COLUMNS: Array[int] = [0, 1]
 const HOP_COLUMNS: Array[int] = [2, 3, 4, 5]
 const BOTTOM_Y := 8
 
-var hp := Config.WILD_SLIME_HP
-var max_hp := Config.WILD_SLIME_HP
+var hp := Config.WILD_SLIME_HP * Config.DMG_UNIT
+var max_hp := Config.WILD_SLIME_HP * Config.DMG_UNIT
 ## 대장 슬라임 (크고 금빛, 체력 Config.BOSS_HP). make_boss() 로 만든다.
 var boss := false
 ## 이름 (대장 이름표에 쓴다). 구역마다 다르다 (Config.HUNT_ZONES).
@@ -307,10 +307,10 @@ func sort_y() -> float:
 
 
 ## 대장 내려찍기 때 튀어나오는 새끼로 만든다 (트리에 넣기 전에, setup_zone 뒤에)
-func make_minion() -> void:
+func make_minion(zone := 0) -> void:
 	minion = true
-	hp = 1
-	max_hp = 1
+	hp = HunterSkills.minion_hp(zone, 1)
+	max_hp = hp
 	title = "새끼 " + title
 	scale = Vector2.ONE * Config.MINION_SCALE
 	# 새끼용 작은 시트 (<이름>_mini.png, 21칸)가 있으면 그걸 줄이지 않고 그린다 (줄이면 도트가 깨짐)
@@ -323,7 +323,7 @@ func make_minion() -> void:
 
 
 ## 한 대 맞는다. 쓰러지면 true. 웅크리는 중이면 밀려나도 달려들기는 멈추지 않는다.
-func hit(from: Vector2, amount := 1) -> bool:
+func hit(from: Vector2, amount := Config.DMG_UNIT) -> bool:
 	buried = false
 	if flyer:
 		if in_air():
@@ -363,7 +363,7 @@ func in_air() -> bool:
 
 ## 몰아잡기 떼 한 마리로 만든다 (setup_zone 뒤에): 체력을 낮추고 드롭 몫을 1/n 로
 func make_swarm(n: int) -> void:
-	hp = maxi(1, roundi(hp * Config.SWARM_HP_MULT))
+	hp = maxi(Config.DMG_UNIT, roundi(hp * Config.SWARM_HP_MULT))
 	max_hp = hp
 	share = 1.0 / n
 

@@ -2,6 +2,8 @@ extends Node
 ## 헤드리스 스모크 테스트. 프로토타입 핵심 순환을 코드로 한 바퀴 돌린다.
 ## 실행: godot --headless --path . res://tests/smoke_test.tscn
 
+## 피해 단위 (2026-10-03: 한 대 1 → DMG_UNIT)
+const U := Config.DMG_UNIT
 var _failures := 0
 
 
@@ -178,9 +180,14 @@ func _ready() -> void:
 	var hunter: Character = main.hunter
 	hunter.position = main.hunt_gate.position
 	main.interact()
+	# 처음엔 직업부터 고른다 (2026-10-03). 전사 → 사냥칼 그대로, 피해 +20%
+	_check(main.menu_open and main.menu_kind == &"class" and main.class_options() == [&"warrior", &"archer", &"mage", &"close"], "처음 사냥터 입구 F → 직업 고르기 창")
+	main._unhandled_input(_action(&"interact"))
+	_check(GameState.hunter_class == &"warrior" and GameState.stat_points == 0 and Wearables.weapon().kind == &"melee", "전사를 고름 (Lv 1 이라 스탯 포인트 0, 사냥칼 그대로)")
 	# 밭에 크리처가 있으면 누구랑 갈지 먼저 묻는다. 여기서는 혼자 간다.
-	_check(main.menu_open and main.menu_kind == &"companion" and main.companion_options() == [&"companion_0", &"solo"], "사냥터 입구 F → 누구랑 갈까? 창 (크리처 1 + 혼자)")
+	_check(main.menu_open and main.menu_kind == &"companion" and main.companion_options() == [&"companion_0", &"respec", &"solo"], "이어서 누구랑 갈까? 창 (크리처 1 + 직업 · 초기화 + 혼자)")
 	_check(main.companion_option_text(&"companion_0").contains("물총"), "물 슬라임은 물총으로 돕는다고 표시")
+	main._unhandled_input(_action(&"move_down"))
 	main._unhandled_input(_action(&"move_down"))
 	main._unhandled_input(_action(&"interact"))
 	var hunt: HuntGround = main.hunt
@@ -191,7 +198,9 @@ func _ready() -> void:
 	var wild: WildSlime = hunt.slimes[0]
 	hunter.facing = Vector2i.UP
 	wild.position = hunter.feet() + Vector2(0, -8 - Config.SWING_REACH)
-	_check(hunt.swing() == 1 and wild.hp == 1, "휘두르기 한 번 맞히면 체력 -1")
+	var full_hp := HunterSkills.monster_hp(0, Config.WILD_SLIME_HP)
+	var knife := HunterClass.hunter_damage(1, &"melee")
+	_check(hunt.swing() == 1 and wild.hp == full_hp - knife and knife == roundi(Config.DMG_UNIT * (1.0 + Config.CLASS_WEAPON_BONUS)), "휘두르기 한 번 맞히면 체력 -%d (%d, 전사 +20%%)" % [knife, full_hp])
 	_check(hunt.swing() == 0, "휘두른 직후에는 다시 못 휘두름")
 	hunt.tick(Config.SWING_COOLDOWN)
 	wild.position = hunter.feet() + Vector2(0, -8 - Config.SWING_REACH)
@@ -511,11 +520,13 @@ func _ready() -> void:
 		other.position = h3.companion.position + Vector2(200, 0)
 	far.position = h3.companion.position + Vector2(Config.COMPANION_SHOT_RANGE - 10, 0)
 	h3.tick(0.01)
-	_check(far.hp == Config.WILD_SLIME_HP - 1, "물총은 먼 거리의 야생 슬라임을 맞힘")
+	var slime_full := HunterSkills.monster_hp(0, Config.WILD_SLIME_HP)
+	_check(far.hp == slime_full - HunterClass.companion_damage(1), "물총은 먼 거리의 야생 슬라임을 맞힘")
 	far.position = h3.companion.position + Vector2(Config.COMPANION_SHOT_RANGE - 10, 0)
 	h3.tick(0.01)
-	_check(far.hp == Config.WILD_SLIME_HP - 1, "물총은 간격을 두고 쏜다")
+	_check(far.hp == slime_full - HunterClass.companion_damage(1), "물총은 간격을 두고 쏜다")
 	far.position = h3.companion.position + Vector2(Config.COMPANION_SHOT_RANGE - 10, 0)
+	far.hp = mini(far.hp, HunterClass.companion_damage(1))
 	h3.tick(h3.companion.attack_interval())
 	_check(h3.slimes.size() == Config.WILD_SLIME_COUNT - 1 and h3.drops.size() == 1, "크리처가 쓰러뜨린 슬라임도 알 확률은 같음")
 	# 따라다니기
@@ -553,11 +564,11 @@ func _ready() -> void:
 	h4.companion.position = main.hunter.feet() + Vector2(0, 20)
 	near.position = h4.companion.position + Vector2(40, 0)
 	h4.tick(0.01)
-	_check(near.hp == Config.WILD_SLIME_HP, "박치기는 멀리서는 못 때림")
+	_check(near.hp == near.max_hp, "박치기는 멀리서는 못 때림")
 	near.position = h4.companion.position + Vector2(Config.COMPANION_BUMP_RANGE - 4, 0)
 	var before_x := near.position.x
 	h4.tick(0.01)
-	_check(near.hp == Config.WILD_SLIME_HP - 1 and near.position.x - before_x > 14.0, "붙어서 박치기, 더 멀리 밀쳐냄")
+	_check(near.hp == near.max_hp - HunterClass.companion_damage(1) and near.position.x - before_x > 14.0, "붙어서 박치기, 더 멀리 밀쳐냄")
 	h4.companion_ai = true
 	near.position = h4.companion.position + Vector2(50, 0)
 	var gap := h4.companion.position.distance_to(near.position)
@@ -828,15 +839,17 @@ func _ready() -> void:
 		bw.position = main.hunter.feet() + Vector2(0, -8 - Config.SWING_REACH)
 		bh.tick(Config.SWING_COOLDOWN)
 		bh.swing()
-	_check(bh.boss_spawned and bh.slimes.size() == 1 and bh.slimes[0].boss and bh.slimes[0].hp == Config.BOSS_HP, "셋을 다 쓰러뜨리면 대장 슬라임 1마리 (체력 %d)" % Config.BOSS_HP)
+	var boss_full := HunterSkills.monster_hp(0, Config.BOSS_HP)
+	_check(bh.boss_spawned and bh.slimes.size() == 1 and bh.slimes[0].boss and bh.slimes[0].hp == boss_full, "셋을 다 쓰러뜨리면 대장 슬라임 1마리 (체력 %d)" % boss_full)
 	var bs: WildSlime = bh.slimes[0]
 	_check(not bs.ai_enabled and is_equal_approx(bs.scale.x, Config.BOSS_SCALE), "대장은 크고, 멈춤 설정을 따름")
 	bh.loot.clear()
-	for i in Config.BOSS_HP:
+	var boss_hits := ceili(float(boss_full) / HunterClass.hunter_damage(1, &"melee"))
+	for i in boss_hits:
 		bs.position = main.hunter.feet() + Vector2(0, -8 - Config.SWING_REACH)
 		bh.tick(Config.SWING_COOLDOWN)
 		bh.swing()
-		if i < Config.BOSS_HP - 1:
+		if i < boss_hits - 1:
 			_check(bh.slimes.size() == 1, "대장은 %d대 맞아도 버팀" % (i + 1))
 	_check(bh.slimes.is_empty() and bh.loot.size() == 1, "대장을 쓰러뜨리면 반드시 하나가 떨어짐")
 	_check(not bh.boss_spawned or bh.slimes.is_empty(), "대장은 사냥 한 번에 한 마리")
@@ -894,7 +907,7 @@ func _ready() -> void:
 	_check(sh.zone == 1 and not sh.path_open and not sh.boss_spawned, "위쪽 길에서 F → 2구역 %s" % z2.name)
 	_check(sh.life == hearts_before and GameState.hunts_today == 1, "체력은 그대로, 같은 날 같은 사냥 (%d/%d, %d번)" % [sh.life, hearts_before, GameState.hunts_today])
 	_check(1 in GameState.waypoints, "%s에 도착하면 웨이포인트가 켜짐" % z2.name)
-	_check(sh.slimes.size() == z2.count and sh.slimes[0].hp == z2.hp and sh.slimes[0].speed == z2.speed and sh.slimes[0].title == z2.monster, "2구역 몬스터: %s 체력 %d · 빠르기 %s" % [z2.monster, z2.hp, z2.speed])
+	_check(sh.slimes.size() == z2.count and sh.slimes[0].hp == HunterSkills.monster_hp(1, z2.hp) and sh.slimes[0].speed == z2.speed and sh.slimes[0].title == z2.monster, "2구역 몬스터: %s 체력 %d · 빠르기 %s" % [z2.monster, z2.hp, z2.speed])
 	# 금사리 (사용자 선택: 모래게 + 대장 금두꺼비, 입구에 "금사리(구터)" 회색 항아리 표지)
 	var crab: WildSlime = sh.slimes[0]
 	_check(crab.buried and crab.sheet.resource_path.ends_with("wild_sand_crab.png"), "모래게는 모래에 숨어 있음")
@@ -909,7 +922,7 @@ func _ready() -> void:
 	for i in z2.count:
 		var zw: WildSlime = sh.slimes[0]
 		zw.position = main.hunter.feet() + Vector2(0, -8 - Config.SWING_REACH)
-		for k in z2.hp:
+		for k in ceili(float(HunterSkills.monster_hp(1, z2.hp)) / HunterClass.hunter_damage(1, &"melee")):
 			sh.tick(Config.SWING_COOLDOWN)
 			sh.swing()
 			zw.position = main.hunter.feet() + Vector2(0, -8 - Config.SWING_REACH)
@@ -938,14 +951,16 @@ func _ready() -> void:
 	# 다음 날: 사냥터 입구에서 웨이포인트를 고른다
 	main.next_day()
 	main.hunter.position = main.hunt_gate.position
+	if not HunterClass.chosen():
+		HunterClass.choose(&"warrior")
 	main._hunter_interact()
-	_check(main.menu_open and main.menu_kind == &"waypoint" and main.waypoint_options() == [&"zone_0", &"zone_1", &"zone_2", &"close"], "웨이포인트가 여럿이면 어디서 시작할지 물음")
+	_check(main.menu_open and main.menu_kind == &"waypoint" and main.waypoint_options() == [&"zone_0", &"zone_1", &"zone_2", &"respec", &"close"], "웨이포인트가 여럿이면 어디서 시작할지 물음")
 	main.menu_move(1)
 	main.menu_confirm()
 	if main.menu_open and main.menu_kind == &"companion":
 		main.menu_index = main.companion_options().size() - 1
 		main.menu_confirm()
-	_check(main.hunt != null and main.hunt.zone == 1 and main.hunt.slimes[0].hp == z2.hp, "%s 웨이포인트에서 바로 시작" % z2.name)
+	_check(main.hunt != null and main.hunt.zone == 1 and main.hunt.slimes[0].hp == HunterSkills.monster_hp(1, z2.hp), "%s 웨이포인트에서 바로 시작" % z2.name)
 	main.leave_hunt()
 	_check(not main.enter_hunt(null, 1), "하루 한 번은 그대로")
 	main.next_day()
@@ -1025,7 +1040,7 @@ func _ready() -> void:
 	pc.position = main.hunter.feet() + Vector2(0, 20)
 	var pulled: WildSlime = th.slimes[0]
 	pulled.buried = false
-	pulled.hp = 3
+	pulled.hp = 3 * U
 	pulled.position = pc.position + Vector2(Config.COMPANION_PULL_RANGE - 10, 0)
 	for other in th.slimes:
 		if other != pulled:
@@ -1033,7 +1048,7 @@ func _ready() -> void:
 	var hp_before := pulled.hp
 	th.tick(Config.COMPANION_PULL_INTERVAL * 2)
 	th.tick(Config.COMPANION_PULL_TIME)
-	_check(pulled.hp == hp_before - 1 and pulled.position.distance_to(pc.position) <= Config.COMPANION_PULL_GAP + 1 and pulled.stunned(), "혀 당기기: 멀리 있는 몬스터를 끌어와 피해 1 + 멈춤")
+	_check(pulled.hp == hp_before - HunterClass.companion_damage(1) and pulled.position.distance_to(pc.position) <= Config.COMPANION_PULL_GAP + 1 and pulled.stunned(), "혀 당기기: 멀리 있는 몬스터를 끌어와 피해 1 + 멈춤")
 	var hearts_t := th.life
 	pulled.position = main.hunter.feet()
 	th.tick(0.01)
@@ -1799,7 +1814,7 @@ func _ready() -> void:
 	_check(not sp_a.in_air() and sp_a._rest > 0.0, "내려앉아 낟알을 쫌 (칠 틈)")
 	gh._cooldown = 0.0
 	sp_a.position = main.hunter.feet() + Vector2(0, -8 - Config.SWING_REACH)
-	_check(gh.swing(Vector2.UP) == 1 and sp_a.hp == sp_a.max_hp - 1, "앉은 까마귀는 칼에 맞음")
+	_check(gh.swing(Vector2.UP) == 1 and sp_a.hp == sp_a.max_hp - HunterClass.hunter_damage(1, &"melee"), "앉은 까마귀는 칼에 맞음")
 	_check(sp_a._rest <= Config.SWOOP_HIT_RECOVER, "맞으면 곧 다시 날아오름")
 	# 내려꽂기 원 밖이면 안 다침
 	sp_a._rest = 0.0
@@ -1893,11 +1908,11 @@ func _ready() -> void:
 	gh.companion_ai = false
 	var g_t: WildSlime = gh.slimes[0]
 	g_t._fly = 1.0
-	g_t.hp = 2
+	g_t.hp = U + HunterClass.companion_damage(1)
 	g_t.position = gh.companion.position + Vector2(90, 0)
 	gh.companion.cooldown = 0.0
 	gh._tick_companion(gh.companion, 0.01)
-	_check(g_t.hp == 1 and not g_t.in_air() and g_t._rest > 0.0, "아기 까마귀가 날던 까마귀를 쪼아 떨어뜨림")
+	_check(g_t.hp == U and not g_t.in_air() and g_t._rest > 0.0, "아기 까마귀가 날던 까마귀를 쪼아 떨어뜨림")
 	main.leave_hunt()
 
 	# 37. 도마리 (4구역, 2막 마지막 구역): 고목 그루터기 · 장승 한 쌍 · 아기 나무 정령 (2026-09-29)
@@ -1929,7 +1944,7 @@ func _ready() -> void:
 	dh.companion.cooldown = 0.0
 	var d_hp0 := d_s.hp
 	dh._tick_companion(dh.companion, 0.01)
-	_check(d_s.stunned() and d_s.hp == d_hp0 - 1, "아기 나무 정령이 덩굴로 묶음 (피해 1 + 멈춤)")
+	_check(d_s.stunned() and d_s.hp == d_hp0 - HunterClass.companion_damage(1), "아기 나무 정령이 덩굴로 묶음 (피해 1 + 멈춤)")
 	# 대장: 장승 한 쌍
 	for o in dh.slimes.duplicate():
 		dh.slimes.erase(o)
@@ -2050,45 +2065,47 @@ func _ready() -> void:
 	for o: WildSlime in wph.slimes:
 		o.position = w_feet + Vector2(-300, 0)
 	var w_t: WildSlime = wph.slimes[0]
-	w_t.hp = 3
+	var bow_d := HunterClass.hunter_damage(1, &"bow")
+	w_t.hp = 3 * U
 	w_t.position = w_feet + Vector2(120, 8)
 	_check(wph.swing(Vector2.RIGHT) == 1 and wph.shots.size() == 1, "활: 클릭하면 화살이 날아감")
 	for i in 30:
 		wph.tick(1.0 / 30.0)
-	_check(w_t.hp == 2 and wph.shots.is_empty(), "화살이 120 떨어진 몬스터에 맞고 사라짐")
+	_check(w_t.hp == 3 * U - bow_d and wph.shots.is_empty(), "화살이 120 떨어진 몬스터에 맞고 사라짐")
 	w_t.position = w_feet + Vector2(220, 8)
 	wph._cooldown = 0.0
 	wph.swing(Vector2.RIGHT)
 	for i in 40:
 		wph.tick(1.0 / 30.0)
-	_check(w_t.hp == 2, "사거리(150) 밖은 안 맞음")
+	_check(w_t.hp == 3 * U - bow_d, "사거리(150) 밖은 안 맞음")
 	# 지팡이: 물 = 느려짐 · 땅 = 멈춤 · 불 = 잠시 뒤 한 번 더
 	for el: StringName in [&"water_staff", &"earth_staff", &"fire_staff"]:
 		Wearables.gain_rolled(Wearables.roll_gear(wr, &"normal", {}, el))
 		GameState.worn[&"hunter"][&"weapon"] = StringName("gear_%d" % GameState.gear_serial)
-		w_t.hp = 5
+		w_t.hp = 5 * U
 		w_t._stun = 0.0
 		w_t._slow = 0.0
 		w_t.position = w_feet + Vector2(90, 8)
 		var w_near: WildSlime = wph.slimes[1]
-		w_near.hp = 5
+		w_near.hp = 5 * U
 		w_near.position = w_t.position + Vector2(10, 6)
 		wph._cooldown = 0.0
 		wph.swing(Vector2.RIGHT)
 		for i in 25:
 			wph.tick(1.0 / 30.0)
 		var w_fx := {&"water_staff": w_t.slowed(), &"earth_staff": w_t.stunned(), &"fire_staff": wph._burns.size() == 2}
-		_check(w_t.hp == 4 and w_near.hp == 4 and w_fx[el], "%s: 구슬이 터져 둘레 둘 다 1 피해 + %s" % [Wearables.ITEMS[el].name, Wearables.ELEMENT_EFFECTS[Wearables.ITEMS[el].weapon.element]])
+		var staff_d := HunterClass.hunter_damage(1, &"staff")
+		_check(w_t.hp == 5 * U - staff_d and w_near.hp == 5 * U - staff_d and w_fx[el], "%s: 구슬이 터져 둘레 둘 다 1 피해 + %s" % [Wearables.ITEMS[el].name, Wearables.ELEMENT_EFFECTS[Wearables.ITEMS[el].weapon.element]])
 	for i in 60:
 		wph.tick(1.0 / 30.0)
-	_check(w_t.hp == 3, "불 구슬: 잠시 뒤 한 번 더 피해")
+	_check(w_t.hp == 5 * U - 2 * HunterClass.hunter_damage(1, &"staff"), "불 구슬: 잠시 뒤 한 번 더 피해")
 	# 근거리 무기: 전투 도끼는 사냥칼보다 넓게
 	Wearables.gain_rolled(Wearables.roll_gear(wr, &"normal", {}, &"battle_axe"))
 	GameState.worn[&"hunter"][&"weapon"] = StringName("gear_%d" % GameState.gear_serial)
 	w_t.position = w_feet + Vector2(0, -8) + Vector2(Config.SWING_REACH + 24, 0)
-	w_t.hp = 5
+	w_t.hp = 5 * U
 	wph._cooldown = 0.0
-	_check(wph.swing(Vector2.RIGHT) == 1 and w_t.hp == 4, "전투 도끼: 사냥칼이 안 닿는 옆까지 벰")
+	_check(wph.swing(Vector2.RIGHT) == 1 and w_t.hp == 5 * U - HunterClass.hunter_damage(1, &"melee"), "전투 도끼: 사냥칼이 안 닿는 옆까지 벰")
 	main.leave_hunt()
 	# 나는 까마귀도 화살엔 맞는다
 	GameState.worn[&"hunter"][&"weapon"] = &"gear_1"
@@ -2113,7 +2130,7 @@ func _ready() -> void:
 	wpg.swing(Vector2.RIGHT)
 	for i in 30:
 		wpg.tick(1.0 / 30.0)
-	_check(w_sp.hp == w_sp_hp - 1 and not w_sp.in_air(), "화살은 나는 까마귀도 맞혀 떨어뜨림")
+	_check(w_sp.hp == w_sp_hp - HunterClass.hunter_damage(1, &"bow") and not w_sp.in_air(), "화살은 나는 까마귀도 맞혀 떨어뜨림")
 	main.leave_hunt()
 	# 대장간: 강철 검 · 쇠뇌
 	GameState.scrap = 20
@@ -2154,7 +2171,7 @@ func _ready() -> void:
 	for o: WildSlime in bjh.slimes:
 		o.position = b_feet + Vector2(-320, 0)
 	var b_g: WildSlime = bjh.slimes[0]
-	b_g.hp = 3
+	b_g.hp = 3 * U
 	b_g.position = b_feet + Vector2(120, 8)
 	bjh.tick(0.01)
 	_check(not bjh.hittable(b_g) and is_equal_approx(b_g.modulate.a, Config.GHOST_FADE), "어둠 속 도깨비불은 반쯤 비침 (못 맞힘)")
@@ -2163,7 +2180,7 @@ func _ready() -> void:
 	bjh.swing(Vector2.RIGHT)
 	for i in 30:
 		bjh.tick(1.0 / 30.0)
-	_check(b_g.hp == 3, "화살이 어둠 속 도깨비불을 지나감")
+	_check(b_g.hp == 3 * U, "화살이 어둠 속 도깨비불을 지나감")
 	bjh.lamps.assign(b_lamps)
 	_check(bjh.hittable(b_g) == bjh.in_light(b_g.position) and bjh.in_light(b_lamps[0] + Vector2(0, 10)), "가로등 아래는 밝음")
 	# 불빛 동행: 동행 둘레 유령도 맞고, 불씨로 잠시 뒤 한 번 더 (아직 날던 화살은 치움)
@@ -2172,13 +2189,13 @@ func _ready() -> void:
 	b_g.position = bjh.companion.position + Vector2(20, 0)
 	_check(bjh.hittable(b_g), "아기 도깨비불 불빛 안의 도깨비불은 맞음")
 	bjh.companion_attack(b_g)
-	_check(b_g.hp == 2 and bjh._burns.size() == 1, "불씨: 1 피해 + 불붙음")
+	_check(b_g.hp == 3 * U - HunterClass.companion_damage(1) and bjh._burns.size() == 1, "불씨: 1 피해 + 불붙음")
 	for i in int(Config.STAFF_BURN_DELAY * 30) + 5:
 		# 동행이 사냥꾼 쪽으로 걸어가도 도깨비불이 불빛 안에 있게 (불씨는 불빛 안에서만 탄다)
 		b_g.position = bjh.companion.position + Vector2(20, 0)
 		bjh.companion.cooldown = 99.0  # 동행이 다시 치지 않게 (크리처 공격 간격은 타고난 능력치에 따라 1.5초보다 짧을 수 있다)
 		bjh.tick(1.0 / 30.0)
-	_check(b_g.hp == 1, "불씨: 잠시 뒤 한 번 더 피해 (체력 %d)" % b_g.hp)
+	_check(b_g.hp == 3 * U - 2 * HunterClass.companion_damage(1), "불씨: 잠시 뒤 한 번 더 피해 (체력 %d)" % b_g.hp)
 	# 도깨비불 불똥: 불빛 안에서만 부풀어 원 안을 다치게 함
 	var b_w: WildSlime = bjh.slimes[1]
 	b_w.lit = false
@@ -2326,13 +2343,13 @@ func _ready() -> void:
 	# 아기 호랑이 포효: 맞은 늑대와 둘레 늑대가 멈춤
 	var m_c: WildSlime = mh.slimes[1]
 	m_b._stun = 0.0
-	m_b.hp = 5
+	m_b.hp = 5 * U
 	mh.companion.position = m_feet + Vector2(0, -60)
 	m_b.position = mh.companion.position + Vector2(20, 0)
 	m_c.position = mh.companion.position + Vector2(-30, 0)
 	m_c._stun = 0.0
 	mh.companion_attack(m_b)
-	_check(m_b.hp == 4 and m_b.stunned() and m_c.stunned(), "포효: 1 피해 + 둘레 멈춤")
+	_check(m_b.hp == 5 * U - HunterClass.companion_damage(1) and m_b.stunned() and m_c.stunned(), "포효: 1 피해 + 둘레 멈춤")
 	main.leave_hunt()
 	GameState.hunts_today = 0
 	main.enter_hunt(m_w, m_zi)
@@ -2341,10 +2358,10 @@ func _ready() -> void:
 	mh.set_process(false)
 	mh.companion_ai = false
 	m_b = mh.slimes[0]
-	m_b.hp = 5
+	m_b.hp = 5 * U
 	m_b.position = mh.companion.position + Vector2(20, 0)
 	mh.companion_attack(m_b)
-	_check(m_b.hp == 3, "아기 백호 번개 발톱: 한 방에 2 피해")
+	_check(m_b.hp == 5 * U - HunterClass.companion_damage(2), "아기 백호 번개 발톱: 한 방에 2 피해")
 	# 산군 백호: 도약 (착지 원, 새끼 없음) → 쓰러지는 나무 → 포효 (굳음)
 	for o: WildSlime in mh.slimes.duplicate():
 		mh.slimes.erase(o)
@@ -2576,6 +2593,9 @@ func _ready() -> void:
 
 	# 46) 사냥꾼 레벨 · 스킬 (2026-10-02 사용자 선택 B: 무기 트리 셋 + 조련)
 	await _hunter_skill_checks()
+
+	# 46b) 사냥꾼 직업 · 스탯 · 초기화 (2026-10-03 사용자 선택 B · B · B)
+	await _hunter_class_checks()
 
 	# 47) 4막 첫 구역 역동 (2026-10-02 사용자 선택 A): 켄타우로스 창기병 · 역마 장군 · 아기 망아지 (밭 갈기 · 뒷발차기)
 	await _yeokdong_checks()
@@ -2828,7 +2848,7 @@ func _pace_checks() -> void:
 	var z: Dictionary = Config.HUNT_ZONES[0]
 	_check(h.slimes.size() == z.count * Config.SWARM_SIZE, "떼: 분원농협 몬스터 자리마다 %d마리 (%d마리)" % [Config.SWARM_SIZE, h.slimes.size()])
 	var s0: WildSlime = h.slimes[0]
-	_check(s0.hp == maxi(1, roundi(z.hp * Config.SWARM_HP_MULT)) and is_equal_approx(s0.share, 1.0 / Config.SWARM_SIZE), "떼 몬스터는 체력 낮고 드롭 몫 1/%d" % Config.SWARM_SIZE)
+	_check(s0.hp == maxi(U, roundi(HunterSkills.monster_hp(0, z.hp) * Config.SWARM_HP_MULT)) and is_equal_approx(s0.share, 1.0 / Config.SWARM_SIZE), "떼 몬스터는 체력 낮고 드롭 몫 1/%d" % Config.SWARM_SIZE)
 	var rng := RandomNumberGenerator.new()
 	var got := 0
 	for i in 400:
@@ -2862,16 +2882,18 @@ func _pace_checks() -> void:
 	var far: Vector2 = hand + Vector2(w.reach + w.radius * 1.3, 0)
 	var a: WildSlime = h.slimes[1]
 	var b: WildSlime = h.slimes[2]
+	var d1 := HunterClass.hunter_damage(1, &"melee")
+	var d2 := HunterClass.hunter_damage(2, &"melee")
 	a.position = far
-	a.hp = 5
+	a.hp = 5 * U
 	b.position = hand + Vector2(w.reach, 0)
-	b.hp = 5
+	b.hp = 5 * U
 	h._cooldown = 0.0
 	h._since_swing = 99.0
 	h.swing(Vector2.RIGHT)
 	var hp_a1 := a.hp
 	var hp_b1 := b.hp
-	_check(h.combo == 0 and hp_a1 == 5 and hp_b1 == 4, "1타: 가까운 것만 1 피해")
+	_check(h.combo == 0 and hp_a1 == 5 * U and hp_b1 == 5 * U - d1, "1타: 가까운 것만 1 피해")
 	for k in 2:
 		a.position = far + Vector2(Config.COMBO_FINISH_STEP * k, 0)
 		b.position = hand + Vector2(w.reach, 0)
@@ -2884,7 +2906,7 @@ func _pace_checks() -> void:
 		a.position = m.hunter.feet() + Vector2(0, -8) + Vector2(w.reach + w.radius * 1.3 - (Config.COMBO_FINISH_STEP if k == 1 else 0.0), 0)
 		b.position = m.hunter.feet() + Vector2(0, -8) + Vector2(w.reach, 0)
 		h.swing(Vector2.RIGHT)
-	_check(h.combo == 2 and a.hp == 5 - 2 and b.hp == 4 - 1 - 2, "3타째는 넓게 베고 피해 +1 (멀리 %d · 가까이 %d)" % [a.hp, b.hp])
+	_check(h.combo == 2 and a.hp == 5 * U - d2 and b.hp == 5 * U - 2 * d1 - d2, "3타째는 넓게 베고 피해 +1 (멀리 %d · 가까이 %d)" % [a.hp, b.hp])
 	_check(h._hitstop > 0.0, "맞히면 잠깐 멈춤 (타격 멈춤)")
 	# 한꺼번에 덮치는 수
 	h.set_ai(true)
@@ -2989,6 +3011,77 @@ func _bow_style_checks() -> void:
 	await get_tree().process_frame
 
 
+## 46b) 직업 · 스탯 · 초기화. 처음 고르기 (옛 저장은 돌려받기) · 직업 무기 피해 · 스탯 효과 · 레벨업 포인트 · 첫 초기화 공짜 · 직업 바꾸기
+func _hunter_class_checks() -> void:
+	var m: Node2D = load("res://scenes/main.tscn").instantiate()
+	add_child(m)
+	await get_tree().process_frame
+	GameState.reset()
+	GameState.hunter_unlocked = true
+	GameState.first_egg_done = true
+	# 옛 저장: 직업 전에 Lv 10 으로 여러 트리를 찍어 둠
+	GameState.hunter_level = 10
+	GameState.skills = {&"whirl": 2, &"pierce": 3, &"fight_together": 1}
+	GameState.skill_points = 4
+	_check(not HunterClass.chosen() and HunterClass.weapon_mult(&"bow") == 1.0, "직업 전: 피해 배율 그대로")
+	m._set_active(m.hunter)
+	m.hunter.position = m.hunt_gate.position
+	m._hunter_interact()
+	_check(m.menu_open and m.menu_kind == &"class", "직업 없으면 입구에서 직업 고르기 창")
+	m.menu_index = 1
+	m.menu_confirm()
+	_check(GameState.hunter_class == &"archer" and GameState.skills.is_empty() and GameState.skill_points == 10 and GameState.stat_points == Config.STAT_POINTS_PER_LEVEL * 9, "궁수: 찍은 스킬 6점 돌려받음 (스킬 10 · 스탯 %d)" % GameState.stat_points)
+	_check(Wearables.weapon().kind == &"bow" and 0 in GameState.weapon_gifts, "궁수는 사냥 활을 받아 듦 (첫 대장 활 선물은 넘어감)")
+	_check(m.menu_open and m.menu_kind in [&"companion", &"waypoint"] or m.hunt != null, "고른 뒤 그대로 사냥 갈 준비")
+	if m.hunt != null:
+		m.leave_hunt()
+	m.close_menu()
+	_check(HunterSkills.why_not(&"pierce") == "" and HunterSkills.why_not(&"whirl") == "전사만", "궁수는 활 트리만 (검은 전사만)")
+	_check(is_equal_approx(HunterClass.weapon_mult(&"bow"), 1.0 + Config.CLASS_WEAPON_BONUS) and HunterClass.weapon_mult(&"melee") == 1.0, "직업 무기 피해 +%d%%" % roundi(Config.CLASS_WEAPON_BONUS * 100))
+	# 스탯: T 창 맨 아래 줄
+	m._unhandled_input(_action(&"skills"))
+	m.skill_panel.cursor = Vector2i(1, SkillPanel.rows())
+	m.skill_panel.learn_cursor()
+	m.skill_panel.learn_cursor()
+	_check(HunterClass.stat(&"dex") == 2 and GameState.stat_points == Config.STAT_POINTS_PER_LEVEL * 9 - 2, "T 창 스탯 줄에서 솜씨 2")
+	_check(HunterClass.hunter_damage(1, &"bow") == roundi(U * (1.0 + 2 * Config.STAT_DMG) * (1.0 + Config.CLASS_WEAPON_BONUS)), "솜씨가 활 피해를 올림 (%d)" % HunterClass.hunter_damage(1, &"bow"))
+	m.skill_panel.cursor = Vector2i(3, SkillPanel.rows())
+	m.skill_panel.learn_cursor()
+	_check(HunterClass.companion_damage(1) == roundi(U * Config.COMPANION_BASE * (1.0 + Config.BOND_DMG)), "교감이 동행 피해를 올림")
+	m.skill_panel.cursor = Vector2i(0, SkillPanel.rows())
+	m.skill_panel.learn_cursor()
+	GameState.hunts_today = 0
+	m.enter_hunt(null, 0)
+	_check(m.hunt.max_life() == Config.HUNTER_HP + Config.HP_PER_LEVEL * 9 + Config.STR_HP, "힘이 최대 체력을 올림")
+	m.leave_hunt()
+	m._unhandled_input(_action(&"skills"))
+	var sp0 := GameState.stat_points
+	HunterSkills.gain(HunterSkills.xp_to_next(GameState.hunter_level))
+	_check(GameState.stat_points == sp0 + Config.STAT_POINTS_PER_LEVEL, "레벨업마다 스탯 %d점" % Config.STAT_POINTS_PER_LEVEL)
+	# 초기화: 첫 번 공짜, 그 뒤 Lv x 값
+	HunterSkills.learn(&"pierce")
+	GameState.money = 0
+	var r := HunterClass.respec()
+	_check(r.ok and GameState.stats.is_empty() and GameState.skills.is_empty() and GameState.stat_points == Config.STAT_POINTS_PER_LEVEL * 10 and GameState.skill_points == 11, "첫 초기화는 공짜, 스탯 · 스킬 모두 돌려받음")
+	_check(HunterClass.respec_price() == 11 * Config.RESPEC_PRICE_PER_LV and not HunterClass.respec(&"mage").ok, "그 뒤엔 Lv x %d원, 돈이 모자라면 못 함" % Config.RESPEC_PRICE_PER_LV)
+	GameState.money = 5000
+	m.open_menu(&"respec")
+	_check(m.respec_options() == [&"reset", &"to_warrior", &"to_mage", &"close"], "입구 초기화 창: 초기화 · 전사 · 마법사 · 닫기")
+	m.menu_index = 2
+	m.menu_confirm()
+	_check(GameState.hunter_class == &"mage" and GameState.money == 5000 - 11 * Config.RESPEC_PRICE_PER_LV and HunterSkills.why_not(&"big_orb") == "", "마법사로 바꿈 (-%d원), 지팡이 트리가 열림" % (11 * Config.RESPEC_PRICE_PER_LV))
+	m.close_menu()
+	# 몬스터 체력은 보통 빌드 피해만큼 함께 오른다
+	_check(HunterSkills.monster_hp(0, 2) == roundi(2 * U * (1.0 + Config.CLASS_WEAPON_BONUS)) and HunterSkills.monster_hp(3, 2) > HunterSkills.monster_hp(0, 2), "몬스터 체력: x%d x 직업 무기 x 레벨" % U)
+	# 저장 · 불러오기에 담김
+	var snap := SaveGame.snapshot(m)
+	GameState.reset()
+	SaveGame.apply(m, snap)
+	_check(GameState.hunter_class == &"mage" and GameState.free_respec_used and GameState.stat_points == Config.STAT_POINTS_PER_LEVEL * 10, "직업 · 스탯 · 초기화 기록이 저장됨")
+	m.queue_free()
+	await get_tree().process_frame
+
+
 ## 46) 사냥꾼 레벨 · 스킬. 경험치 · 레벨업 · 찍기 규칙 · 스킬마다 실제 효과.
 func _hunter_skill_checks() -> void:
 	var m: Node2D = load("res://scenes/main.tscn").instantiate()
@@ -3003,10 +3096,14 @@ func _hunter_skill_checks() -> void:
 	_check(GameState.hunter_level == 2 and GameState.skill_points == 1, "다음 레벨까지 모으면 Lv 2 · 스킬 포인트 +1")
 	_check(HunterSkills.gap_mult(0, 20) == Config.XP_GAP_MIN and HunterSkills.gap_mult(5, 20) == 1.0, "레벨 차 벌칙: Lv 20 이 분원농협에선 경험치 %d%%, 밀목에선 그대로" % roundi(Config.XP_GAP_MIN * 100))
 	_check(HunterSkills.is_act_boss_zone(1) and HunterSkills.is_act_boss_zone(3) and not HunterSkills.is_act_boss_zone(2), "막 대장 구역은 금사리 · 도마리 (스킬 포인트 +1)")
+	_check(HunterSkills.why_not(&"whirl") == "직업을 먼저 고르기 (사냥터 입구)" and HunterSkills.why_not(&"fight_together") == "", "직업 전엔 무기 트리는 못 찍고 조련은 찍힘")
+	GameState.hunter_class = &"warrior"
 	_check(HunterSkills.why_not(&"dash_slash") == "Lv 6 부터", "레벨이 모자라면 못 찍음")
 	GameState.hunter_level = 20
 	GameState.skill_points = 40
 	_check(HunterSkills.why_not(&"dash_slash") == "회전 베기 먼저", "위 스킬을 먼저 찍어야 함")
+	_check(HunterSkills.why_not(&"pierce") == "궁수만" and HunterSkills.why_not(&"big_orb") == "마법사만", "전사는 활 · 지팡이 트리를 못 찍음")
+	GameState.hunter_class = &"archer"
 	_check(HunterSkills.learn(&"pierce") and HunterSkills.left_mode(&"bow") == &"pierce", "관통 화살을 찍으면 왼클릭에 걸림")
 	HunterSkills.learn(&"spread")
 	_check(HunterSkills.left_mode(&"bow") == &"spread" and HunterSkills.cycle_mode(&"bow") == &"" and HunterSkills.cycle_mode(&"bow") == &"pierce" and HunterSkills.cycle_mode(&"bow", -1) == &"", "Q/E 로 기본 · 관통 · 부채살을 돌려 고름")
@@ -3020,8 +3117,9 @@ func _hunter_skill_checks() -> void:
 	_check(HunterSkills.rank(&"fight_together") == 1 and GameState.skill_points == before - 1, "스킬 창에서 찍기 (함께 싸우기 1)")
 	m._unhandled_input(_action(&"skills"))
 	_check(not m.skill_panel.visible, "T 로 닫힘")
+	# 스킬 효과 확인: 직업과 상관없이 모든 트리를 한 단계씩 (실제 게임에선 자기 트리만)
 	for id in [&"whirl", &"dash_slash", &"sword_mastery", &"earth_split", &"volley", &"arrow_rain", &"big_orb", &"chain_orb", &"element_boost", &"element_storm", &"creature_guard", &"charge_order", &"two_together"]:
-		HunterSkills.learn(id)
+		GameState.skills[id] = maxi(1, HunterSkills.rank(id))
 	HuntGround.feel = true
 	# 활: 관통 1단계 = 3마리, 부채살 5단계 = 5발
 	GameState.worn[&"hunter"][&"weapon"] = &"hunting_bow"
@@ -3051,7 +3149,7 @@ func _hunter_skill_checks() -> void:
 	for o: WildSlime in h.slimes:
 		o.position = feet + Vector2(-400, 0)
 	var rain_t: WildSlime = h.slimes[0]
-	rain_t.hp = 3
+	rain_t.hp = 3 * U
 	rain_t.position = feet + Vector2(60, 0)
 	_check(h.skill_right(rain_t.position), "오른클릭 화살비")
 	for i in 45:
@@ -3149,14 +3247,14 @@ func _hunter_skill_checks() -> void:
 	for o: WildSlime in h.slimes:
 		o.position = feet + Vector2(-400, 0)
 	var ct: WildSlime = h.slimes[0]
-	ct.hp = 5
+	ct.hp = 5 * U
 	ct.position = feet + Vector2(60, 0)
 	_check(h.order_charge(ct.position), "R 돌격 명령")
 	h.companion_ai = false
 	for i in 20:
 		h.tick(1.0 / 30.0)
 		h._hitstop = 0.0
-	_check(ct.hp < 5 and ct.stunned(), "돌격: 동행이 달려가 들이받고 기절시킴")
+	_check(ct.hp < 5 * U and ct.stunned(), "돌격: 동행이 달려가 들이받고 기절시킴")
 	m.leave_hunt()
 	_check(c1.process_mode == Node.PROCESS_MODE_INHERIT and c2.process_mode == Node.PROCESS_MODE_INHERIT, "돌아오면 두 동행 모두 밭 일로")
 	HuntGround.feel = false
@@ -3261,7 +3359,7 @@ func _yeokdong_checks() -> void:
 	# 파발 나팔: 창기병이 원래 크기로 달려옴
 	h._on_called(b.position)
 	var calls := h.slimes.filter(func(o: WildSlime) -> bool: return o.minion)
-	_check(calls.size() == Config.GENERAL_CALL and calls.all(func(o: WildSlime) -> bool: return o.lancer and o.scale == Vector2.ONE and o.hp == Config.GENERAL_MINION_HP), "파발 나팔: 창기병 %d (원래 크기, 체력 %d)" % [Config.GENERAL_CALL, Config.GENERAL_MINION_HP])
+	_check(calls.size() == Config.GENERAL_CALL and calls.all(func(o: WildSlime) -> bool: return o.lancer and o.scale == Vector2.ONE and o.hp == HunterSkills.minion_hp(h.zone, Config.GENERAL_MINION_HP)), "파발 나팔: 창기병 %d (원래 크기, 체력 %d)" % [Config.GENERAL_CALL, HunterSkills.minion_hp(h.zone, Config.GENERAL_MINION_HP)])
 	# 체력 절반 아래면 말발굽 쿵 (새끼 없음)
 	b._recover = 0.0
 	b._pattern_cd = 0.0
@@ -3383,7 +3481,7 @@ func _gonjiam_checks() -> void:
 		if h.blackout_t > 0.0:
 			break
 	var called := h.slimes.filter(func(o: WildSlime) -> bool: return o.minion)
-	_check(h.blackout_t > 0.0 and called.size() == Config.ARCH_CALL and called.all(func(o: WildSlime) -> bool: return o.demon and o.position.x < feet.x and o.hp == Config.ARCH_MINION_HP), "등불이 꺼지면 정전 + 사냥꾼 등 뒤에 뿔 악귀 %d" % Config.ARCH_CALL)
+	_check(h.blackout_t > 0.0 and called.size() == Config.ARCH_CALL and called.all(func(o: WildSlime) -> bool: return o.demon and o.position.x < feet.x and o.hp == HunterSkills.minion_hp(h.zone, Config.ARCH_MINION_HP)), "등불이 꺼지면 정전 + 사냥꾼 등 뒤에 뿔 악귀 %d" % Config.ARCH_CALL)
 	var seen: WildSlime = called[0]
 	seen.position = feet + Vector2(60, 0)
 	h.tick(1.0 / 30.0)
