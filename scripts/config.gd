@@ -438,7 +438,8 @@ const SET_PIECE_SHARE := 0.5
 ## 공급함에서 장비를 팔 때 값 (바로 돈)
 const GEAR_SELL_PRICES := {&"normal": 5, &"magic": 20, &"rare": 60, &"crafted": 40}
 ## 장비 갈기 (2026-10-03 백로그 8 "아이템을 갈아서 고철 얻기"): 대장장이 창 → 가방에서 장비를 누르면 고철. 등급별 고철 수 (임시).
-const SALVAGE_SCRAP := {&"normal": 1, &"magic": 2, &"rare": 3, &"crafted": 3, &"set": 5}
+## 제작품은 1 + 단계 (Wearables.salvage_scrap, 2026-10-03 대장장이 레벨). 아래 crafted 값은 갈기 창 안내에만.
+const SALVAGE_SCRAP := {&"normal": 1, &"magic": 2, &"rare": 3, &"crafted": 1, &"set": 5}
 
 ## 대장 슬라임 (2026-09-28 사용자 선택 B, 디아블로2 챔피언처럼). 값은 전부 임시.
 ## 야생 슬라임을 다 쓰러뜨리면 공터 가운데에 대장 1마리가 나온다 (사냥 한 번에 한 마리).
@@ -1266,6 +1267,40 @@ const FARM_FOOD_STEP := 0.2
 const FARM_CREATURE_XP_STEP := 0.2
 const FARM_MATCH_STEP := 0.15
 const FARM_SNACK_STEP := 0.05
+
+## 대장장이 레벨 · 단계 장비 (2026-10-03 백로그 10, 후보 문서 design/smith-level-options.md, 고르는 동안 Claude 추천 A · A 로 짬). 값은 모두 임시.
+## 경험치: 장비를 만들 때 단계마다 SMITH_XP_CRAFT, 갈 때 등급마다 SMITH_XP_SALVAGE. 다음 레벨까지 = SMITH_XP_BASE x Lv^SMITH_XP_EXP. 레벨업마다 대장 포인트 1.
+const SMITH_LEVEL_CAP := 20
+const SMITH_XP_BASE := 6.0
+const SMITH_XP_EXP := 1.4
+const SMITH_XP_CRAFT: Array[int] = [6, 10, 15, 21, 28, 36]
+const SMITH_XP_SALVAGE := {&"normal": 1, &"magic": 2, &"rare": 3, &"crafted": 1, &"set": 3}
+## 단계: 대장 Lv (req) 이 되면 열린다. 고철 = CRAFT_COSTS 고철 + scrap (1단계는 그대로), money = 돈 (1단계는 CRAFT_COSTS 돈),
+## material = 대장 재료 (GameState 변수) 와 개수. 바탕 힘: hp 사냥 방어구 체력 (하트 단위, x HP_PER_HEART) · dmg 제작 무기 피해 + · walk 밭 옷 걷기 +.
+## affix = 옵션 값 배율, weights = 옵션 수 무게 {개수: 무게}.
+const SMITH_TIERS: Array[Dictionary] = [
+	{name = "", req = 1, scrap = 0, money = 0, material = "", mat_count = 0, hp = 0, dmg = 0.0, walk = 0.0, affix = 1.0, weights = {1: 50, 2: 35, 3: 15}},
+	{name = "사금", req = 4, scrap = 8, money = 500, material = "material", mat_count = 2, hp = 1, dmg = 0.08, walk = 0.03, affix = 1.15, weights = {1: 45, 2: 38, 3: 17}},
+	{name = "장승목", req = 8, scrap = 12, money = 800, material = "material2", mat_count = 2, hp = 2, dmg = 0.16, walk = 0.06, affix = 1.3, weights = {1: 30, 2: 45, 3: 25}},
+	{name = "범발톱", req = 12, scrap = 16, money = 1200, material = "material3", mat_count = 2, hp = 3, dmg = 0.24, walk = 0.09, affix = 1.45, weights = {1: 25, 2: 45, 3: 30}},
+	{name = "마각", req = 16, scrap = 20, money = 1600, material = "material4", mat_count = 2, hp = 4, dmg = 0.32, walk = 0.12, affix = 1.6, weights = {1: 15, 2: 45, 3: 40}},
+	{name = "용비늘", req = 20, scrap = 25, money = 2000, material = "material5", mat_count = 2, hp = 5, dmg = 0.40, walk = 0.15, affix = 1.75, weights = {1: 5, 2: 40, 3: 55}},
+]
+## 시설을 연 뒤에도 그 막 두 구역 일반 몹이 대장 재료를 SITE_TASKS drop x 이 배율로 계속 떨군다 (대장간 단계 재료)
+const SMITH_MATERIAL_AFTER_OPEN := 0.5
+## 대장 기술 (단계마다)
+const SMITH_AFFIX_STEP := 0.1
+const SMITH_EXTRA_AFFIX_STEP := 0.15
+const SMITH_SHARPEN_STEP := 0.04
+const SMITH_MASTER_STEP := 0.15
+const SMITH_SCRAP_SAVE_STEP := 0.1
+const SMITH_SALVAGE_STEP := 0.3
+const SMITH_MAT_SAVE_STEP := 0.2
+const SMITH_PRICE_STEP := 0.15
+const SMITH_DIG_STEP := 0.25
+const SMITH_XP_STEP := 0.2
+const SMITH_FIND_STEP := 0.25
+const SMITH_COLLAR_STEP := 0.06
 
 ## 크리처 레벨 (2026-10-03 백로그 9, 고르는 동안 Claude 추천 A 포인트 + 돈). 값은 모두 임시.
 ## 일 한 번마다 경험치 1 (농사 · 채집 · 시설 일 · 공사 · 밤일), 원정을 마치면 CREATURE_XP_EXPEDITION x (구역 + 1),

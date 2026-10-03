@@ -267,7 +267,7 @@ func _scrap_once() -> bool:
 
 ## 이 크리처가 하루에 캐는 고철 수 = SCRAP_DIG_PER_DAY x 고물 캐기 재능 x 속도 훈련 (반올림, 최소 1)
 func dig_cap() -> int:
-	return maxi(1, roundi(Config.SCRAP_DIG_PER_DAY * data.aptitude(CreatureJobs.SCRAP) * data.train_speed_mult()))
+	return maxi(1, roundi(Config.SCRAP_DIG_PER_DAY * data.aptitude(CreatureJobs.SCRAP) * data.train_speed_mult() * SmithSkills.dig_mult()))
 
 
 ## 고물 더미 오른쪽 한 칸 띄운 자리 (크리처가 서서 줍는 자리. 2026-10-01 마을 넓히기: 더미 배지와 일 이름표가 안 겹치게)

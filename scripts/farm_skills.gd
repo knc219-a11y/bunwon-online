@@ -28,6 +28,14 @@ const TREES: Array[Dictionary] = [
 ]
 
 
+static func level() -> int:
+	return GameState.farm_level
+
+
+static func points() -> int:
+	return GameState.farm_points
+
+
 ## Lv 에서 다음 레벨까지 필요한 경험치
 static func xp_to_next(level: int) -> int:
 	return roundi(Config.FARM_XP_BASE * pow(level, Config.FARM_XP_EXP))

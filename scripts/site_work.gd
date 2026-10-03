@@ -118,12 +118,21 @@ static func fill(fac: StringName) -> void:
 
 ## 사냥터에서 일반 몬스터를 쓰러뜨렸을 때: 그 구역이 터의 재료 구역이면 drop 확률로 대장 재료 하나.
 ## 공사를 시작했거나 다 모은 터는 더 안 준다. 얻은 것 글 ("사금 덩이 (3/12)") 을 돌려준다 (없으면 "").
+## 2026-10-03 대장장이 레벨 (백로그 10): 시설을 연 뒤에도 Config.SMITH_MATERIAL_AFTER_OPEN 배율로 계속 떨군다 (대장간 단계 장비 재료).
+## 대장 기술 "재료 찾기" 가 확률을 높인다.
 static func mob_drop(zone: int, roll: float) -> String:
 	for fac in ORDER:
 		var t := task(fac)
-		if state(fac) != 1 or building(fac) or not zone in t.zones or int(GameState.get(t.material)) >= t.need:
+		if not zone in t.zones:
 			continue
-		if roll < t.drop:
+		if state(fac) == 2:
+			if roll < t.drop * Config.SMITH_MATERIAL_AFTER_OPEN * SmithSkills.find_mult():
+				GameState.set(t.material, int(GameState.get(t.material)) + 1)
+				return "%s (%d개, 대장간 재료)" % [material_name(fac), int(GameState.get(t.material))]
+			continue
+		if state(fac) != 1 or building(fac) or int(GameState.get(t.material)) >= t.need:
+			continue
+		if roll < t.drop * SmithSkills.find_mult():
 			GameState.set(t.material, int(GameState.get(t.material)) + 1)
 			return "%s (%d/%d)" % [material_name(fac), int(GameState.get(t.material)), t.need]
 	return ""

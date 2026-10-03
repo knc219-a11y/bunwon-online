@@ -286,6 +286,11 @@ func _ready() -> void:
 		if farm_level_by_day.has(d):
 			flv.append("%d일 %s" % [d, farm_level_by_day[d]])
 	_log("농사 레벨 · 크리처 레벨 (2026-10-03): %s · 끝 농사 Lv %d (남은 포인트 %d) · 찍은 기술 %s" % [" · ".join(flv), GameState.farm_level, GameState.farm_points, GameState.farm_skills])
+	var slv := []
+	for d in [10, 20, 30, 40, 60, 80, 100, 120, 140]:
+		if smith_level_by_day.has(d):
+			slv.append("%d일 %s" % [d, smith_level_by_day[d]])
+	_log("대장장이 레벨 (2026-10-03 백로그 10): %s · 끝 대장 Lv %d (남은 포인트 %d) · 단계별 제작 %s · 기술 %s" % [" · ".join(slv), GameState.smith_level, GameState.smith_points, tier_crafts, GameState.smith_skills])
 	_log("끝 크리처 Lv %s · 남은 훈련 포인트 합 %d" % [main.creatures.map(func(c: Creature) -> int: return c.data.level),
 		main.creatures.reduce(func(a: int, c: Creature) -> int: return a + c.data.train_points, 0)])
 	_log("직업 %s · 스탯 %s (남은 %d)" % [HunterClass.class_name_of(GameState.hunter_class), GameState.stats, GameState.stat_points])
@@ -355,6 +360,7 @@ func play_day() -> void:
 	await let_creatures_work()
 	incubate()
 	spend_farm_points()
+	smith_level_by_day[GameState.day] = "대장 Lv%d 고철 %d 재료 %d/%d/%d/%d/%d" % [GameState.smith_level, GameState.scrap, GameState.material, GameState.material2, GameState.material3, GameState.material4, GameState.material5]
 	var clv: Array = main.creatures.map(func(c: Creature) -> int: return c.data.level)
 	farm_level_by_day[GameState.day] = "농사 Lv%d · 크리처 최고 Lv%d 평균 %.1f" % [GameState.farm_level, clv.max() if not clv.is_empty() else 0,
 		float(clv.reduce(func(a: int, b: int) -> int: return a + b, 0)) / maxi(clv.size(), 1)]
@@ -1063,18 +1069,42 @@ func craft_day(did: Array[String]) -> void:
 	for j in range(hb.size() - 1, -1, -1):
 		if Wearables.is_rolled(hb[j]) and Wearables.rarity(hb[j]) == &"normal":
 			salvaged_scrap += Wearables.salvage(&"hunter", j)
-	while true:
+	# 2026-10-03 대장장이 레벨: 가방이 가득 차면 (창고도 가득) 제작이 멈춰서, 가방에 남은 사냥터 장비도 간다 (즐겨 드는 종류 무기는 남김)
+	# 즐겨 드는 종류 무기도 가장 좋은 하나만 남긴다
+	if hb.size() >= Config.BAG_SIZE - 2:
+		var best := &""
+		for g: StringName in hb:
+			if Wearables.is_rolled(g) and _wanted_weapon(g) and (best == &"" or _score(g) > _score(best)):
+				best = g
+		for j in range(hb.size() - 1, -1, -1):
+			if Wearables.is_rolled(hb[j]) and hb[j] != best:
+				salvaged_scrap += Wearables.salvage(&"hunter", j)
+	spend_smith_points()
+	# 하루에 몇 개만 (2026-10-03: 돈이 있는 만큼 다 만들면 하루 수백 번 만들어 시설 복구비가 안 모임. 사람도 이렇게 많이 만들지 않음)
+	var made_today := 0
+	while made_today < SMITH_CRAFTS_PER_DAY:
 		var base: StringName = bases[crafted % bases.size()]
-		var cost: Array = Config.CRAFT_COSTS[base]
+		var tier := _bot_tier()
+		var c := SmithSkills.cost(base, tier)
+		var cost: Array = [c.scrap, c.money]
 		if GameState.scrap < cost[0] or GameState.money < cost[1]:
+			if OS.get_environment("DEBUG_CRAFT") != "":
+				_log("  제작 그만: %s %d단계 고철 %d/%d 돈 %d/%d" % [base, tier + 1, GameState.scrap, cost[0], GameState.money, cost[1]])
 			break
 		# 마을회관 복구비를 모으는 중이면 그만큼은 남긴다
 		if GameState.hall_state == 1 and not SiteWork.building(&"hall") and GameState.material5 >= Config.HALL_COST_MATERIAL and GameState.money - cost[1] < Config.HALL_COST_MONEY:
 			break
-		var id: StringName = main.craft(base)
+		var said: Array[String] = []
+		var hear := func(t: String) -> void: said.append(t)
+		GameState.message.connect(hear)
+		var id: StringName = main.craft(base, tier)
+		GameState.message.disconnect(hear)
 		if id == &"":
+			_log("  제작 못 함: %s %d단계 · %s · 가방 %s · 창고 %d" % [base, tier + 1, " / ".join(said), GameState.bag[&"hunter"].map(func(g: StringName) -> String: return "%s:%s" % [Wearables.item(g).name, Wearables.rarity(g)]), GameState.stash.size()])
 			break
 		crafted += 1
+		made_today += 1
+		tier_crafts[tier] = tier_crafts.get(tier, 0) + 1
 		craft_spent += cost[1]
 		var it := Wearables.item(id)
 		made.append("%s[%s]" % [it.name, it.effect])
@@ -1123,6 +1153,32 @@ var level_by_day := {}
 ## 농사 기술 (2026-10-03 백로그 9): 손일을 넓히는 것 → 크리처 → 등급 순으로, 앞 기술을 다 찍거나 못 찍으면 다음
 const FARM_ORDER: Array[StringName] = [&"wide_can", &"wide_hoe", &"kind_hand", &"hand_touch", &"buddy_farm", &"compost_hand",
 	&"field_snack", &"quick_step", &"bounty", &"dawn_dew", &"warm_egg", &"food_hand"]
+
+
+## 대장장이 (2026-10-03 백로그 10): 재료가 있는 가장 높은 단계 (뒤 막 재료로 대신하는 것까지)
+const SMITH_ORDER: Array[StringName] = [&"good_steel", &"save_scrap", &"dig", &"extra_hit", &"forge_fire", &"salvage_hand",
+	&"sharpen", &"save_mat", &"mat_find", &"master", &"regular", &"iron_collar"]
+var tier_crafts := {}
+const SMITH_CRAFTS_PER_DAY := 3
+var smith_level_by_day := {}
+
+
+func _bot_tier() -> int:
+	for t in range(SmithSkills.top_tier(), 0, -1):
+		var td: Dictionary = Config.SMITH_TIERS[t]
+		if SmithSkills.mat_have(td.material) >= td.mat_count:
+			return t
+	return 0
+
+
+func spend_smith_points() -> void:
+	var learned := true
+	while GameState.smith_points > 0 and learned:
+		learned = false
+		for id: StringName in SMITH_ORDER:
+			if SmithSkills.learn(id):
+				learned = true
+				break
 
 
 func spend_farm_points() -> void:
@@ -1221,6 +1277,8 @@ func _score(id: StringName) -> float:
 	var sc := 0.0
 	for a: Dictionary in it.get("affixes", []):
 		sc += 1.0 + a.value / 100.0
+	# 대장간 단계 장비 바탕 힘 (2026-10-03): 한 단계 = 옵션 하나쯤
+	sc += it.get("tier", 0) * 1.5
 	return sc
 
 
