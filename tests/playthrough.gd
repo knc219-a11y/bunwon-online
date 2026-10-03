@@ -852,6 +852,9 @@ func dock_day(did: Array[String]) -> void:
 		fish_caught += GameState.basket
 		made.append("물고기 %d" % GameState.basket)
 		main.dock_action(&"take_fish")
+	# 잔치상 매운탕 큰 솥에 들 물고기는 끓이거나 팔지 않고 남긴다 (사람이라면 그럴 것)
+	var keep_fish := mini(GameState.fish, _feast_need("fish"))
+	GameState.fish -= keep_fish
 	if GameState.stews == 0 and GameState.fish >= Config.STEW_FISH:
 		main._set_active(main.ferryman)
 		if main.dock_action(&"stew"):
@@ -862,6 +865,7 @@ func dock_day(did: Array[String]) -> void:
 		fish_sold += GameState.fish
 		made.append("물고기 %d 진열" % GameState.fish)
 		main.supply_action(&"display_fish")
+	GameState.fish += keep_fish
 	if GameState.traps < Config.TRAP_MAX and main.dock_action(&"set_traps"):
 		made.append("통발 %d" % GameState.traps)
 	if not made.is_empty():
