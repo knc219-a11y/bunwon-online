@@ -566,10 +566,9 @@ func _best_worker(fac: StringName, any_count := false) -> Creature:
 
 ## 크리처를 들어 (F) 시설 멍석 근처에서 내려놓는다 (F). 플레이어가 할 법한 그대로.
 func _to_mat(c: Creature, fac: StringName) -> void:
+	# 풀밭 크리처는 몰려 있어서 F 로 들면 옆 크리처를 들 수 있다: 이 크리처를 바로 든다
 	main.player.position = c.position
-	main.interact()
-	if c.carried_by != main.player:
-		c.pick_up(main.player)
+	c.pick_up(main.player)
 	var slot := FacilityWorkers.free_slot(main, fac)
 	main.player.position = Farm.center_of(slot + Vector2i(0, 1))
 	main.interact()

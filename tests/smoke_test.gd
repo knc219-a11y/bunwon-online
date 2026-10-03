@@ -1730,7 +1730,10 @@ func _ready() -> void:
 		x.queue_free()
 	_check(is_equal_approx(fs.data.work_speed(CreatureJobs.SCRAP), fs.data.work_speed(CreatureJobs.WATER) * 1.5), "땅속성은 고물 캐기 1.5배")
 	GameState.scrap = 0
-	_check(fs.dig_cap() == maxi(1, roundi(Config.SCRAP_DIG_PER_DAY * fs.data.work_speed(CreatureJobs.SCRAP))) and fs.dig_cap() >= 3, "땅속성 하루 캐는 수 %d개" % fs.dig_cap())
+	var fs_cap0 := fs.dig_cap()
+	fs.data.speed_level = 3
+	_check(fs_cap0 == maxi(1, roundi(Config.SCRAP_DIG_PER_DAY * 1.5)) and fs.dig_cap() > fs_cap0, "땅속성 하루 캐는 수 %d개, 속도 훈련하면 %d개" % [fs_cap0, fs.dig_cap()])
+	fs.data.speed_level = 0
 	_check(fs.work_once(), "고물 캐기 크리처가 고물 더미로")
 	Engine.time_scale = 20.0
 	while fs._busy:

@@ -954,8 +954,9 @@ const FORGE_COST_MONEY := 2000
 const FORGE_COST_CROPS := 40
 const FORGE_COST_MATERIAL := 12
 ## 고물 캐기 (2026-10-03 백로그 3 "고철이 하루 6개 그냥 생기는 게 별로 → 남는 크리처로 고철"): 고물 더미는 저절로 차지 않는다.
-## 고물 캐기를 맡은 크리처 한 마리가 하루 SCRAP_DIG_PER_DAY x 고물 캐기 재능 (땅 1.5) 개를 캐 대장간에 둔다 (반올림, 최소 1).
-const SCRAP_DIG_PER_DAY := 2
+## 대장간 일꾼 한 마리가 하루 SCRAP_DIG_PER_DAY x 고물 캐기 재능 (땅 1.5) x 속도 훈련 개를 캐 대장간에 둔다 (반올림, 최소 1).
+## 일꾼 셋이면 하루 약 3~9개 (예전 저절로 6개쯤). 처음 값 2 는 봇에서 150일 동안 2천 개 넘게 쌓여서 1 로 (2026-10-03).
+const SCRAP_DIG_PER_DAY := 1
 ## 제작 (대장장이 모루 F). 기본 장비마다 고철 · 돈. 옵션 수는 무게로 굴린다 {개수: 무게}.
 const CRAFT_COSTS := {
 	&"work_cap": [3, 200], &"rain_suit": [5, 300], &"work_boots": [4, 250],
