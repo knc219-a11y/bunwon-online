@@ -106,6 +106,9 @@ static func snapshot(main: Node2D) -> Dictionary:
 			radius = data.base_radius,
 			radius_level = data.radius_level,
 			speed_level = data.speed_level,
+			level = data.level,
+			xp = data.xp,
+			train_points = data.train_points,
 			job = s.job,
 			home = home,
 			expedition = s.expedition_zone,
@@ -246,6 +249,10 @@ static func apply(main: Node2D, d: Dictionary) -> void:
 		data.base_radius = cd.radius
 		data.radius_level = cd.radius_level
 		data.speed_level = cd.speed_level
+		# 크리처 레벨 (2026-10-03): 옛 저장은 훈련한 단계만큼 레벨이 오른 것으로 (남은 포인트 없음)
+		data.level = cd.get("level", 1 + data.train_total())
+		data.xp = cd.get("xp", 0)
+		data.train_points = cd.get("train_points", 0)
 		var s := main.add_creature(data, cd.home, cd.job) as Creature
 		# 원정 중이던 크리처는 다시 원정 중으로 (Expedition)
 		if cd.get("expedition", -1) >= 0:

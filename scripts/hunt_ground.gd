@@ -530,6 +530,8 @@ func eat_lunch() -> void:
 func eat_food(id: StringName, grade: int) -> void:
 	var d: Dictionary = Config.FOODS[id]
 	var v = d.values[clampi(grade, 1, 3) - 1]
+	# 손맛 음식 (농사 기술, 2026-10-03): 효과 x FarmSkills.food_mult
+	v = roundi(v * FarmSkills.food_mult()) if d.effect == &"hp" else v * FarmSkills.food_mult()
 	match d.effect:
 		&"hp":
 			food_hp += int(v)
@@ -1249,6 +1251,10 @@ func _defeat(s: WildSlime) -> void:
 	# 사냥꾼 경험치 (2026-10-02 레벨 · 스킬): 동행이 잡아도 같게. 대장을 처음 잡으면 크게, 막 대장이면 스킬 포인트 +1
 	var first_boss := last_boss and not zone in GameState.bosses_beaten
 	_give_xp(HunterSkills.kill_xp(zone, s.boss, first_boss))
+	# 크리처 레벨 (2026-10-03): 데려간 동행도 처치마다 경험치 1
+	for c: HuntCompanion in [companion, companion2]:
+		if c != null and c.data != null:
+			c.data.gain_xp(1.0)
 	if first_boss and HunterSkills.is_act_boss_zone(zone):
 		GameState.skill_points += Config.ACT_BOSS_SKILL_POINT
 		_level_banner = Config.LEVEL_UP_BANNER_TIME

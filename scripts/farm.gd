@@ -141,7 +141,8 @@ func can_do(work: Work, cell: Vector2i) -> bool:
 
 
 ## 작업을 수행한다. 성공하면 true. element 는 크리처가 할 때 그 속성들 (속성 맞는 작물이면 등급 확률이 오름).
-func do_work(work: Work, cell: Vector2i, elements: Array[StringName] = []) -> bool:
+## hand = 주인공이 손으로 함 (손맛: ★ 한 단계 더 확률, 농사 기술 2026-10-03)
+func do_work(work: Work, cell: Vector2i, elements: Array[StringName] = [], hand := false) -> bool:
 	if not can_do(work, cell):
 		return false
 	var c := get_cell(cell)
@@ -165,7 +166,11 @@ func do_work(work: Work, cell: Vector2i, elements: Array[StringName] = []) -> bo
 		Work.HARVEST:
 			var d := Crops.info(c.kind)
 			var grade := Crops.harvest_grade(c, _grade_rng.randf())
-			Crops.add_graded(c.kind, int(d.amount) + (Config.PLOW_BONUS if c.plowed else 0), grade)
+			if hand and grade < 3 and _grade_rng.randf() < FarmSkills.hand_star_chance():
+				grade += 1
+			# 풍년 (농사 기술): 가끔 하나 더 (크리처 밭도)
+			var bonus := 1 if _grade_rng.randf() < FarmSkills.bounty_chance() else 0
+			Crops.add_graded(c.kind, int(d.amount) + (Config.PLOW_BONUS if c.plowed else 0) + bonus, grade)
 			last_grade = grade
 			c.plowed = false
 			c.watered = false
@@ -213,6 +218,20 @@ func advance_day() -> int:
 		c.watered = false
 	queue_redraw()
 	return grown
+
+
+## 새벽 이슬 (농사 기술, 2026-10-03): 심은 칸 중 아직 안 익고 물이 없는 칸에 chance 확률로 물이 든다. 물이 든 칸 수.
+func dew(chance: float) -> int:
+	if chance <= 0.0:
+		return 0
+	var n := 0
+	for c: Cell in _cells.values():
+		if c.planted and not c.watered and not c.is_ripe() and _grade_rng.randf() < chance:
+			c.watered = true
+			n += 1
+	if n > 0:
+		queue_redraw()
+	return n
 
 
 ## 비 내리기 (아기 청룡, 2026-10-03): 심은 칸 중 아직 안 익은 칸에 모두 물이 든다. 물이 든 칸 수를 돌려준다.

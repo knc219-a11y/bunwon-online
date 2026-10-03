@@ -449,14 +449,18 @@ func use_tool() -> void:
 	var fert := 0
 	var grades: Array[int] = []
 	for cell in tool_cells(work):
-		if farm.do_work(work, cell):
+		if farm.do_work(work, cell, [], true):
 			done += 1
 			if work == Farm.Work.HARVEST:
 				grades.append(farm.last_grade)
+				FarmSkills.gain_harvest(farm.last_grade)
+			else:
+				FarmSkills.gain_for(FARM_XP_IDS[work])
 		elif work == Farm.Work.SOW and farm.fertilize(cell):
 			# 이미 심은 칸에 씨앗 주머니 = 퇴비 한 줌 (2026-10-03 작물 등급)
 			done += 1
 			fert += 1
+			FarmSkills.gain_for(&"fert")
 	if fert > 0:
 		GameState.notify("퇴비를 %d칸에 줬다 (남은 퇴비 %d). 거둘 때 ★ +1." % [fert, GameState.compost])
 	if not grades.is_empty():
@@ -481,7 +485,12 @@ func use_tool() -> void:
 			GameState.notify("여기서는 %s을(를) 쓸 수 없다." % tool_name(work))
 
 
+## 손일 → 농사 경험치 id (Config.FARM_XP, 2026-10-03 농사 레벨)
+const FARM_XP_IDS := {Farm.Work.TILL: &"till", Farm.Work.SOW: &"sow", Farm.Work.WATER: &"water", Farm.Work.PLOW: &"plow", Farm.Work.HARVEST: &"harvest"}
+
+
 ## 도구가 닿는 칸. 강화한 도구는 바라보는 방향으로 앞 3칸 일자.
+## 큰 물뿌리개 · 큰 괭이 (농사 기술, 2026-10-03): 옆으로 줄을 더하고 앞으로 더 닿는다 (FarmSkills.wide).
 func tool_cells(work: Farm.Work) -> Array[Vector2i]:
 	var first := player.facing_cell()
 	var reach := Config.TOOL_UPGRADE_REACH if GameState.tool_level(work) > 0 else 1
@@ -490,9 +499,14 @@ func tool_cells(work: Farm.Work) -> Array[Vector2i]:
 	elif work == Farm.Work.TILL or work == Farm.Work.WATER:
 		# 대장간 제작품 옵션 "괭이 · 물뿌리개 칸 +" (2026-09-29)
 		reach += Wearables.stat_sum(&"farmer", "reach_add")
+	var wide := FarmSkills.wide(work)
+	var side := Vector2i(player.facing.y, player.facing.x)
 	var cells: Array[Vector2i] = []
-	for i in reach:
+	for i in reach + wide.y:
 		cells.append(first + player.facing * i)
+		for j in range(1, wide.x + 1):
+			cells.append(first + player.facing * i + side * j)
+			cells.append(first + player.facing * i - side * j)
 	return cells
 
 
@@ -605,6 +619,7 @@ func _village_interact(villager: Character) -> void:
 	elif forage.nearest(player.feet()) != null:
 		var herb := forage.pick(forage.nearest(player.feet()))
 		GameState.herbs += 1
+		FarmSkills.gain_for(&"herb")
 		GameState.notify("%s%s 캤다! (들나물 %d) 공급함에 진열하면 밤사이 한 포기 %d원." % [herb, Forage.object_particle(herb), GameState.herbs, Config.HERB_PRICE])
 	elif forage.nearest_root(player.feet()) != null:
 		GameState.notify("땅속 깊이 %s 뿌리가 있다. 손으로는 못 캔다. 땅속성 크리처에게 채집(R)을 맡기면 캐 온다." % Config.ROOT_NAME)
@@ -2136,15 +2151,16 @@ func train_option_text(id: StringName) -> String:
 	var pick := train_from_option(id)
 	var s: Creature = pick[0]
 	var stat: StringName = pick[1]
-	var who := "%s %s · %s" % [s.data.element_names(), s.data.species.display_name, CreatureJobs.display_name(s.job)]
+	var who := "%s %s Lv%d · %s" % [s.data.element_names(), s.data.species.display_name, s.data.level, CreatureJobs.display_name(s.job)]
+	var cost := ("포인트 1 · %d원" % train_price(s, stat)) if s.data.train_points > 0 else "포인트 없음 · 일하면 레벨업"
 	if stat == &"radius":
 		var r := s.data.work_radius()
-		return "%s   범위 %d → %d (%d원)" % [who, r, r + Config.TRAIN_RADIUS_STEP, train_price(s, stat)]
+		return "%s   범위 %d → %d (%s)" % [who, r, r + Config.TRAIN_RADIUS_STEP, cost]
 	# 농사·쉬는 중은 급수 속도로 보여 준다 (훈련 배율은 모든 일에 같게 붙는다)
 	var job := s.job if s.job == CreatureJobs.FORAGE else CreatureJobs.WATER
 	var now := s.data.work_speed(job)
 	var next := now / s.data.train_speed_mult() * (s.data.train_speed_mult() + Config.TRAIN_SPEED_STEP)
-	return "%s   속도 %.2f → %.2f (%d원)" % [who, now, next, train_price(s, stat)]
+	return "%s   속도 %.2f → %.2f (%s)" % [who, now, next, cost]
 
 
 ## 크리처 하나의 범위(&"radius") 또는 속도(&"speed")를 한 단계 올린다. 선택창과 테스트가 함께 쓴다.
@@ -2156,10 +2172,16 @@ func train(s: Creature, stat: StringName) -> bool:
 	if price < 0:
 		GameState.notify("%s %s 훈련은 다 끝냈다." % [s.data.species.display_name, stat_name])
 		return false
+	# 크리처 레벨 (2026-10-03): 훈련 한 단계에 훈련 포인트 1 (레벨업마다 1)
+	if s.data.train_points <= 0:
+		GameState.notify("%s Lv%d: 훈련 포인트가 없다. 일을 시키면 경험치가 쌓여 레벨업마다 포인트 1 (다음 레벨까지 %d/%d)." % [
+			s.data.species.display_name, s.data.level, s.data.xp, CreatureData.xp_to_next(s.data.level)])
+		return false
 	if GameState.money < price:
 		GameState.notify("돈이 모자라다. %s 훈련 %d원 (가진 돈 %d원)." % [stat_name, price, GameState.money])
 		return false
 	GameState.money -= price
+	s.data.train_points -= 1
 	if stat == &"radius":
 		s.data.radius_level += 1
 	else:
@@ -2443,6 +2465,7 @@ func _rebuild_menu() -> void:
 		lines.append("   ▼")
 	if training:
 		lines.append("크리처마다 따로 · 단계마다 값 두 배 (%s원)" % " → ".join(Config.TRAIN_PRICES.map(func(p: int) -> String: return str(p))))
+		lines.append("한 단계에 훈련 포인트 1: 크리처가 일하면 경험치가 쌓여 레벨업마다 1 (최대 Lv %d)" % Config.CREATURE_LEVEL_CAP)
 	if menu_kind == &"forge":
 		lines.append_array(forge_cost_lines())
 	elif menu_kind == &"yak":
@@ -2820,6 +2843,9 @@ func next_day() -> Array[String]:
 	var rained := rain_on_farm()
 	if rained > 0:
 		lines.append("아기 청룡이 비를 불러 밭 %d칸에 물이 들었다." % rained)
+	var dewed := farm.dew(FarmSkills.dew_chance())
+	if dewed > 0:
+		lines.append("새벽 이슬이 내려 밭 %d칸에 물이 들었다." % dewed)
 	var night_done := night_work()
 	if night_done > 0:
 		lines.append("아기 악귀가 밤새 맡은 일을 %d번 해 두었다." % night_done)
@@ -2933,6 +2959,8 @@ func _hatch(species: CreatureSpecies, at_cell: Vector2i, element: CreatureElemen
 		data.guarantee_minimum(Config.FIRST_CREATURE_MIN_WORK_SPEED, Config.FIRST_CREATURE_MIN_RADIUS)
 	if element:
 		data.set_element(element)
+	# 알 품기 (농사 기술, 2026-10-03): 높은 레벨로 태어남 (오른 만큼 훈련 포인트)
+	data.start_at_level(FarmSkills.hatch_level())
 	return add_creature(data, at_cell, s.job, s)
 
 

@@ -143,7 +143,9 @@ func _process(delta: float) -> void:
 	else:
 		facing = Vector2i(0, int(signf(dir.y)))
 	var ground_mult := terrain.speed_at(feet()) if terrain else 1.0
-	step(dir * Config.CHARACTER_SPEED * Wearables.speed_mult(outfit) * ground_mult * slow_mult * delta)
+	# 날랜 걸음 (농사 기술, 2026-10-03): 주인공이 마을 (밭 옷) 에서 걸을 때만
+	var farm_mult := FarmSkills.walk_mult() if who == &"player" and outfit == &"farmer" else 1.0
+	step(dir * Config.CHARACTER_SPEED * Wearables.speed_mult(outfit) * ground_mult * slow_mult * farm_mult * delta)
 	queue_redraw()
 
 
