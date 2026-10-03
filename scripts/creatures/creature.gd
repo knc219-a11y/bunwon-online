@@ -485,6 +485,9 @@ func _draw() -> void:
 		return
 	if job != CreatureJobs.FARM and carried_by == null and position.distance_to(focus) > Config.CREATURE_TAG_DISTANCE:
 		return
+	# 시설 멍석 위 일꾼은 이름표를 안 단다 (세 마리가 붙어 앉아 겹침, 시설 배지에 "일꾼 n/3", 2026-10-03)
+	if carried_by == null and FacilityWorkers.facility_at(home) != &"" and FacilityWorkers.is_facility_job(job):
+		return
 	var label := CreatureJobs.display_name(job)
 	if data.train_total() > 0:
 		label += " ★%d" % data.train_total()

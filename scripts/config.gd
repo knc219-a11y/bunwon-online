@@ -1179,5 +1179,15 @@ const ADOPT_SPOTS := {
 	&"ferryman": [Vector2i(30, 19), Vector2i(30, 20), Vector2i(31, 20), Vector2i(29, 20)],
 	&"chief": [Vector2i(16, 22), Vector2i(16, 21), Vector2i(10, 22), Vector2i(17, 22)]}
 
+## 크리처 시설 배치 (2026-10-03 사용자 구조 결정 "시설 일은 크리처를 배치해서 돌린다", FacilityWorkers): 시설마다 일꾼 자리 (멍석) 3칸.
+## 크리처를 들고 이 근처에서 내려놓으면 빈 자리에 앉아 그 시설 일꾼이 된다. 자리 · 수는 임시.
+const WORKER_SLOTS := {
+	&"forge": [Vector2i(11, 18), Vector2i(12, 18), Vector2i(13, 18)],
+	&"yak": [Vector2i(22, 20), Vector2i(23, 20), Vector2i(24, 20)],
+	&"barn": [Vector2i(25, 6), Vector2i(26, 6), Vector2i(27, 6)],
+	&"naru": [Vector2i(32, 20), Vector2i(33, 20), Vector2i(34, 20)],
+	&"hall": [Vector2i(11, 22), Vector2i(12, 22), Vector2i(13, 22)],
+}
+
 ## 농사가 아닌 크리처 (채집 · 고철 · 도라지밭 · 모이) 의 일 이름표는 조작 중인 캐릭터가 이 거리 (px) 안일 때만 보인다
 const CREATURE_TAG_DISTANCE := 56.0

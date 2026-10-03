@@ -74,19 +74,10 @@ const FARM_WORK := {
 }
 
 
-## 지금 R 로 고를 수 있는 일. 대장간을 고쳤으면 고철 줍기가 붙는다.
+## 지금 R 로 고를 수 있는 일: 밭 일만 (쉬기 · 농사 · 채집, 무너진 터가 있으면 터 공사).
+## 시설 일 (고물 캐기 · 도라지밭 · 모이 · 물고기 몰기 · 심부름) 은 시설 앞 일꾼 자리에 내려놓으면 맡는다 (2026-10-03 FacilityWorkers).
 static func jobs() -> Array[StringName]:
 	var out := FARM_JOBS.duplicate()
-	if GameState.forge_state >= 2:
-		out.append(SCRAP)
-	if GameState.yak_state >= 2:
-		out.append(HERB)
-	if GameState.barn_state >= 2:
-		out.append(FEED)
-	if GameState.naru_state >= 2:
-		out.append(FISH)
-	if GameState.hall_state >= 2:
-		out.append(ERRAND)
 	if SiteWork.build_site() != &"":
 		out.append(BUILD)
 	return out

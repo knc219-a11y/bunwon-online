@@ -71,6 +71,8 @@ var chief: Character
 ## 마을회관 (터 → 회관) · 당산나무 앞 잔치상 (VillageHall). 나타나기 전에는 null.
 var hall: Prop
 var feast_table: Prop
+## 시설 일꾼 자리 멍석을 그리는 노드 (FacilityWorkers.draw_mats)
+var _worker_mats: Node2D
 ## 잔치상 위 음식 · 잔치 뒤 청사초롱을 그리는 노드 (VillageHall.draw_feast)
 var _feast_node: Node2D
 ## 잔치 장면이 도는 동안 (FeastScene). F 만 받는다.
@@ -187,6 +189,11 @@ func _ready() -> void:
 	_feast_node = Node2D.new()
 	_feast_node.draw.connect(func() -> void: VillageHall.draw_feast(self, _feast_node))
 	add_child(_feast_node)
+	# 시설 일꾼 자리 멍석 (2026-10-03 크리처 시설 배치): 바닥 바로 위, 캐릭터 · 크리처보다 늘 뒤
+	_worker_mats = Node2D.new()
+	_worker_mats.z_index = -998
+	_worker_mats.draw.connect(func() -> void: FacilityWorkers.draw_mats(_worker_mats, self))
+	add_child(_worker_mats)
 	camera = Camera2D.new()
 	camera.limit_left = 0
 	camera.limit_top = 0
@@ -495,16 +502,37 @@ func interact() -> void:
 		return
 	var carried := _carried_creature()
 	if carried:
+		# 시설 일꾼 자리 근처면 그 시설 일꾼으로 (2026-10-03 크리처 시설 배치)
+		var fac := FacilityWorkers.drop_target(player.cell())
+		if fac != &"":
+			if FacilityWorkers.assign(self, carried, fac, player.cell()):
+				GameState.notify("%s이(가) %s 일꾼이 되었다 (%s · %s). 다른 일을 맡기려면 다시 들어서 옮긴다." % [carried.data.species.display_name, FacilityWorkers.NAMES[fac], CreatureJobs.display_name(carried.job), FacilityWorkers.count_text(self, fac)])
+				Sound.sfx(&"coin", 0.0, 1.0, 0.0)
+			else:
+				GameState.notify("%s 일꾼 자리가 다 찼다 (%s). 다른 곳에 내려놓자." % [FacilityWorkers.NAMES[fac], FacilityWorkers.count_text(self, fac)])
+			_refresh_props()
+			return
+		var was_worker := FacilityWorkers.is_facility_job(carried.job)
 		carried.place(player.cell())
+		if was_worker:
+			carried.job = CreatureJobs.REST
 		if not GameState.hunter_unlocked:
 			GameState.hunter_unlocked = true
 			GameState.notify("%s이(가) 주변 밭에서 일하기 시작했다! 이제 밭을 맡기고 사냥터 입구로 갈 수 있다." % carried.data.species.display_name)
 		else:
-			GameState.notify("%s을(를) 내려놓았다. R 키로 맡길 일을 고른다." % carried.data.species.display_name)
+			GameState.notify("%s을(를) 내려놓았다.%s R 키로 밭 일을 고르고, 시설 앞 멍석에 내려놓으면 시설 일꾼이 된다." % [carried.data.species.display_name, " 시설 일은 그만두고 쉰다." if was_worker else ""])
 		_refresh_props()
 		return
 	if near_door():
 		go_to_sleep()
+		return
+	# 일꾼 자리에 앉은 크리처 바로 옆이면 시설 창보다 먼저 든다 (일꾼을 옮기거나 빼려고)
+	var worker := _nearest_creature()
+	var worker_fac: StringName = FacilityWorkers.facility_of(worker) if worker else &""
+	if worker_fac != &"" and worker.position.distance_to(player.position) <= Config.INTERACT_DISTANCE * 0.7:
+		worker.pick_up(player)
+		GameState.notify("%s을(를) 들었다 (%s 일꾼). 다른 멍석이나 밭에 내려놓는다." % [worker.data.species.display_name, FacilityWorkers.NAMES[worker_fac]])
+		_refresh_props()
 		return
 	# 시설 (그 앞의 마을 사람에게 말을 걸어도 같은 창)
 	var villager := nearby_villager()
@@ -949,6 +977,8 @@ func menu_confirm() -> void:
 				return
 		elif id == &"feed_tonic":
 			feed_tonic()
+		elif id == &"yak_brew":
+			cycle_yak_brew()
 		else:
 			brew(id)
 		_rebuild_menu()
@@ -1337,7 +1367,7 @@ func restore_forge() -> bool:
 		return false
 	GameState.forge_state = 2
 	show_forge_restored()
-	GameState.notify("대장간을 고쳤다! 대장장이가 왔다. 고철로 모루에서 장비를 만들고, 안 쓰는 장비는 갈아서 고철로 바꿔 준다. 고물 더미의 고철은 크리처가 캐 온다 (고물 캐기). 금사리 윗길 쇠다리도 이어 줘서 이제 광동리로 건너갈 수 있다.")
+	GameState.notify("대장간을 고쳤다! 대장장이가 왔다. 고철로 모루에서 장비를 만들고, 안 쓰는 장비는 갈아서 고철로 바꿔 준다. 고물 더미의 고철은 대장간 일꾼 크리처가 캐 온다 (고물 더미 앞 멍석에 크리처를 내려놓기). 금사리 윗길 쇠다리도 이어 줘서 이제 광동리로 건너갈 수 있다.")
 	return true
 
 
@@ -1359,7 +1389,7 @@ func show_forge_restored() -> void:
 func pick_scrap() -> bool:
 	var diggers := scrap_diggers()
 	if diggers.is_empty():
-		GameState.notify("고물 더미는 손으로 못 판다. 크리처에게 고물 캐기를 맡기면 하루 몇 개씩 고철을 캐 온다 (땅속성이 잘 캔다).")
+		GameState.notify("고물 더미는 손으로 못 판다. 크리처를 들어 옆 멍석 (대장간 일꾼 자리) 에 내려놓으면 하루 몇 개씩 고철을 캐 온다 (땅속성이 잘 캔다).")
 	else:
 		var dug := 0
 		var cap := 0
@@ -1370,13 +1400,9 @@ func pick_scrap() -> bool:
 	return false
 
 
-## 고물 캐기를 맡은 크리처 (원정 · 들림 제외)
+## 고물 캐기를 맡은 크리처 = 대장간 일꾼
 func scrap_diggers() -> Array[Creature]:
-	var out: Array[Creature] = []
-	for c in creatures:
-		if c.job == CreatureJobs.SCRAP and c.expedition_zone < 0:
-			out.append(c)
-	return out
+	return FacilityWorkers.workers(self, &"forge")
 
 
 ## 대장장이가 모루에서 base 장비를 하나 만든다. 만든 장비 id (못 만들면 &"").
@@ -1453,6 +1479,7 @@ func brew_options() -> Array[StringName]:
 	out.assign(Config.BREWS.keys())
 	if GameState.tonics > 0 and GameState.tonic_day != GameState.day:
 		out.append(&"feed_tonic")
+	out.append(&"yak_brew")
 	out.append(&"close")
 	return out
 
@@ -1468,6 +1495,9 @@ func brew_option_text(id: StringName) -> String:
 			return "닫기"
 		&"feed_tonic":
 			return "크리처 보약 먹이기 (오늘 모든 크리처 x2, 남은 보약 %d)" % GameState.tonics
+		&"yak_brew":
+			var what: String = Config.BREWS[GameState.yak_brew].name if GameState.yak_brew != &"" else "안 달임"
+			return "일꾼이 아침마다 달일 약: %s ▶ (일꾼 한 마리에 하루 한 번)" % what
 	var b: Dictionary = Config.BREWS[id]
 	var cost: Array[String] = []
 	for k: String in b.cost:
@@ -1510,7 +1540,7 @@ func restore_yak() -> bool:
 	GameState.yak_state = 2
 	GameState.herb_bed = Config.HERB_BED_PER_DAY
 	show_yak_restored()
-	GameState.notify("약방을 고쳤다! 연금술사가 왔다. 약방에서 물약 · 크리처 보약을 만든다. 도라지밭 가꾸기(R)도 맡길 수 있다. 연금술사가 호롱을 만들어 줘서 이제 도마리 윗길 너머 번천으로 갈 수 있다.")
+	GameState.notify("약방을 고쳤다! 연금술사가 왔다. 약방에서 물약 · 크리처 보약을 만든다. 약방 앞 멍석에 크리처를 내려놓으면 도라지밭을 가꾸고, 정해 둔 약을 아침마다 달여 둔다. 연금술사가 호롱을 만들어 줘서 이제 도마리 윗길 너머 번천으로 갈 수 있다.")
 	return true
 
 
@@ -1534,12 +1564,13 @@ func pick_herb_bed() -> bool:
 		return false
 	GameState.herb_bed -= 1
 	GameState.roots += 1
-	GameState.notify("도라지를 하나 캤다 (%s %d). 크리처에게 도라지밭(R)을 맡기면 알아서 캔다." % [Config.ROOT_NAME, GameState.roots])
+	GameState.notify("도라지를 하나 캤다 (%s %d). 약방 앞 멍석에 크리처를 앉히면 알아서 캔다." % [Config.ROOT_NAME, GameState.roots])
 	return true
 
 
 ## 연금술사가 id 를 한 번 만든다. 만들었으면 true.
-func brew(id: StringName) -> bool:
+## quiet: 알림 없이 (약방 일꾼이 아침에 달일 때, FacilityWorkers.morning)
+func brew(id: StringName, quiet := false) -> bool:
 	if not Config.BREWS.has(id):
 		return false
 	var b: Dictionary = Config.BREWS[id]
@@ -1548,14 +1579,23 @@ func brew(id: StringName) -> bool:
 		if GameState.get(k) < b.cost[k]:
 			short.append("%s %d" % [BREW_COST_NAMES[k], b.cost[k] - GameState.get(k)])
 	if not short.is_empty():
-		GameState.notify("모자라다: %s." % ", ".join(short))
+		if not quiet:
+			GameState.notify("모자라다: %s." % ", ".join(short))
 		return false
 	for k: String in b.cost:
 		GameState.set(k, GameState.get(k) - b.cost[k])
 	var field: String = {&"potion": "potions", &"lamp_oil": "lamp_oil", &"strength": "strength", &"speed": "speed", &"tonic": "tonics"}[id]
 	GameState.set(field, GameState.get(field) + b.count)
+	if quiet:
+		return true
 	GameState.notify("%s을(를) %s 만들었다! %s" % [b.name, "두 병" if b.count == 2 else "하나", b.effect])
 	return true
+
+
+## 약방 일꾼이 아침마다 달일 약을 다음 것으로 (안 달임 → 빨간 물약 → … → 안 달임)
+func cycle_yak_brew() -> void:
+	var ids: Array = [&""] + Config.BREWS.keys()
+	GameState.yak_brew = ids[(ids.find(GameState.yak_brew) + 1) % ids.size()]
 
 
 ## 크리처 보약을 먹인다: 오늘 하루 모든 크리처 일 속도 두 배
@@ -1580,7 +1620,7 @@ func _barn_morning() -> String:
 		return "%s 대장이 쓰러진 뒤, 부화기 오른쪽 큰길 위 풀밭에 무너진 축사 터가 드러났다. 터에서 F. 번천 · 밀목 몬스터도 산군 발톱을 가끔 떨어뜨린다." % Config.HUNT_ZONES[Config.BARN_ZONE].name
 	if GameState.barn_state < 2:
 		return ""
-	var guarded := creatures.any(func(c: Creature) -> bool: return c.data.species.guards_coop and c.job == CreatureJobs.FEED)
+	var guarded := FacilityWorkers.workers(self, &"barn").any(func(c: Creature) -> bool: return c.data.species.guards_coop)
 	var r := coop_night(_rng, guarded)
 	var parts: Array[String] = []
 	if r.weasel != "":
@@ -1726,7 +1766,7 @@ func restore_barn() -> bool:
 	GameState.barn_state = 2
 	GameState.hens = Config.START_HENS
 	show_barn_restored()
-	GameState.notify("축사를 고쳤다! 목축인이 수탉 · 암탉 한 쌍을 데려왔다. 모이를 주면 아침마다 달걀, 둥지에 남긴 달걀은 병아리가 된다. 크리처에게 모이 주기(R)도 맡길 수 있다.")
+	GameState.notify("축사를 고쳤다! 목축인이 수탉 · 암탉 한 쌍을 데려왔다. 모이를 주면 아침마다 달걀, 둥지에 남긴 달걀은 병아리가 된다. 축사 앞 멍석에 크리처를 앉히면 모이를 주고 아침마다 달걀을 거둬 둔다.")
 	return true
 
 
@@ -1784,7 +1824,7 @@ func coop_action(id: StringName) -> bool:
 				GameState.notify("암탉들이 오늘 모이를 다 먹었다.")
 				return false
 			if GameState.crops < Config.FEED_CROP_COST:
-				GameState.notify("모이로 줄 무가 없다. 크리처에게 모이 주기(R)를 맡기면 무 없이 먹인다.")
+				GameState.notify("모이로 줄 무가 없다. 축사 일꾼 크리처는 무 없이 먹인다.")
 				return false
 			GameState.crops -= Config.FEED_CROP_COST
 			GameState.fed = GameState.hens
@@ -1945,7 +1985,7 @@ func restore_naru() -> bool:
 		return false
 	GameState.naru_state = 2
 	show_naru_restored()
-	GameState.notify("나루터를 고쳤다! 뱃사공이 왔다. 통발에 미끼(무)를 넣어 놓으면 아침에 물고기가 든다. 크리처에게 물고기 몰기(R)도 맡길 수 있다.")
+	GameState.notify("나루터를 고쳤다! 뱃사공이 왔다. 통발에 미끼(무)를 넣어 놓으면 아침에 물고기가 든다. 나루터 앞 멍석에 크리처를 앉히면 물고기를 몰고 아침마다 통발을 다시 놓는다.")
 	return true
 
 
@@ -2369,17 +2409,23 @@ func _rebuild_menu() -> void:
 	elif menu_kind == &"dock":
 		lines.append("든 물고기 %d · 무 %d · 매운탕 %d · 오늘 물고기 몰기 %d/%d" % [GameState.fish, GameState.crops, GameState.stews, GameState.fish_drive, Config.FISH_DRIVE_CAP])
 		lines.append("놓은 통발은 다음 날 아침 하나에 물고기 0~2마리 (걷히면 다시 놓기)")
-		lines.append("물고기 몰기 크리처: 통발이 있으면 한 번에 내일 물고기 +1")
+		lines.append("나루터 %s: 물고기 몰기 (통발이 있으면 한 번에 내일 +1) · 아침에 통발 다시 놓기" % FacilityWorkers.count_text(self, &"naru"))
 		lines.append(ferry_line())
 	elif menu_kind == &"coop":
 		lines.append("든 달걀 %d · 무 %d · 사냥 도시락 %d · 오늘 모이 %d/%d" % [GameState.hen_eggs, GameState.crops, GameState.lunches, mini(GameState.fed, GameState.hens), GameState.hens])
 		lines.append("모이를 먹은 암탉은 아침마다 달걀 하나 (굶으면 반쯤)")
 		lines.append("둥지에 남긴 달걀은 밤사이 반쯤 병아리 → %d일 뒤 암탉 (%d마리까지)" % [Config.CHICK_GROW_DAYS, Config.HEN_CAP])
+		lines.append("축사 %s: 모이 주기 · 아침에 둥지 달걀 거두기" % FacilityWorkers.count_text(self, &"barn"))
 	elif menu_kind == &"brew":
 		lines.append("가진 것: 빨간 물약 %d · 호롱 기름 %d · 힘 %d · 빠르기 %d · 보약 %d" % [GameState.potions, GameState.lamp_oil, GameState.strength, GameState.speed, GameState.tonics])
 		lines.append("힘 · 빠르기 물약은 다음 사냥에 들어갈 때 하나씩 마신다")
+		lines.append("약방 %s: 도라지밭 가꾸기 · 아침마다 정해 둔 약 달이기" % FacilityWorkers.count_text(self, &"yak"))
 	elif menu_kind == &"craft":
 		lines.append("만들 때마다 옵션 1~3개가 무작위로 붙는다 (디아블로2 제작처럼)")
+		var dig := 0
+		for c in scrap_diggers():
+			dig += c.dig_cap()
+		lines.append("대장간 %s: 고물 캐기 (하루 고철 %d개)" % [FacilityWorkers.count_text(self, &"forge"), dig])
 		lines.append("만든 장비는 칸이 비었으면 바로 입고, 아니면 그 사람 가방으로")
 	if expedition:
 		lines.append("쉬는 · 채집 크리처 중 잘 맞는 크리처부터 %d~%d마리가 한 팀" % [Config.EXPEDITION_TEAM_MIN, Config.EXPEDITION_TEAM_MAX])
@@ -2580,6 +2626,10 @@ func change_creature_job() -> void:
 	if s == null:
 		GameState.notify("크리처 가까이에서 R.")
 		return
+	var fac := FacilityWorkers.facility_of(s)
+	if fac != &"":
+		GameState.notify("%s 일꾼 (%s). 밭 일을 맡기려면 들어서 (F) 밭에 내려놓는다." % [FacilityWorkers.NAMES[fac], s.describe()])
+		return
 	s.next_job()
 	GameState.notify(s.describe())
 
@@ -2695,6 +2745,7 @@ func next_day() -> Array[String]:
 	var hall_line := VillageHall.morning(self, _rng)
 	if hall_line != "":
 		lines.append(hall_line)
+	lines.append_array(FacilityWorkers.morning(self))
 	# 시설 공사 (2026-10-03 백로그 4번): 다 된 공사는 아침에 문을 연다, 덜 된 공사는 진척 한 줄
 	for fac in SiteWork.ORDER:
 		if not SiteWork.building(fac):
@@ -2892,24 +2943,26 @@ func _refresh_props() -> void:
 	var away := Expedition.away_count(self)
 	hunt_gate.set_badge("원정 %d마리" % away if away > 0 else "")
 	if forge:
-		forge.set_badge(SiteWork.badge(&"forge") if GameState.forge_state == 1 else ("고철 %d" % GameState.scrap))
+		forge.set_badge(SiteWork.badge(&"forge") if GameState.forge_state == 1 else ("고철 %d · %s" % [GameState.scrap, FacilityWorkers.count_text(self, &"forge")]))
 	if scrap_heap:
 		var diggers := scrap_diggers().size()
-		scrap_heap.set_badge("캐는 크리처 %d" % diggers if diggers > 0 else "캘 크리처 없음")
+		scrap_heap.set_badge("" if diggers > 0 else "캘 크리처 없음")
 	if yak:
 		# 고친 뒤엔 도라지밭 남은 수도 여기 함께 (도라지밭 배지가 약방 옆 배지와 겹쳐서, 2026-10-01)
-		yak.set_badge(SiteWork.badge(&"yak") if GameState.yak_state == 1 else ("%s %d · 밭 %d" % [Config.ROOT_NAME, GameState.roots, GameState.herb_bed]))
+		yak.set_badge(SiteWork.badge(&"yak") if GameState.yak_state == 1 else ("%s %d · 밭 %d · %s" % [Config.ROOT_NAME, GameState.roots, GameState.herb_bed, FacilityWorkers.count_text(self, &"yak")]))
 	if herb_bed:
 		herb_bed.set_badge("")
 	if barn:
-		barn.set_badge(SiteWork.badge(&"barn") if GameState.barn_state == 1 else ("둥지 달걀 %d" % GameState.nest if GameState.nest > 0 else ""))
+		barn.set_badge(SiteWork.badge(&"barn") if GameState.barn_state == 1 else ((("둥지 달걀 %d · " % GameState.nest) if GameState.nest > 0 else "") + FacilityWorkers.count_text(self, &"barn")))
 		_flock.queue_redraw()
 	if naru:
-		naru.set_badge(SiteWork.badge(&"naru") if GameState.naru_state == 1 else ("물고기 %d" % GameState.basket if GameState.basket > 0 else ""))
+		naru.set_badge(SiteWork.badge(&"naru") if GameState.naru_state == 1 else ((("물고기 %d · " % GameState.basket) if GameState.basket > 0 else "") + FacilityWorkers.count_text(self, &"naru")))
 	if _lake:
 		_lake.queue_redraw()
 	if hall:
 		hall.set_badge(VillageHall.badge_text(&"hall"))
+	if _worker_mats:
+		_worker_mats.queue_redraw()
 	if feast_table:
 		feast_table.set_badge(VillageHall.badge_text(&"feast"))
 		_feast_node.queue_redraw()

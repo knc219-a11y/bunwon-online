@@ -376,6 +376,8 @@ static func apply(main: Node2D, id: StringName) -> bool:
 		Wearables.gain_rolled(Wearables.roll_crafted(rng, base))
 	main.player.refresh_wear()
 
+	# 시설 일을 맡긴 크리처는 그 시설 앞 멍석 (일꾼 자리) 으로 (2026-10-03 크리처 시설 배치)
+	FacilityWorkers.fix_after_load(main)
 	main._refresh_props()
 	GameState.notify("테스트 시작: %s (%d일째). 개발용 빌드에서만 고를 수 있다." % [s.name, GameState.day])
 	return true

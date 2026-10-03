@@ -243,6 +243,8 @@ static func apply(main: Node2D, d: Dictionary) -> void:
 		# 원정 중이던 크리처는 다시 원정 중으로 (Expedition)
 		if cd.get("expedition", -1) >= 0:
 			Expedition.depart(s, cd.expedition)
+	# 시설 일을 맡았는데 일꾼 자리에 없는 크리처 (2026-10-03 전 저장) 는 빈 멍석으로, 자리가 없으면 쉰다
+	FacilityWorkers.fix_after_load(main)
 	# 입양 보낸 크리처는 GameState.adopted 로 담겨 있으니 주민 곁에 다시 그린다
 	Expedition.rebuild_adopted(main)
 

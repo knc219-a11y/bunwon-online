@@ -7,7 +7,7 @@
 
 | 개념 | 파일 | 역할 |
 |---|---|---|
-| 일 (Job) | `scripts/creatures/creature_jobs.gd` | 크리처가 맡는 일의 id. 지금은 쉬기, 농사, 채집, 고철 줍기 (대장간을 고친 뒤). 농사 안의 파종·급수·수확 id는 재능 배율을 적는 데 쓴다 |
+| 일 (Job) | `scripts/creatures/creature_jobs.gd` | 크리처가 맡는 일의 id. R 로 고르는 일은 쉬기 · 농사 · 채집 · 터 공사. 시설 일 (고물 캐기 · 도라지밭 · 모이 · 물고기 몰기 · 심부름) 은 시설 앞 멍석에 앉혀 맡긴다 (`FacilityWorkers`). 농사 안의 파종·급수·수확 id는 재능 배율을 적는 데 쓴다 |
 | 속성 (Element) | `data/creatures/elements/*.tres` | 물, 비행 등. 일별 재능 배율과 이동 속도 배율 |
 | Trait | `data/creatures/traits/*.tres` | 개체 특성. 작업 속도, 이동 속도, 범위, 일별 재능 |
 | 종 (Species) | `data/creatures/species/*.tres` | 몬스터 종류. 가질 수 있는 속성 후보, 고유 재능, 부화 시 능력치 범위, Trait 후보 |
@@ -43,11 +43,15 @@
 맡긴 크리처는 터 왼쪽 아래 칸을 오가며 공사를 한 번씩 한다 (`SiteWork.build_once`, 하루 `Config.BUILD_CAP` 번까지). 땅속성이 1.5배 빠르고, 아기 악귀는 밤일로도 한다.
 공사가 `Config.SITE_TASKS` 의 날수만큼 차면 다음 날 아침 시설이 선다.
 
-## 고철 줍기 (2026-09-29 대장간 복구 A)
+## 시설 일꾼 (2026-10-03 크리처 시설 배치)
 
-대장간을 고치면 옆에 고물 더미가 생기고 R 일 목록 끝에 **고철 줍기**(`CreatureJobs.SCRAP`)가 붙는다 (`CreatureJobs.jobs()`).
-고철 줍기 크리처는 고물 더미 왼쪽 칸까지 건너가 고철 하나를 주워 대장간에 둔다 (`GameState.scrap`). 더미가 비면 놓아 준 자리로 돌아가 쉬고, 아침마다 더미가 `Config.SCRAP_PER_DAY` 만큼 다시 쌓인다.
-땅속성은 `job_aptitude` 에 `scrap: 1.5` 라서 빠르다. 대장장이는 이 고철로 모루에서 장비를 만든다.
+조작 캐릭터는 주인공 하나라서, 시설 일은 크리처를 시설 앞 멍석 (일꾼 자리, `Config.WORKER_SLOTS`, 시설마다 3칸) 에 앉혀 돌린다 (`scripts/facility_workers.gd`).
+크리처를 들고 (F) 멍석 2칸 안에서 내려놓으면 가까운 빈 자리에 앉아 그 시설 일 (`FacilityWorkers.JOBS`) 을 맡는다. 멍석 위 일꾼은 F 로 바로 들 수 있고 (시설 창보다 먼저), 멍석 밖에 내려놓으면 쉰다. 일꾼에게 R 은 일을 바꾸지 않는다.
+
+- 대장간 · 고물 캐기 (`CreatureJobs.SCRAP`): 고물 더미는 저절로 차지 않는다. 일꾼 한 마리가 하루 `Creature.dig_cap()` = `SCRAP_DIG_PER_DAY` x 고물 캐기 속도 (땅 1.5, 훈련) 개를 캔다.
+- 약방 · 도라지밭 + 달이기: 연금술사 창에서 고른 약 (`GameState.yak_brew`) 을 아침마다 일꾼 한 마리에 한 번씩.
+- 축사 · 모이 주기 + 달걀 거두기 (아침), 나루터 · 물고기 몰기 + 통발 다시 놓기 (아침), 마을회관 · 심부름.
+- 아침 일은 `FacilityWorkers.morning`, 옛 저장 · 시작 지점은 `FacilityWorkers.fix_after_load` 가 시설 일 크리처를 멍석으로 옮긴다.
 
 ## 도라지밭 (2026-09-29 약방 복구)
 
