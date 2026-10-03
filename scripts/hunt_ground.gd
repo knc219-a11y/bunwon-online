@@ -514,7 +514,7 @@ func companions() -> Array[HuntCompanion]:
 
 ## 입은 장비와 세트 보너스까지 더한 하트 칸 수
 func max_life() -> int:
-	return Config.HUNTER_HP + Config.HP_PER_LEVEL * (GameState.hunter_level - 1) + Config.HP_PER_HEART * Wearables.bonus_hearts(&"hunter") \
+	return Config.HUNTER_HP + Config.HP_PER_LEVEL * (GameState.hunter_level - 1) + Config.HP_PER_HEART * Wearables.bonus_hearts(&"hunter") + Wearables.bonus_hp(&"hunter") \
 		+ (Config.LUNCH_HP if lunch else 0) + (Config.STEW_HP if stew else 0) + HunterClass.bonus_hp() + food_hp
 
 

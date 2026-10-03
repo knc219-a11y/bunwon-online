@@ -145,10 +145,33 @@ static func item(id: StringName) -> Dictionary:
 				out.atk_speed = out.get("atk_speed", 0) + a.value
 			&"range":
 				out.range_add = out.get("range_add", 0) + a.value
+	# 대장간 단계 장비의 바탕 힘 (2026-10-03 백로그 10, SmithSkills.roll_power): 만들 때 굳힌 값
+	var power: Dictionary = roll.get("power", {})
+	if power.has("hp"):
+		out.hp_add = power.hp
+	if power.has("dmg"):
+		out.dmg = power.dmg
+	if power.has("walk"):
+		speed *= 1.0 + power.walk
 	if speed != 1.0:
 		out.speed = speed
+	out.tier = roll.get("tier", 0)
 	out.effect = affix_text(roll.affixes)
+	var pt := power_text(power)
+	if pt != "":
+		out.effect = pt if roll.affixes.is_empty() else "%s · %s" % [pt, out.effect]
 	return out
+
+
+## 단계 장비 바탕 힘 한 줄 ("" = 없음)
+static func power_text(power: Dictionary) -> String:
+	if power.has("hp"):
+		return "바탕 체력 +%d" % power.hp
+	if power.has("dmg"):
+		return "바탕 피해 +%d%%" % roundi(power.dmg * 100.0)
+	if power.has("walk"):
+		return "바탕 걷기 +%d%%" % roundi(power.walk * 100.0)
+	return ""
 
 
 ## who 칸 목록 (무기 칸은 사냥꾼만)
@@ -166,6 +189,7 @@ static func weapon(who := &"hunter") -> Dictionary:
 		it = item(id)
 		w = (it.weapon as Dictionary).duplicate()
 		w.name = it.name
+	w.dmg = it.get("dmg", 0.0)
 	var range_mult: float = 1.0 + it.get("range_add", 0) / 100.0
 	w.cooldown = w.cooldown / (1.0 + it.get("atk_speed", 0) / 100.0)
 	if w.kind == &"melee":
@@ -251,7 +275,8 @@ static func roll_gear(rng: RandomNumberGenerator, force_rarity := &"", weights :
 
 ## who 에게 붙을 수 있는 옵션 중 count_range [최소, 최대] 개를 굴린다 (한 장비에 같은 옵션은 한 번만)
 ## slot 이 무기면 무기 옵션만, 아니면 방어구 옵션만 (on 이 &"" 인 옵션은 둘 다)
-static func roll_affixes(rng: RandomNumberGenerator, who: StringName, count_range: Array, slot := &"hat") -> Array[Dictionary]:
+## mult: 옵션 값 배율 (대장간 단계 · 기술, 반올림)
+static func roll_affixes(rng: RandomNumberGenerator, who: StringName, count_range: Array, slot := &"hat", mult := 1.0) -> Array[Dictionary]:
 	var on := &"weapon" if slot == &"weapon" else &"armor"
 	var stats: Array = AFFIXES.keys().filter(func(k: StringName) -> bool: return AFFIXES[k].who in [&"", who] and AFFIXES[k].on in [&"", on])
 	# 섞어서 앞에서부터
@@ -263,23 +288,35 @@ static func roll_affixes(rng: RandomNumberGenerator, who: StringName, count_rang
 	var affixes: Array[Dictionary] = []
 	for i in mini(rng.randi_range(count_range[0], count_range[1]), stats.size()):
 		var def: Dictionary = AFFIXES[stats[i]]
-		affixes.append({stat = stats[i], value = rng.randi_range(def.min, def.max)})
+		affixes.append({stat = stats[i], value = maxi(def.min, roundi(rng.randi_range(def.min, def.max) * mult))})
 	return affixes
 
 
 ## 대장간 제작 (2026-09-29 사용자 선택 A): 기본 장비 하나에 옵션 1~3개를 굴린다 (Config.CRAFT_AFFIX_WEIGHTS).
 ## 이름은 마법 장비처럼 앞말 (+ 옵션이 둘 이상이면 뒷말). 아직 가진 것에 넣지 않은 정보만 돌려준다.
-static func roll_crafted(rng: RandomNumberGenerator, base: StringName) -> Dictionary:
-	var roll := rng.randf() * 100.0
+## 2026-10-03 대장장이 레벨 (백로그 10): tier 단계 (0 기준, Config.SMITH_TIERS) 의 옵션 수 무게 · 옵션 값 배율 · 바탕 힘 (power), 이름 앞에 단계 이름.
+## 대장 기술 "한 번 더" 면 옵션이 하나 더 붙기도 한다.
+static func roll_crafted(rng: RandomNumberGenerator, base: StringName, tier := 0) -> Dictionary:
+	var weights: Dictionary = Config.SMITH_TIERS[tier].weights
+	var total := 0.0
+	for n: int in weights:
+		total += weights[n]
+	var roll := rng.randf() * total
 	var count := 1
 	var acc := 0.0
-	for n: int in Config.CRAFT_AFFIX_WEIGHTS:
-		acc += Config.CRAFT_AFFIX_WEIGHTS[n]
+	for n: int in weights:
+		acc += weights[n]
 		count = n
 		if roll < acc:
 			break
-	var affixes := roll_affixes(rng, ITEMS[base].who, [count, count], ITEMS[base].slot)
-	return {base = base, rarity = &"crafted", name = gear_name(rng, base, &"magic", affixes), affixes = affixes}
+	if rng.randf() < SmithSkills.extra_affix_chance():
+		count += 1
+	var affixes := roll_affixes(rng, ITEMS[base].who, [count, count], ITEMS[base].slot, SmithSkills.affix_mult(tier))
+	var name := gear_name(rng, base, &"magic", affixes)
+	var tier_name: String = Config.SMITH_TIERS[tier].name
+	if tier_name != "":
+		name = "%s %s" % [tier_name, name]
+	return {base = base, rarity = &"crafted", name = name, affixes = affixes, tier = tier, power = SmithSkills.roll_power(base, tier)}
 
 
 ## 등급 장비 이름: 마법 "날랜 가죽 두건" (옵션 둘이면 "바람의 날랜 …"), 레어는 무작위 두 단어, 일반은 기본 이름
@@ -342,7 +379,10 @@ static func sell(who: StringName, i: int) -> int:
 	return price
 
 
+## 제작품은 1 + 단계 (2026-10-03 대장장이 레벨: 만들고 갈기를 되풀이해 고철이 늘지 않게, 만들 때 드는 고철보다 늘 적다)
 static func salvage_scrap(id: StringName) -> int:
+	if rarity(id) == &"crafted":
+		return 1 + int(GameState.gear[id].get("tier", 0))
 	return Config.SALVAGE_SCRAP.get(rarity(id), 1)
 
 
@@ -353,6 +393,10 @@ static func salvage(who: StringName, i: int) -> int:
 		return 0
 	var id := b[i]
 	var n := salvage_scrap(id)
+	# 대장 기술 갈기 솜씨: 하나 더 · 대장 경험치 (2026-10-03 백로그 10)
+	if rarity(id) != &"crafted" and randf() < SmithSkills.salvage_extra_chance():
+		n += 1
+	SmithSkills.gain(Config.SMITH_XP_SALVAGE.get(rarity(id), 1))
 	b.remove_at(i)
 	GameState.gear.erase(id)
 	GameState.scrap += n
@@ -463,6 +507,14 @@ static func set_complete(set_id: StringName, who: StringName) -> bool:
 
 
 ## 입은 장비와 완성한 세트가 더하는 사냥터 체력 (하트 단위, x Config.HP_PER_HEART)
+## 대장간 단계 장비의 바탕 체력 (체력 숫자 그대로)
+static func bonus_hp(who: StringName) -> int:
+	var n := 0
+	for id in worn_by(who):
+		n += item(id).get("hp_add", 0)
+	return n
+
+
 static func bonus_hearts(who: StringName) -> int:
 	var n := 0
 	for id in worn_by(who):

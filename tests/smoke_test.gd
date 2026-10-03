@@ -2677,6 +2677,8 @@ func _ready() -> void:
 	await _grade_checks()
 	# 54) 농사 레벨 · 기술 · 크리처 레벨 (2026-10-03 백로그 9)
 	await _farm_level_checks()
+	# 55) 대장장이 레벨 · 단계 장비 · 대장 기술 (2026-10-03 백로그 10)
+	await _smith_level_checks()
 
 	# 41) 저장/불러오기 (2026-09-30 사용자 선택 C 디아2식): 저장 → 장면을 버리고 → 새 장면에 불러오면 모든 상태가 같다
 	await _save_load_checks()
@@ -4386,6 +4388,112 @@ func _farm_level_checks() -> void:
 	_check(panel.learn_cursor() and FarmSkills.rank(&"compost_hand") == 1, "T 창 농사 쪽에서 찍기")
 	panel.set_page(&"hunt")
 	_check(not panel.farm_page() and panel.skill_at(Vector2i(0, 0)).id == &"whirl", "탭으로 사냥 쪽")
+	m.close_skills()
+	m.queue_free()
+	await get_tree().process_frame
+
+
+## 55) 대장장이 레벨 · 단계 장비 · 대장 기술 (2026-10-03 백로그 10)
+func _smith_level_checks() -> void:
+	var m: Node2D = load("res://scenes/main.tscn").instantiate()
+	add_child(m)
+	await get_tree().process_frame
+	GameState.reset()
+	GameState.forge_state = 2
+	m.show_forge_restored()
+	_check(SmithSkills.top_tier() == 0 and not (&"tier" in m.craft_options()), "대장 Lv 1: 1단계만, 단계 고르기 줄 없음")
+	# 1단계 제작 = 예전 그대로 + 경험치
+	GameState.scrap = 100
+	GameState.money = 10000
+	var id1: StringName = m.craft(&"hard_hat")
+	var c1: Array = Config.CRAFT_COSTS[&"hard_hat"]
+	_check(id1 != &"" and GameState.scrap == 100 - c1[0] and GameState.money == 10000 - c1[1], "1단계 안전모: 고철 %d · %d원 (예전 값)" % [c1[0], c1[1]])
+	var xp_total := GameState.smith_xp
+	for lv in range(1, GameState.smith_level):
+		xp_total += SmithSkills.xp_to_next(lv)
+	_check(xp_total == Config.SMITH_XP_CRAFT[0], "만들면 대장 경험치 %d" % Config.SMITH_XP_CRAFT[0])
+	_check(Wearables.bonus_hp(&"hunter") == 0 and Wearables.item(id1).get("tier", -1) == 0, "1단계는 바탕 힘 없음")
+	# 레벨업 → 단계가 열림
+	SmithSkills.gain(9999)
+	_check(GameState.smith_level >= Config.SMITH_TIERS[1].req and GameState.smith_points == GameState.smith_level - 1, "경험치가 차면 대장 레벨업 + 포인트 (Lv %d)" % GameState.smith_level)
+	GameState.smith_level = Config.SMITH_TIERS[1].req
+	GameState.smith_xp = 0
+	_check(SmithSkills.top_tier() == 1 and &"tier" in m.craft_options(), "대장 Lv %d: 2단계 열림, 단계 고르기 줄" % Config.SMITH_TIERS[1].req)
+	# 2단계: 대장 재료가 모자라면 못 만듦
+	GameState.material = 0
+	_check(m.craft(&"hard_hat", 1) == &"", "사금 덩이가 모자라면 2단계를 못 만듦")
+	GameState.material = 10
+	var scrap0 := GameState.scrap
+	var id2: StringName = m.craft(&"hard_hat", 1)
+	var t2: Dictionary = Config.SMITH_TIERS[1]
+	_check(id2 != &"" and GameState.material == 10 - t2.mat_count and GameState.scrap == scrap0 - c1[0] - t2.scrap, "2단계 안전모: 사금 덩이 %d · 고철 %d" % [t2.mat_count, c1[0] + t2.scrap])
+	var it2 := Wearables.item(id2)
+	_check(String(it2.name).begins_with(t2.name) and it2.get("hp_add", 0) == t2.hp * Config.HP_PER_HEART, "이름 앞에 %s, 바탕 체력 +%d (%s)" % [t2.name, t2.hp * Config.HP_PER_HEART, it2.effect])
+	GameState.worn[&"hunter"][&"hat"] = id2
+	_check(Wearables.bonus_hp(&"hunter") == t2.hp * Config.HP_PER_HEART, "입으면 사냥터 체력 +")
+	# 모자란 재료는 뒤 막 재료로 대신 (연 시설 것만)
+	var keep_mat := GameState.material
+	GameState.material = 0
+	GameState.material2 = 5
+	_check(m.craft(&"hard_hat", 1) == &"" and GameState.material2 == 5, "약방을 열기 전엔 장승 조각을 대장간에서 안 씀")
+	GameState.yak_state = 2
+	_check(m.craft(&"hard_hat", 1) != &"" and GameState.material2 == 5 - t2.mat_count, "사금 덩이가 없으면 뒤 막 재료 (장승 조각) 로 대신")
+	GameState.yak_state = 0
+	GameState.material = keep_mat
+	# 무기 바탕 피해
+	var w2: StringName = m.craft(&"steel_sword", 1)
+	GameState.worn[&"hunter"][&"weapon"] = w2
+	var dmg_with := HunterClass.hunter_damage(10, &"melee")
+	GameState.worn[&"hunter"].erase(&"weapon")
+	_check(is_equal_approx(Wearables.item(w2).dmg, t2.dmg) and dmg_with > HunterClass.hunter_damage(10, &"melee"), "2단계 강철 검: 바탕 피해 +%d%%" % roundi(t2.dmg * 100))
+	# 밭 옷: 바탕 걷기
+	var f2: StringName = m.craft(&"work_boots", 1)
+	_check(Wearables.item(f2).speed > 1.0 and Wearables.item(f2).effect.contains("바탕 걷기"), "2단계 작업 장화: 바탕 걷기 + (%s)" % Wearables.item(f2).effect)
+	# 단계 옵션 값이 커짐 (같은 씨앗, 단계 1 vs 6)
+	var rng_a := RandomNumberGenerator.new()
+	var rng_b := RandomNumberGenerator.new()
+	var sum_a := 0
+	var sum_b := 0
+	for i in 200:
+		rng_a.seed = i
+		rng_b.seed = i
+		for a: Dictionary in Wearables.roll_crafted(rng_a, &"hiking_vest", 0).affixes:
+			sum_a += a.value
+		for a: Dictionary in Wearables.roll_crafted(rng_b, &"hiking_vest", 5).affixes:
+			sum_b += a.value
+	_check(sum_b > sum_a * 1.5, "높은 단계는 옵션 값 · 수가 큼 (%d → %d)" % [sum_a, sum_b])
+	# 모루 창: 단계 줄에서 F → 단계 바꾸기
+	GameState.smith_level = Config.SMITH_TIERS[2].req
+	m._forge_interact()
+	_check(m.menu_open and m.menu_kind == &"craft" and m.craft_tier == 2, "모루 창은 가장 높은 단계로 열림")
+	m.menu_index = 0
+	m.menu_confirm()
+	_check(m.craft_tier == 0 and m.forge_option_text(&"hard_hat") == "안전모 (사냥 옷 모자)   고철 %d · %d원" % [c1[0], c1[1]], "단계 줄 F → 1단계로 돌아감")
+	m.menu_confirm()
+	_check(m.craft_tier == 1 and m.forge_option_text(&"hard_hat").contains(SmithSkills.material_name("material")), "다시 F → 2단계, 재료가 보임")
+	m.close_menu()
+	# 갈기 경험치
+	var xp0 := GameState.smith_xp
+	GameState.bag[&"hunter"].append(id1)
+	Wearables.salvage(&"hunter", GameState.bag[&"hunter"].find(id1))
+	_check(GameState.smith_xp == xp0 + Config.SMITH_XP_SALVAGE[&"crafted"], "장비를 갈면 대장 경험치")
+	# 대장 기술
+	GameState.smith_points = 10
+	_check(SmithSkills.why_not(&"extra_hit").contains("먼저") and SmithSkills.learn(&"good_steel") and SmithSkills.why_not(&"extra_hit") == "", "대장 기술: 위 기술을 찍어야 다음")
+	_check(SmithSkills.learn(&"save_scrap") and SmithSkills.learn(&"save_scrap") and SmithSkills.cost(&"crossbow", 1).scrap == ceili((Config.CRAFT_COSTS[&"crossbow"][0] + t2.scrap) * 0.8), "고철 아끼기 2단계: 고철 -20%")
+	_check(is_equal_approx(SmithSkills.affix_mult(1), t2.affix * 1.1), "좋은 쇠: 옵션 값 +10%")
+	_check(SmithSkills.learn(&"dig") and SmithSkills.dig_mult() > 1.0, "고물 캐기: 일꾼이 캐는 고철 +")
+	# 시설을 연 뒤에도 그 막 몹이 대장 재료를 떨굼 (반 확률)
+	GameState.material = 0
+	_check(SiteWork.mob_drop(0, 0.0) != "" and GameState.material == 1, "대장간을 연 뒤에도 금사리 쪽 몹이 사금 덩이를 떨굼")
+	_check(SiteWork.mob_drop(0, Config.SITE_TASKS[&"forge"].drop * 0.9) == "", "그 확률은 예전의 반")
+	# T 창 대장 탭
+	m.open_skills()
+	var panel: SkillPanel = m.skill_panel
+	_check(&"smith" in SkillPanel.pages(), "대장간을 고치면 T 창에 대장 탭")
+	panel.set_page(&"smith")
+	panel.cursor = Vector2i(1, 1)
+	_check(panel.learn_cursor() and SmithSkills.rank(&"salvage_hand") == 1, "T 창 대장 쪽에서 찍기")
 	m.close_skills()
 	m.queue_free()
 	await get_tree().process_frame

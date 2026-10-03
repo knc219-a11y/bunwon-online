@@ -61,12 +61,12 @@ static func weapon_mult(kind: StringName) -> float:
 
 ## 사냥꾼 한 대 피해 (units = 옛 피해 1 · 2 ...)
 static func hunter_damage(units: int, kind: StringName) -> int:
-	return maxi(1, roundi(units * Config.DMG_UNIT * weapon_mult(kind)))
+	return maxi(1, roundi(units * Config.DMG_UNIT * weapon_mult(kind) * (1.0 + Wearables.weapon().get("dmg", 0.0))))
 
 
 ## 동행 크리처 한 대 피해
 static func companion_damage(units: int) -> int:
-	return maxi(1, roundi(units * Config.DMG_UNIT * Config.COMPANION_BASE * (1.0 + Config.BOND_DMG * stat(&"bond"))))
+	return maxi(1, roundi(units * Config.DMG_UNIT * Config.COMPANION_BASE * (1.0 + Config.BOND_DMG * stat(&"bond")) * SmithSkills.collar_mult()))
 
 
 static func companion_speed() -> float:

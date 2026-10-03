@@ -165,6 +165,11 @@ var farm_level := 1
 var farm_xp := 0
 var farm_points := 0
 var farm_skills := {}
+## 대장장이 레벨 · 기술 (2026-10-03 백로그 10, SmithSkills). 대장장이 (마을 사람) 솜씨, 포인트는 주인공이 T 창 "대장" 탭에서 찍는다.
+var smith_level := 1
+var smith_xp := 0
+var smith_points := 0
+var smith_skills := {}
 
 
 func _ready() -> void:
@@ -306,6 +311,10 @@ func reset() -> void:
 	farm_xp = 0
 	farm_points = 0
 	farm_skills = {}
+	smith_level = 1
+	smith_xp = 0
+	smith_points = 0
+	smith_skills = {}
 	changed.emit()
 
 

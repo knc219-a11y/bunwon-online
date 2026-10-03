@@ -105,6 +105,8 @@ var _morning_text: Label
 var menu_open := false
 ## 열려 있는 선택창 종류: &"supply" 마을 공급함, &"companion" 사냥터 입구 동행 고르기
 var menu_kind := &"supply"
+## 대장간 모루 창에서 고른 단계 (0 기준, 2026-10-03 대장장이 레벨)
+var craft_tier := 0
 var menu_index := 0
 var _menu_options: Array[StringName] = []
 var _menu: ColorRect
@@ -1069,6 +1071,9 @@ func menu_confirm() -> void:
 		elif id == &"salvage":
 			open_inventory(false, false, true)
 			return
+		elif id == &"tier":
+			# 단계 바꾸기 (2026-10-03 대장장이 레벨): 열린 단계를 차례로
+			craft_tier = (craft_tier + 1) % (SmithSkills.top_tier() + 1)
 		else:
 			craft(id)
 		_rebuild_menu()
@@ -1358,7 +1363,10 @@ func forge_options() -> Array[StringName]:
 
 
 func craft_options() -> Array[StringName]:
-	var out: Array[StringName] = Wearables.craft_bases()
+	var out: Array[StringName] = []
+	if SmithSkills.top_tier() > 0:
+		out.append(&"tier")
+	out.append_array(Wearables.craft_bases())
 	if Wearables.rolled_in_bag(&"hunter") > 0 or Wearables.rolled_in_bag(&"farmer") > 0:
 		out.append(&"salvage")
 	out.append(&"close")
@@ -1373,12 +1381,27 @@ func forge_option_text(id: StringName) -> String:
 			return "닫기"
 		&"salvage":
 			var g: Dictionary = Config.SALVAGE_SCRAP
-			return "가방에서 장비 갈기 ▶ (고철: 일반 %d · 마법 %d · 레어 %d · 제작 %d · 세트 %d)" % [g[&"normal"], g[&"magic"], g[&"rare"], g[&"crafted"], g[&"set"]]
+			return "가방에서 장비 갈기 ▶ (고철: 일반 %d · 마법 %d · 레어 %d · 제작 1+단계 · 세트 %d)" % [g[&"normal"], g[&"magic"], g[&"rare"], g[&"set"]]
+		&"tier":
+			var td: Dictionary = Config.SMITH_TIERS[craft_tier]
+			return "단계: %d단계 %s (F 로 바꾸기 · 대장 Lv %d 은 %d단계까지)" % [craft_tier + 1, td.name if td.name != "" else "쇠", GameState.smith_level, SmithSkills.top_tier() + 1]
 	var it: Dictionary = Wearables.ITEMS[id]
-	var cost: Array = Config.CRAFT_COSTS[id]
+	var tier_name: String = Config.SMITH_TIERS[craft_tier].name
+	var name: String = it.name if tier_name == "" else "%s %s" % [tier_name, it.name]
+	var cost_text := craft_cost_text(id, craft_tier)
 	if it.slot == &"weapon":
-		return "%s (무기 · %s)   고철 %d · %d원" % [it.name, Wearables.WEAPON_KIND_NAMES[it.weapon.kind], cost[0], cost[1]]
-	return "%s (%s %s)   고철 %d · %d원" % [it.name, Wearables.OUTFIT_NAMES[it.who], Wearables.SLOT_NAMES[it.slot], cost[0], cost[1]]
+		return "%s (무기 · %s)   %s" % [name, Wearables.WEAPON_KIND_NAMES[it.weapon.kind], cost_text]
+	return "%s (%s %s)   %s" % [name, Wearables.OUTFIT_NAMES[it.who], Wearables.SLOT_NAMES[it.slot], cost_text]
+
+
+## 제작에 드는 것 글 ("고철 8 · 사금 덩이 2 · 500원")
+func craft_cost_text(base: StringName, tier: int) -> String:
+	var c := SmithSkills.cost(base, tier)
+	var parts: Array[String] = ["고철 %d" % c.scrap]
+	if c.material != "":
+		parts.append("%s %d" % [SmithSkills.material_name(c.material), c.mat_count])
+	parts.append("%d원" % c.money)
+	return " · ".join(parts)
 
 
 ## 대장간 터 · 대장간 · 대장장이에게 F. 터면 복구 창, 고친 대장간이면 대장장이 제작 창.
@@ -1386,6 +1409,7 @@ func _forge_interact() -> void:
 	if GameState.forge_state == 1:
 		open_menu(&"forge")
 	else:
+		craft_tier = SmithSkills.top_tier()
 		open_menu(&"craft")
 
 
@@ -1453,28 +1477,42 @@ func scrap_diggers() -> Array[Creature]:
 	return FacilityWorkers.workers(self, &"forge")
 
 
-## 대장장이가 모루에서 base 장비를 하나 만든다. 만든 장비 id (못 만들면 &"").
-func craft(base: StringName) -> StringName:
+## 대장장이가 모루에서 base 장비를 tier 단계 (0 기준, -1 = 모루 창에서 고른 단계) 로 하나 만든다. 만든 장비 id (못 만들면 &"").
+## 2026-10-03 대장장이 레벨 (백로그 10): 2단계부터 대장 재료가 들고, 만들 때마다 대장 경험치.
+func craft(base: StringName, tier := -1) -> StringName:
 	if not Config.CRAFT_COSTS.has(base):
 		return &""
-	var cost: Array = Config.CRAFT_COSTS[base]
+	if tier < 0:
+		tier = craft_tier
+	tier = clampi(tier, 0, SmithSkills.top_tier())
+	var cost := SmithSkills.cost(base, tier)
 	var it: Dictionary = Wearables.ITEMS[base]
-	if GameState.scrap < cost[0] or GameState.money < cost[1]:
-		GameState.notify("모자라다. %s: 고철 %d · %d원 (가진 고철 %d · 돈 %d원)." % [it.name, cost[0], cost[1], GameState.scrap, GameState.money])
+	var mat_have := SmithSkills.mat_have(cost.material)
+	if GameState.scrap < cost.scrap or GameState.money < cost.money or mat_have < cost.mat_count:
+		var have := "가진 고철 %d · 돈 %d원" % [GameState.scrap, GameState.money]
+		if cost.material != "":
+			have += " · %s (뒤 막 재료 포함) %d" % [SmithSkills.material_name(cost.material), mat_have]
+		GameState.notify("모자라다. %s: %s (%s)." % [it.name, craft_cost_text(base, tier), have])
 		return &""
-	var roll := Wearables.roll_crafted(_rng, base)
+	var roll := Wearables.roll_crafted(_rng, base, tier)
 	var before := GameState.gear_serial
 	var where := Wearables.gain_rolled(roll)
 	if where == &"":
 		GameState.notify("%s 가방과 창고가 모두 가득 차서 만들 수 없다." % Wearables.OUTFIT_NAMES[it.who])
 		return &""
-	GameState.scrap -= cost[0]
-	GameState.money -= cost[1]
+	GameState.scrap -= cost.scrap
+	GameState.money -= cost.money
+	var saved := false
+	if cost.material != "":
+		# 대장 기술 재료 아끼기: 하나 덜 쓰기도 한다
+		saved = _rng.randf() < SmithSkills.save_mat_chance()
+		SmithSkills.spend_mat(cost.material, cost.mat_count - (1 if saved else 0))
+	SmithSkills.gain(Config.SMITH_XP_CRAFT[tier])
 	var id := StringName("gear_%d" % GameState.gear_serial)
 	assert(GameState.gear_serial == before + 1)
 	player.refresh_wear()
 	var place: String = {&"worn": "바로 갖췄다", &"bag": "가방에 넣었다", &"stash": "창고로 보냈다"}[where]
-	GameState.notify("대장장이가 %s을(를) 만들어 줬다! %s · %s (%s)" % [roll.name, Wearables.affix_text(roll.affixes), Wearables.OUTFIT_NAMES[it.who], place])
+	GameState.notify("대장장이가 %s을(를) 만들어 줬다! %s · %s (%s)%s" % [roll.name, Wearables.item(id).effect, Wearables.OUTFIT_NAMES[it.who], place, " 재료 하나를 아꼈다." if saved else ""])
 	return id
 
 
@@ -2489,7 +2527,13 @@ func _rebuild_menu() -> void:
 		lines.append("힘 · 빠르기 물약은 다음 사냥에 들어갈 때 하나씩 마신다")
 		lines.append("약방 %s: 도라지밭 가꾸기 · 아침마다 정해 둔 약 달이기" % FacilityWorkers.count_text(self, &"yak"))
 	elif menu_kind == &"craft":
-		lines.append("만들 때마다 옵션 1~3개가 무작위로 붙는다 (디아블로2 제작처럼)")
+		lines.append("대장장이 Lv %d (경험치 %d/%d) · 만들 때마다 옵션이 무작위로 붙는다 · 단계가 높을수록 바탕 힘 · 옵션이 크다" % [GameState.smith_level, GameState.smith_xp, SmithSkills.xp_to_next(GameState.smith_level)])
+		var mats: Array[String] = []
+		for t in range(1, SmithSkills.top_tier() + 1):
+			var key: String = Config.SMITH_TIERS[t].material
+			mats.append("%s %d" % [SmithSkills.material_name(key), int(GameState.get(key))])
+		if not mats.is_empty():
+			lines.append("대장 재료: " + " · ".join(mats) + " (모자라면 뒤 막 재료로 대신)")
 		var dig := 0
 		for c in scrap_diggers():
 			dig += c.dig_cap()
