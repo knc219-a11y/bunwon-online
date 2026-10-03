@@ -294,6 +294,13 @@ func _process(delta: float) -> void:
 		follow_camera()
 		update_fading()
 		Creature.focus = player.position
+		# 넓은 도구 (도구 손보기 · 큰 물뿌리개 · 큰 괭이) 가 함께 닿는 칸
+		var reach: Array[Vector2i] = tool_cells(TOOLS[tool_index]).filter(func(c: Vector2i) -> bool: return farm.get_cell(c) != null)
+		if reach.size() <= 1:
+			reach = []
+		if reach != player.reach_cells:
+			player.reach_cells = reach
+			player.queue_redraw()
 		var near := nearby_villager()
 		for c in people():
 			c.show_tag = c == near

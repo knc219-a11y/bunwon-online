@@ -45,6 +45,8 @@ var terrain: HuntMap
 var slow_mult := 1.0
 ## 바라보는 칸 표시 (농사용). 사냥터에서는 끈다.
 var show_facing_cell := true
+## 넓은 도구가 함께 닿는 칸 (바라보는 칸 말고, main 이 매 프레임 넣음). 옅은 점으로 보인다 (2026-10-03 큰 물뿌리개 · 큰 괭이)
+var reach_cells: Array[Vector2i] = []
 ## 선택창이 열려 있는 동안처럼 조작 중이지만 걷지 않을 때 true
 var frozen := false
 ## 사냥터 구르기 중 (HuntGround 가 대신 움직인다, 걷기 입력은 안 받음)
@@ -186,5 +188,9 @@ func _draw() -> void:
 			var sx := 1.0 if corner.x == r.position.x else -1.0
 			var sy := 1.0 if corner.y == r.position.y else -1.0
 			draw_polyline(PackedVector2Array([corner + Vector2(0, sy * 5), corner, corner + Vector2(sx * 5, 0)]), Color(1, 1, 1, 0.85), 2.0)
+		for c in reach_cells:
+			if c != facing_cell():
+				var p := Farm.center_of(c) - position
+				draw_rect(Rect2(p - Vector2(9, 9), Vector2(18, 18)), Color(1, 1, 1, 0.35), false, 1.0)
 	if active or (npc and show_tag):
 		UiSkin.draw_tag(self, Vector2(-30, -42), display_name, 60)

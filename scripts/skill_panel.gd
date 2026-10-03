@@ -206,8 +206,8 @@ func _draw() -> void:
 	if farm_page():
 		_draw_farm(font)
 		return
-	draw_string(font, Vector2(tab_rect(1).end.x + 6, 14), "%s 스킬 · 스탯 (T 닫기 · 클릭/F 찍기 · Tab 농사)" % HunterClass.class_name_of(GameState.hunter_class), HORIZONTAL_ALIGNMENT_LEFT, -1, 10, INK)
-	var right := "Lv %d · 스킬 포인트 %d · 스탯 포인트 %d" % [GameState.hunter_level, GameState.skill_points, GameState.stat_points]
+	draw_string(font, Vector2(tab_rect(1).end.x + 6, 14), "%s (Tab 농사)" % HunterClass.class_name_of(GameState.hunter_class), HORIZONTAL_ALIGNMENT_LEFT, -1, 10, INK)
+	var right := "Lv %d · 스킬 포인트 %d · 스탯 %d" % [GameState.hunter_level, GameState.skill_points, GameState.stat_points]
 	draw_string(font, Vector2(size.x - 8 - font.get_string_size(right, HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x, 14), right, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, GOLD.darkened(0.25) if GameState.skill_points > 0 or GameState.stat_points > 0 else SUB)
 	var weapon_kind: StringName = Wearables.weapon().kind
 	for ti in HunterSkills.TREES.size():
@@ -292,7 +292,7 @@ func _draw_tabs(font: Font) -> void:
 
 ## 농사 쪽: 세 갈래 트리 (Lv 1 · 4 · 8 · 12) + 아래 경험치 막대 · 고른 기술 설명
 func _draw_farm(font: Font) -> void:
-	draw_string(font, Vector2(tab_rect(1).end.x + 6, 14), "농사 기술 (T 닫기 · 클릭/F 찍기 · Tab 사냥)", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, INK)
+	draw_string(font, Vector2(tab_rect(1).end.x + 6, 14), "농사 기술 (Tab 사냥)", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, INK)
 	var right := "농사 Lv %d · 농사 포인트 %d" % [GameState.farm_level, GameState.farm_points]
 	draw_string(font, Vector2(size.x - 8 - font.get_string_size(right, HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x, 14), right, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, GOLD.darkened(0.25) if GameState.farm_points > 0 else SUB)
 	for ti in FarmSkills.TREES.size():
@@ -321,8 +321,8 @@ func _draw_farm(font: Font) -> void:
 	var bar := Rect2(Vector2(_x0() + 6, bar_y), Vector2(COL_W * FarmSkills.TREES.size() - 12, 8))
 	draw_rect(bar, EDGE)
 	draw_rect(Rect2(bar.position + Vector2.ONE, Vector2((bar.size.x - 2) * FarmSkills.progress(), bar.size.y - 2)), Color(0.5, 0.72, 0.35))
-	var xp_text := "최대 레벨" if GameState.farm_level >= Config.FARM_LEVEL_CAP else "다음 레벨까지 %d / %d" % [GameState.farm_xp, FarmSkills.xp_to_next(GameState.farm_level)]
-	draw_string(font, Vector2(bar.position.x, bar.end.y + 11), "손일 경험치: %s · 갈기 · 심기 · 물 · 들나물 1, 퇴비 2, 음식 3, 거두기 ★마다 2/3/5" % xp_text, HORIZONTAL_ALIGNMENT_LEFT, size.x - bar.position.x - 8, 9, SUB)
+	var xp_text := "최대 레벨" if GameState.farm_level >= Config.FARM_LEVEL_CAP else "%d / %d" % [GameState.farm_xp, FarmSkills.xp_to_next(GameState.farm_level)]
+	draw_string(font, Vector2(12, bar.end.y + 11), "손일 경험치 %s · 갈기 · 심기 · 물 · 나물 1 · 퇴비 2 · 음식 3 · 거두기 2/3/5" % xp_text, HORIZONTAL_ALIGNMENT_CENTER, size.x - 24, 9, SUB)
 	var cs := skill_at(cursor)
 	if cs.is_empty():
 		return
