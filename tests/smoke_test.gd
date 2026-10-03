@@ -2327,8 +2327,8 @@ func _ready() -> void:
 	_check(not main.brew(&"lamp_oil") and GameState.lamp_oil == 0, "도라지가 없으면 호롱 기름 못 만듦")
 	GameState.roots = 4
 	_check(main.brew(&"lamp_oil") and GameState.lamp_oil == 1 and GameState.roots == 2 and GameState.junk == 2, "호롱 기름 (도라지 2)")
-	GameState.crops = 5
-	_check(main.brew(&"tonic") and GameState.tonics == 1 and GameState.crops == 0 and GameState.roots == 0, "크리처 보약 (무 5 · 도라지 2)")
+	GameState.crops = 3
+	_check(main.brew(&"tonic") and GameState.tonics == 1 and GameState.crops == 0 and GameState.roots == 0, "크리처 보약 (무 3 · 도라지 2)")
 	b_c._reset_timer()
 	var y_t1 := b_c._timer
 	_check(main.brew_options().has(&"feed_tonic") and main.feed_tonic() and not main.feed_tonic() and GameState.tonics == 0, "보약 먹이기 (하루 한 번)")
