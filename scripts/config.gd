@@ -995,7 +995,7 @@ const BREWS := {
 	&"lamp_oil": {name = "호롱 기름", count = 1, cost = {roots = 2}, effect = "밤 구역 호롱 불빛이 넓어짐 (들어갈 때 하나)"},
 	&"strength": {name = "힘 물약", count = 1, cost = {roots = 3, junk = 1}, effect = "다음 사냥 한 번 공격 피해 +1"},
 	&"speed": {name = "빠르기 물약", count = 1, cost = {herbs = 2, junk = 1}, effect = "다음 사냥 한 번 걸음 +25%"},
-	&"tonic": {name = "크리처 보약", count = 1, cost = {crops = 5, roots = 2}, effect = "먹인 날 모든 크리처 일 속도 x2"},
+	&"tonic": {name = "크리처 보약", count = 1, cost = {crops = 3, roots = 2}, effect = "먹인 날 모든 크리처 일 속도 x2"},
 }
 const SPEED_POTION_MULT := 1.25
 const TONIC_SPEED_MULT := 2.0
@@ -1224,7 +1224,7 @@ const CROP_MATCH_CHANCE := 0.3
 const CROP_ELEMENTS := {&"radish": &"spirit", &"potato": &"earth", &"pepper": &"fire", &"cabbage": &"water"}
 ## 등급별 판매값 (★1 값의 %, ★1 · ★2 · ★3). 크리처가 돌보는 밭은 거의 ★2 라 웃돈은 작게 (돈 흐름이 크게 바뀌지 않게)
 const STAR_PRICE_PCT: Array[int] = [100, 130, 200]
-## 퇴비: 공급함 "밭 작물 · 씨앗 · 음식" 에서 들나물 또는 사냥 잡템 COMPOST_COST 개 → 1. 축사가 열리면 아침마다 암탉 COMPOST_PER_HENS 마리당 1.
+## 퇴비: 공급함 "밭 작물 · 씨앗 · 음식" 에서 들나물 (손에 든 것 → 진열해 둔 것) 또는 사냥 잡템 COMPOST_COST 개 → 1. 축사가 열리면 아침마다 암탉 COMPOST_PER_HENS 마리당 1.
 ## 씨앗 주머니(심기 도구)를 이미 심은 칸에 쓰면 퇴비를 한 줌 준다. 크리처는 퇴비를 쓰지 않는다 (주인공 손일의 몫).
 const COMPOST_COST := 3
 const COMPOST_PER_HENS := 2

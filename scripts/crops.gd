@@ -177,7 +177,7 @@ static func option_text(id: StringName) -> String:
 		var d := info(k)
 		return "%s 씨앗 %d개 사기 (%d원, 가진 씨앗 %d) · %s" % [d.name, d.pack, d.pack_price, seeds(k), d.note]
 	if id == &"compost":
-		return "퇴비 만들기 (들나물 또는 잡템 %d → 1, 가진 퇴비 %d) · 심은 칸에 씨앗 주머니로 주면 ★ +1" % [Config.COMPOST_COST, GameState.compost]
+		return "퇴비 만들기 (들나물 · 진열한 들나물 · 잡템 %d → 1, 가진 퇴비 %d) · 심은 칸에 씨앗 주머니로 주면 ★ +1" % [Config.COMPOST_COST, GameState.compost]
 	if s.begins_with("food_"):
 		var f := StringName(s.trim_prefix("food_"))
 		var fd: Dictionary = Config.FOODS[f]
@@ -307,16 +307,16 @@ static func harvest_grade(c: Farm.Cell, roll: float) -> int:
 
 # --- 퇴비 · 사냥 음식 ----------------------------------------------------------
 
-## 퇴비 하나 만들기: 들나물이 있으면 들나물, 없으면 잡템
+## 퇴비 하나 만들기: 손에 든 들나물 → 공급함에 진열한 들나물 (채집 크리처가 캔 것) → 사냥 잡템 순으로 COMPOST_COST 개
 static func make_compost() -> bool:
-	for key: String in ["herbs", "junk"]:
+	for key: String in ["herbs", "displayed_herbs", "junk"]:
 		if int(GameState.get(key)) >= Config.COMPOST_COST:
 			GameState.set(key, int(GameState.get(key)) - Config.COMPOST_COST)
 			GameState.compost += 1
 			GameState.notify("%s %d개로 퇴비를 만들었다 (퇴비 %d). 씨앗 주머니를 이미 심은 칸에 쓰면 한 줌씩 준다 (★ +1)." % [
-				"들나물" if key == "herbs" else "잡템", Config.COMPOST_COST, GameState.compost])
+				{"herbs": "들나물", "displayed_herbs": "진열해 둔 들나물", "junk": "잡템"}[key], Config.COMPOST_COST, GameState.compost])
 			return true
-	GameState.notify("모자라다. 퇴비: 들나물 또는 잡템 %d개 (든 나물 %d · 잡템 %d)." % [Config.COMPOST_COST, GameState.herbs, GameState.junk])
+	GameState.notify("모자라다. 퇴비: 들나물 또는 잡템 %d개 (든 나물 %d · 진열한 나물 %d · 잡템 %d)." % [Config.COMPOST_COST, GameState.herbs, GameState.displayed_herbs, GameState.junk])
 	return false
 
 

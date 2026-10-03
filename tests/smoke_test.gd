@@ -4225,6 +4225,10 @@ func _grade_checks() -> void:
 	# 퇴비: 들나물 3 → 1, 심은 칸에 주면 ★3
 	GameState.herbs = Config.COMPOST_COST
 	_check(Crops.act(&"compost") and GameState.compost == 1 and GameState.herbs == 0, "들나물로 퇴비 만들기")
+	GameState.displayed_herbs = Config.COMPOST_COST
+	GameState.junk = 0
+	_check(Crops.make_compost() and GameState.displayed_herbs == 0 and GameState.compost == 2, "진열해 둔 들나물로도 퇴비")
+	GameState.compost = 1
 	_check(not Crops.make_compost(), "재료가 없으면 퇴비를 못 만듦")
 	_check(not farm.fertilize(cell), "안 심은 칸엔 퇴비를 못 줌")
 	farm.do_work(Farm.Work.SOW, cell)
