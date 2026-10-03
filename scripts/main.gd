@@ -460,8 +460,9 @@ func use_tool() -> void:
 			Farm.Work.HARVEST:
 				Sound.sfx(&"harvest")
 	if done == 0:
-		if work == Farm.Work.SOW and GameState.seeds <= 0:
-			GameState.notify("씨앗이 없다.")
+		var kind := Crops.kind_at(farmer.facing_cell())
+		if work == Farm.Work.SOW and Crops.seeds(kind) <= 0:
+			GameState.notify("%s 씨앗이 없다. (이 구역 작물은 공급함 \"밭 작물 · 씨앗\" 에서 바꾼다)" % Crops.display_name(kind))
 		else:
 			GameState.notify("여기서는 %s을(를) 쓸 수 없다." % tool_name(work))
 
@@ -822,7 +823,7 @@ func supply_options() -> Array[StringName]:
 		options.append(&"sell_normal")
 	if Wearables.rolled_in_bag(&"hunter") > 0 or Wearables.rolled_in_bag(&"farmer") > 0:
 		options.append(&"sell_gear")
-	if GameState.crops > 0:
+	if Crops.held_total() > 0:
 		options.append(&"display_crops")
 	if GameState.herbs > 0:
 		options.append(&"display_herbs")
@@ -831,6 +832,8 @@ func supply_options() -> Array[StringName]:
 	if GameState.fish > 0:
 		options.append(&"display_fish")
 	options.append(&"buy_seeds")
+	if not GameState.crop_unlocked.is_empty():
+		options.append(&"crops")
 	if not creatures.is_empty():
 		options.append(&"train")
 	if Expedition.any_villager() and not Expedition.idle(self).is_empty():
@@ -854,7 +857,7 @@ func supply_option_text(id: StringName) -> String:
 		&"take_eggs":
 			return "알 받기 (%d개)" % GameState.village_eggs.size()
 		&"display_crops":
-			return "무 진열하기 (%d개, 밤사이 %d원)" % [GameState.crops, GameState.crops * Config.CROP_PRICE]
+			return "작물 진열하기 (%s, 밤사이 %d원)" % [Crops.held_text(), Crops.held_value()]
 		&"display_herbs":
 			return "들나물 진열하기 (%d포기, 밤사이 %d원)" % [GameState.herbs, GameState.herbs * Config.HERB_PRICE]
 		&"display_fish":
@@ -862,7 +865,9 @@ func supply_option_text(id: StringName) -> String:
 		&"display_hen_eggs":
 			return "달걀 진열하기 (%d개, 밤사이 %d원)" % [GameState.hen_eggs, GameState.hen_eggs * Config.HEN_EGG_PRICE]
 		&"buy_seeds":
-			return "씨앗 %d개 사기 (%d원)" % [Config.SEED_PACK_SIZE, Config.SEED_PACK_PRICE]
+			return "무 씨앗 %d개 사기 (%d원)" % [Config.SEED_PACK_SIZE, Config.SEED_PACK_PRICE]
+		&"crops":
+			return "밭 작물 · 씨앗 (구역마다 심을 작물) ▶"
 		&"train":
 			return "크리처 훈련 (%d마리) ▶" % creatures.size()
 		&"adopt":
@@ -1065,6 +1070,19 @@ func menu_confirm() -> void:
 		menu_index = 0
 		_rebuild_menu()
 		return
+	if menu_kind == &"crops":
+		if id == &"back":
+			menu_kind = &"supply"
+			menu_index = 0
+		elif Crops.act(id):
+			Sound.sfx(&"coin", 0.0, 1.0, 0.0)
+		_rebuild_menu()
+		return
+	if id == &"crops":
+		menu_kind = &"crops"
+		menu_index = 0
+		_rebuild_menu()
+		return
 	if menu_kind == &"train":
 		if id == &"back":
 			menu_kind = &"supply"
@@ -1102,13 +1120,12 @@ func supply_action(id: StringName) -> bool:
 			GameState.village_eggs.clear()
 			GameState.notify("마을 공급함에서 알을 받았다. 부화기에 넣어 보자.")
 		&"display_crops":
-			if GameState.crops <= 0:
-				GameState.notify("진열할 무가 없다.")
+			if Crops.held_total() <= 0:
+				GameState.notify("진열할 작물이 없다.")
 				return false
-			var n := GameState.crops
-			GameState.displayed_crops += n
-			GameState.crops = 0
-			GameState.notify("무 %d개를 공급함에 진열했다. 밤사이 마을 사람들이 사 가고 돈통에 값을 넣어 둔다." % n)
+			var what := Crops.held_text()
+			Crops.display_all()
+			GameState.notify("%s을(를) 공급함에 진열했다. 밤사이 마을 사람들이 사 가고 돈통에 값을 넣어 둔다." % what)
 		&"display_herbs":
 			if GameState.herbs <= 0:
 				GameState.notify("진열할 들나물이 없다.")
@@ -1139,7 +1156,7 @@ func supply_action(id: StringName) -> bool:
 				return false
 			GameState.money -= Config.SEED_PACK_PRICE
 			GameState.seeds += Config.SEED_PACK_SIZE
-			GameState.notify("씨앗 %d개를 샀다. -%d원" % [Config.SEED_PACK_SIZE, Config.SEED_PACK_PRICE])
+			GameState.notify("무 씨앗 %d개를 샀다. -%d원" % [Config.SEED_PACK_SIZE, Config.SEED_PACK_PRICE])
 		&"expand_field":
 			var i := Farm.next_plot()
 			if i < 0:
@@ -2020,7 +2037,7 @@ func dock_option_text(id: StringName) -> String:
 		&"ferry":
 			return "나룻배 타기 (%s, 오늘 사냥 한 번)" % Config.HUNT_ZONES[Config.ferry_zone()].name
 		&"stew":
-			return "매운탕 끓이기 (물고기 %d · 무 %d, 다음 사냥 체력 +%d · 경험치 +%d%%)" % [Config.STEW_FISH, Config.STEW_CROPS, Config.STEW_HP, roundi((Config.STEW_XP_MULT - 1.0) * 100)]
+			return "매운탕 끓이기 (물고기 %d · 고추 %d, 다음 사냥 체력 +%d · 경험치 +%d%%)" % [Config.STEW_FISH, Config.STEW_PEPPERS, Config.STEW_HP, roundi((Config.STEW_XP_MULT - 1.0) * 100)]
 	return "닫기"
 
 
@@ -2042,11 +2059,11 @@ func dock_action(id: StringName) -> bool:
 			GameState.notify("바구니에서 물고기 %d마리를 꺼냈다 (든 물고기 %d). 공급함에 진열하거나 뱃사공에게 매운탕을 부탁한다." % [GameState.basket, GameState.fish])
 			GameState.basket = 0
 		&"stew":
-			if GameState.fish < Config.STEW_FISH or GameState.crops < Config.STEW_CROPS:
-				GameState.notify("모자라다. 매운탕: 물고기 %d · 무 %d (든 물고기 %d · 무 %d)." % [Config.STEW_FISH, Config.STEW_CROPS, GameState.fish, GameState.crops])
+			if GameState.fish < Config.STEW_FISH or GameState.peppers < Config.STEW_PEPPERS:
+				GameState.notify("모자라다. 매운탕: 물고기 %d · 고추 %d (든 물고기 %d · 고추 %d)." % [Config.STEW_FISH, Config.STEW_PEPPERS, GameState.fish, GameState.peppers])
 				return false
 			GameState.fish -= Config.STEW_FISH
-			GameState.crops -= Config.STEW_CROPS
+			GameState.peppers -= Config.STEW_PEPPERS
 			GameState.stews += 1
 			GameState.notify("뱃사공이 매운탕을 끓여 줬다 (%d그릇). 다음 사냥에 들어갈 때 먹는다." % GameState.stews)
 		_:
@@ -2285,6 +2302,7 @@ func _rebuild_menu() -> void:
 	var companion := menu_kind == &"companion"
 	var waypoint := menu_kind == &"waypoint"
 	var training := menu_kind == &"train"
+	var cropping := menu_kind == &"crops"
 	var forging := menu_kind == &"forge" or menu_kind == &"craft"
 	var brewing := menu_kind == &"yak" or menu_kind == &"brew"
 	var starting := menu_kind == &"start"
@@ -2311,6 +2329,8 @@ func _rebuild_menu() -> void:
 		_menu_options = forge_options() if menu_kind == &"forge" else craft_options()
 	elif training:
 		_menu_options = train_options()
+	elif cropping:
+		_menu_options = Crops.options()
 	elif expedition:
 		_menu_options = expedition_options()
 	elif adopting:
@@ -2323,6 +2343,8 @@ func _rebuild_menu() -> void:
 	var head := "사냥터 입구 · 누구랑 갈까?" if companion else ("사냥터 입구 · 어디서 시작할까?" if waypoint else "마을 공급함   가진 돈 %d원" % GameState.money)
 	if training:
 		head = "크리처 훈련   가진 돈 %d원" % GameState.money
+	if cropping:
+		head = "밭 작물 · 씨앗   가진 돈 %d원" % GameState.money
 	if expedition:
 		head = "사냥터 입구 · 크리처 원정   쉬는 · 채집 %d마리 · 원정 중 %d마리" % [Expedition.idle(self).size(), Expedition.away_count(self)]
 	if adopting:
@@ -2373,6 +2395,8 @@ func _rebuild_menu() -> void:
 			text = TestStarts.option_text(o)
 		elif training:
 			text = train_option_text(o)
+		elif cropping:
+			text = Crops.option_text(o)
 		elif expedition:
 			text = expedition_option_text(o)
 		elif adopting:
@@ -2703,6 +2727,9 @@ func next_day() -> Array[String]:
 		sold += earned
 		lines.append("공급함의 무 %d개가 팔렸다. 돈통에 +%d원" % [GameState.displayed_crops, earned])
 		GameState.displayed_crops = 0
+	var money0 := GameState.money
+	lines.append_array(Crops.sell_displayed())
+	sold += GameState.money - money0
 	if GameState.displayed_herbs > 0:
 		var earned := GameState.displayed_herbs * Config.HERB_PRICE
 		GameState.money += earned
@@ -2755,6 +2782,7 @@ func next_day() -> Array[String]:
 				lines.append("%s 공사가 끝나 문을 열었다! %s이(가) 왔다." % [SiteWork.NAMES[fac], SiteWork.MASTERS[fac]])
 		else:
 			lines.append("%s 공사 %d/%d일%s" % [SiteWork.NAMES[fac], SiteWork.work(fac) / Config.BUILD_CAP, SiteWork.task(fac).days, " · 어제는 공사한 크리처가 없었다 (R 터 공사)" if built_yesterday == 0 else ""])
+	lines.append_array(Crops.morning_unlocks())
 	forage.sprout(_rng)
 	var herb_line := "밭 밖 풀밭에 들나물 %d포기가 돋았다." % forage.herbs.size()
 	if forage.bonus_today > 0:
@@ -2935,6 +2963,8 @@ func _refresh_props() -> void:
 		shelf.append("알 %d" % GameState.village_eggs.size())
 	if GameState.displayed_crops > 0:
 		shelf.append("무 %d 진열" % GameState.displayed_crops)
+	for k: StringName in GameState.displayed_harvest:
+		shelf.append("%s %d" % [Crops.display_name(k), GameState.displayed_harvest[k]])
 	if GameState.displayed_herbs > 0:
 		shelf.append("나물 %d" % GameState.displayed_herbs)
 	if GameState.displayed_roots > 0:
@@ -3072,7 +3102,7 @@ func _refresh_hud() -> void:
 		])
 		return
 	_status.text = "%d일째 %s | 도구: %s | 돈 %d원 | 씨앗 %d  작물 %d  나물 %d | 알: 든 것 %d · 공급함 %d | 크리처 %d" % [
-		GameState.day, GameState.clock_text(GameState.minutes), tool_text, GameState.money, GameState.seeds, GameState.crops, GameState.herbs,
+		GameState.day, GameState.clock_text(GameState.minutes), tool_text, GameState.money, GameState.seeds, Crops.held_total(), GameState.herbs,
 		GameState.farmer_eggs.size(), GameState.village_eggs.size(), creatures.size(),
 	]
 	var chips: Array = [

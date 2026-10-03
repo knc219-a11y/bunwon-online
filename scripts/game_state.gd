@@ -17,6 +17,17 @@ var herbs := 0
 var displayed_herbs := 0
 ## 채집 크리처(땅속성)가 캐서 공급함에 진열한 도라지 뿌리 (밤사이 팔림)
 var displayed_roots := 0
+## 밭 작물 (2026-10-03 농사 다양화, Config.CROPS): 무 말고 가진 수 · 씨앗 · 공급함에 진열한 것 (작물 id → 수)
+var potatoes := 0
+var peppers := 0
+var cabbages := 0
+var potato_seeds := 0
+var pepper_seeds := 0
+var cabbage_seeds := 0
+var displayed_harvest := {}
+## 열린 작물 (무 빼고, 씨앗을 얻은 순서) · 밭 구역마다 심을 작물 (번호 = Config.FIELD_PLOTS, 없으면 무)
+var crop_unlocked: Array[StringName] = []
+var plot_crops: Array[StringName] = []
 ## 열린 밭 구역 수 (Config.FIELD_PLOTS 앞에서부터)
 var open_plots := Config.START_FIELD_PLOTS
 ## 알은 종 정보만 가진다. 능력치와 Trait은 부화할 때 정해진다.
@@ -190,6 +201,15 @@ func reset() -> void:
 	herbs = 0
 	displayed_herbs = 0
 	displayed_roots = 0
+	potatoes = 0
+	peppers = 0
+	cabbages = 0
+	potato_seeds = 0
+	pepper_seeds = 0
+	cabbage_seeds = 0
+	displayed_harvest = {}
+	crop_unlocked = []
+	plot_crops = []
 	open_plots = Config.START_FIELD_PLOTS
 	farmer_eggs = []
 	village_eggs = []

@@ -185,7 +185,7 @@ const STARTS: Array[Dictionary] = [
 		## 2026-10-03 시설 5 · 잔치 스레드: 용을 잡고 마을회관을 고친 뒤, 잔치상을 채우는 자리 (일곱 상 재료를 다 들고 있음)
 		id = &"feast", name = "잔치 준비", note = "125일 · 이장 · 잔치상 0/7 · 재료 넉넉",
 		day = 125, money = 9000, seeds = 26, crops = 45, herbs = 12, plots = 4, planted = true, scrap = 25, roots = 12, junk = 20, potions = 8,
-		hen_eggs = 14, fish = 10, lunches = 2,
+		hen_eggs = 14, fish = 10, lunches = 2, potatoes = 12, peppers = 8, cabbages = 6,
 		creatures = [
 			[&"slime", &"farm", &"water", 2, 2], [&"imp", &"farm", &"", 1, 1], [&"foal", &"farm", &"", 1, 1], [&"tree_spirit", &"farm", &"", 2, 1],
 			[&"slime", &"forage", &"earth", 1, 1], [&"slime", &"fish", &"water", 1, 1], [&"gold_toad", &"forage", &"", 1, 0],
@@ -355,6 +355,11 @@ static func apply(main: Node2D, id: StringName) -> bool:
 		# 공사까지 다 끝난 것으로 치고 실제 문 열기 흐름으로 고친다
 		SiteWork.fill(&"hall")
 		VillageHall.restore(main)
+	# 밭 작물 (2026-10-03 농사 다양화): 쓰러뜨린 막 대장 땅의 씨앗은 이미 얻은 것으로
+	Crops.morning_unlocks()
+	GameState.potatoes = s.get("potatoes", 0)
+	GameState.peppers = s.get("peppers", 0)
+	GameState.cabbages = s.get("cabbages", 0)
 	GameState.herbs = s.get("herbs", 0)
 	GameState.hen_eggs = s.get("hen_eggs", 0)
 	GameState.fish = s.get("fish", 0)

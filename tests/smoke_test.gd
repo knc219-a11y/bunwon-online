@@ -291,7 +291,7 @@ func _ready() -> void:
 
 	# 10) 농장 바닥 타일: 타일셋 규격, 작물 성장 단계, 이웃 연결
 	_check(Farm.TILES.get_width() == 24 * 16 and Farm.TILES.get_height() == 24 * 4, "농장 타일셋 384x96")
-	_check(Farm.CROPS.get_width() == 24 * 4 and Farm.CROPS.get_height() == 24, "작물 시트 96x24")
+	_check(Farm.CROPS.get_width() == 24 * 4 and Farm.CROPS.get_height() == 24 * Config.CROPS.size(), "작물 시트 96x96 (무 · 감자 · 고추 · 배추)")
 	var crop := Farm.Cell.new()
 	crop.planted = true
 	var stages: Array[int] = []
@@ -2664,6 +2664,9 @@ func _ready() -> void:
 	# 51) 시설 5 마을회관 · 이장 + 잔치상 엔딩 (2026-10-03 사용자 선택 A + B)
 	await _hall_checks()
 
+	# 52) 밭 작물 (2026-10-03 백로그 5번): 감자 · 고추 · 배추, 대장 땅 씨앗 · 구역 작물 · 여러 번 따기 · 진열
+	await _crop_checks()
+
 	# 41) 저장/불러오기 (2026-09-30 사용자 선택 C 디아2식): 저장 → 장면을 버리고 → 새 장면에 불러오면 모든 상태가 같다
 	await _save_load_checks()
 
@@ -3642,7 +3645,10 @@ func _naru_checks() -> void:
 	_check(m.dock_action(&"take_fish") and GameState.fish == basket and GameState.basket == 0, "바구니 물고기 꺼내기")
 	GameState.fish = maxi(GameState.fish, Config.STEW_FISH + 1)
 	var fish0 := GameState.fish
-	_check(m.dock_action(&"stew") and GameState.stews == 1 and GameState.fish == fish0 - Config.STEW_FISH, "뱃사공 매운탕 (물고기 %d · 무 %d)" % [Config.STEW_FISH, Config.STEW_CROPS])
+	GameState.peppers = 0
+	_check(not m.dock_action(&"stew"), "고추가 없으면 매운탕을 못 끓임")
+	GameState.peppers = Config.STEW_PEPPERS
+	_check(m.dock_action(&"stew") and GameState.stews == 1 and GameState.fish == fish0 - Config.STEW_FISH and GameState.peppers == 0, "뱃사공 매운탕 (물고기 %d · 고추 %d)" % [Config.STEW_FISH, Config.STEW_PEPPERS])
 	_check(&"stew" in m.dock_options(), "매운탕은 나루터 창에서 뱃사공에게 부탁")
 	var money0 := GameState.money
 	var sell := GameState.fish
@@ -4028,7 +4034,12 @@ func _hall_checks() -> void:
 	GameState.crops = 30
 	_check(not VillageHall.set_dish(m, &"greens") and GameState.feast_dishes.is_empty(), "재료가 모자라면 못 차림")
 	GameState.crops = 50
-	_check(VillageHall.set_dish(m, &"greens") and GameState.crops == 10, "농부가 무생채 · 뭇국")
+	GameState.potatoes = 0
+	_check(not VillageHall.set_dish(m, &"greens"), "감자가 모자라면 농부 상을 못 차림")
+	GameState.potatoes = 10
+	GameState.peppers = 6
+	GameState.cabbages = 4
+	_check(VillageHall.set_dish(m, &"greens") and GameState.crops == 30 and GameState.potatoes == 0 and GameState.cabbages == 0, "농부가 김치 · 감자전 · 뭇국 (무 · 감자 · 고추 · 배추)")
 	_check(not VillageHall.set_dish(m, &"greens"), "같은 상은 한 번")
 	_check(not VillageHall.options(m, &"feast").has(&"open_feast"), "다 안 찼으면 잔치 열기 없음")
 	GameState.junk = 20
@@ -4095,4 +4106,89 @@ func _hall_checks() -> void:
 	c2.cycle_yak_brew()
 	_check(GameState.yak_brew != &"lamp_oil", "연금술사 창에서 달일 약을 바꿈")
 	c2.queue_free()
+	await get_tree().process_frame
+
+
+## 52) 밭 작물: 막 대장을 처음 잡은 다음 아침 씨앗 → 구역마다 작물 → 자라는 날 · 거두는 수 · 고추 다시 열림 · 진열 · 저장
+func _crop_checks() -> void:
+	var m: Node2D = load("res://scenes/main.tscn").instantiate()
+	add_child(m)
+	await get_tree().process_frame
+	GameState.reset()
+	var farm: Farm = m.farm
+	_check(Crops.unlocked() == [&"radish"] and not m.supply_options().has(&"crops"), "처음엔 무만 (밭 작물 메뉴 없음)")
+	GameState.bosses_beaten.append(Config.FORGE_ZONE)
+	var lines: Array[String] = m.next_day()
+	_check(&"potato" in GameState.crop_unlocked and GameState.potato_seeds == Config.CROP_UNLOCK_SEEDS and lines.any(func(l: String) -> bool: return l.contains("감자 씨앗")), "금사리 대장 다음 아침 감자 씨앗")
+	_check(m.supply_options().has(&"crops") and Crops.options().has(&"plot_0") and Crops.options().has(&"seeds_potato") and not Crops.options().has(&"seeds_pepper"), "공급함 밭 작물 메뉴: 구역 · 감자 씨앗")
+	_check(Crops.act(&"plot_0") and Crops.plot_kind(0) == &"potato" and Crops.cycle_plot(0) == &"radish", "구역 작물 바꾸기 (무 → 감자 → 무)")
+	Crops.set_plot(0, &"potato")
+	var cell := fc(1, 2)
+	var seeds0 := GameState.seeds
+	farm.do_work(Farm.Work.TILL, cell)
+	_check(farm.do_work(Farm.Work.SOW, cell) and farm.get_cell(cell).kind == &"potato" and GameState.potato_seeds == Config.CROP_UNLOCK_SEEDS - 1 and GameState.seeds == seeds0, "감자 구역엔 감자 씨앗을 심음 (무 씨앗 그대로)")
+	var c := farm.get_cell(cell)
+	for d in 2:
+		farm.do_work(Farm.Work.WATER, cell)
+		farm.advance_day()
+	_check(c.is_ripe(), "감자는 2일")
+	_check(farm.do_work(Farm.Work.HARVEST, cell) and GameState.potatoes == 2 and not c.planted and GameState.potato_seeds == Config.CROP_UNLOCK_SEEDS, "감자 한 칸에 둘 + 씨앗 하나 돌려받음")
+	# 고추: 4일, 딴 뒤 2일마다, 4번
+	GameState.crop_unlocked.append(&"pepper")
+	GameState.pepper_seeds = 1
+	Crops.set_plot(0, &"pepper")
+	farm.do_work(Farm.Work.SOW, cell)
+	for d in 4:
+		farm.do_work(Farm.Work.WATER, cell)
+		farm.advance_day()
+	_check(c.is_ripe() and c.kind == &"pepper" and Farm.crop_stage(c) == 3, "고추는 4일")
+	var picks := 0
+	for round in 4:
+		if farm.do_work(Farm.Work.HARVEST, cell):
+			picks += 1
+		if round < 3:
+			_check(c.planted and not c.is_ripe() and Farm.crop_stage(c) == 2, "고추 딴 뒤 그대로 섬 (%d번째)" % (round + 1))
+			for d in 2:
+				farm.do_work(Farm.Work.WATER, cell)
+				farm.advance_day()
+	_check(picks == 4 and GameState.peppers == 4 and not c.planted and GameState.pepper_seeds == Config.SEEDS_PER_HARVEST, "고추 한 번 심어 네 번 따고 끝")
+	# 진열: 무 · 감자 · 고추 한꺼번에, 아침에 값대로
+	GameState.crops = 2
+	var money0 := GameState.money
+	_check(m.supply_action(&"display_crops") and Crops.held_total() == 0, "작물 한꺼번에 진열")
+	m.next_day()
+	_check(GameState.money - money0 == 2 * Config.CROP_PRICE + 2 * int(Config.CROPS[&"potato"].price) + 4 * int(Config.CROPS[&"pepper"].price), "밤사이 작물값 (무 · 감자 · 고추)")
+	# 크리처도 구역 작물을 심는다
+	Crops.set_plot(0, &"potato")
+	GameState.potato_seeds = 5
+	var sl: Creature = m._hatch(CreatureCatalog.STARTER_EGG, cell)
+	sl.job = CreatureJobs.FARM
+	sl.auto_work = false
+	var other := cell + Vector2i.RIGHT
+	farm.do_work(Farm.Work.TILL, other)
+	for i in 3:
+		if farm.get_cell(other).planted or not sl.work_once():
+			break
+		await get_tree().create_timer(sl.hop_time() + Config.CREATURE_WORK_ANIM_TIME + 0.2).timeout
+	_check(farm.get_cell(other).planted and farm.get_cell(other).kind == &"potato", "농사 크리처도 구역 작물 (감자) 을 심음")
+	# 저장 · 불러오기: 칸 작물 · 딴 횟수
+	SaveGame.dir = "user://smoke_saves"
+	DirAccess.make_dir_recursive_absolute(SaveGame.dir)
+	c.planted = true
+	c.kind = &"pepper"
+	c.picks = 2
+	c.growth = 3
+	_check(SaveGame.save(m, 3), "저장")
+	var snap := SaveGame.snapshot(m)
+	m.queue_free()
+	await get_tree().process_frame
+	GameState.reset()
+	var b: Node2D = load("res://scenes/main.tscn").instantiate()
+	add_child(b)
+	await get_tree().process_frame
+	_check(SaveGame.load_into(b, 3), "불러오기")
+	var bc: Farm.Cell = b.farm.get_cell(cell)
+	_check(bc.kind == &"pepper" and bc.picks == 2 and Crops.plot_kind(0) == &"potato" and &"pepper" in GameState.crop_unlocked and SaveGame.snapshot(b).farm == snap.farm, "불러오면 칸 작물 · 구역 작물 · 열린 작물 그대로")
+	SaveGame.erase(3)
+	b.queue_free()
 	await get_tree().process_frame
