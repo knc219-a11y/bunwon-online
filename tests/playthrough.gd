@@ -20,6 +20,8 @@ var knocked_zone := -1
 var hunt_days := 0
 var hunt_hurt := 0
 var hunt_knocked := 0
+## 크리처 방패가 대신 막은 횟수 합
+var hunt_blocks := 0
 var cleared_day := {}
 ## 하루 시계 (2026-09-29): 봇은 도구질을 순간에 끝내므로 실제 걸릴 시간을 어림한다 (초, 임시 어림값).
 ## 손 도구질 한 번 = 휘두르기 + 한 칸 걷기, 들나물 한 포기 = 풀밭까지 걷기, 공급함·부화기·집 오가기 = 하루 한 번에 묶어서.
@@ -54,13 +56,13 @@ var craft_spent := 0
 var gross: Array[int] = []
 var spent_today := 0
 var scrap_creature: Creature = null
-## 광동리 (2026-09-29 선택 B): 처음 도착한 날 · 광동리에서 사냥한 날 수 · 거기서 맞은 횟수 · 쓰러진 횟수 · 날마다 끝 돈
+## 광동리 (2026-09-29 선택 B): 처음 도착한 날 · 광동리에서 사냥한 날 수 · 거기서 잃은 체력 · 쓰러진 횟수 · 날마다 끝 돈
 var gwang_day := -1
 var gwang_hunts := 0
 var gwang_hurt := 0
 var gwang_knocked := 0
 var money_by_day := {}
-## 도마리 (2026-09-29, 2막 마지막 구역): 처음 도착한 날 · 사냥한 날 수 · 거기서 맞은 횟수 · 쓰러진 횟수
+## 도마리 (2026-09-29, 2막 마지막 구역): 처음 도착한 날 · 사냥한 날 수 · 거기서 잃은 체력 · 쓰러진 횟수
 var doma_day := -1
 var doma_hunts := 0
 var doma_hurt := 0
@@ -73,7 +75,7 @@ const KITE_DISTANCE := 64.0
 ## 첫 무기를 든 날, 사냥에서 쏜 수
 var weapon_day := -1
 var shots_fired := 0
-## 약방 · 번천 (2026-09-29, 3막): 약방 터 · 복구한 날, 번천 첫 도착 · 사냥 수 · 맞은 횟수 · 쓰러짐, 도라지밭 크리처, 만든 것
+## 약방 · 번천 (2026-09-29, 3막): 약방 터 · 복구한 날, 번천 첫 도착 · 사냥 수 · 잃은 체력 · 쓰러짐, 도라지밭 크리처, 만든 것
 var yak_site_day := -1
 var yak_restore_day := -1
 var bun_day := -1
@@ -84,7 +86,7 @@ var herb_creature: Creature = null
 var brewed := {}
 var tonic_days := 0
 const BUNJEON := 4
-## 밀목 · 축사 (2026-09-30, 3막 둘째 구역): 밀목 첫 도착 · 사냥 수 · 맞은 횟수 · 쓰러짐, 축사 터 · 복구한 날, 닭장 기록
+## 밀목 · 축사 (2026-09-30, 3막 둘째 구역): 밀목 첫 도착 · 사냥 수 · 잃은 체력 · 쓰러짐, 축사 터 · 복구한 날, 닭장 기록
 const MILMOK := 5
 var mil_day := -1
 var mil_hunts := 0
@@ -105,7 +107,7 @@ var stews_eaten := 0
 var fish_creature: Creature = null
 var weasel_nights := 0
 var tigers_got := {}
-## 역동 (2026-10-02, 4막 첫 구역): 첫 도착 · 사냥 수 · 맞은 횟수 · 쓰러짐, 아기 망아지 알 · 깊이 간 칸에서 더 거둔 무
+## 역동 (2026-10-02, 4막 첫 구역): 첫 도착 · 사냥 수 · 잃은 체력 · 쓰러짐, 아기 망아지 알 · 깊이 간 칸에서 더 거둔 무
 const YEOKDONG := 6
 var yd_day := -1
 var yd_hunts := 0
@@ -113,7 +115,7 @@ var yd_hurt := 0
 var yd_knocked := 0
 var foals_got := 0
 var plow_bonus := 0
-## 곤지암 (2026-10-02, 4막 대장 구역): 첫 도착 · 사냥 수 · 맞은 횟수 · 쓰러짐, 아기 악귀 알 · 밤일 수
+## 곤지암 (2026-10-02, 4막 대장 구역): 첫 도착 · 사냥 수 · 잃은 체력 · 쓰러짐, 아기 악귀 알 · 밤일 수
 const GONJIAM := 7
 var gj_day := -1
 var gj_hunts := 0
@@ -152,6 +154,12 @@ func _ready() -> void:
 	# START (2026-10-02 곤지암): 테스트용 시작 지점에서 이어 돌린다 (예: START=gonjiam DAYS=8, 구역 값만 빨리 맞출 때)
 	if OS.get_environment("START") != "":
 		TestStarts.apply(main, StringName(OS.get_environment("START")))
+	# LEVEL (2026-10-02 3~4막 난이도): 시작 레벨을 바꿔 스킬을 처음부터 다시 찍는다 (레벨 곡선 후보를 빨리 보려고)
+	if OS.get_environment("LEVEL") != "":
+		GameState.hunter_level = int(OS.get_environment("LEVEL"))
+		GameState.hunter_xp = 0
+		GameState.skills = {}
+		GameState.skill_points = GameState.hunter_level - 1 + GameState.bosses_beaten.filter(func(z: int) -> bool: return HunterSkills.is_act_boss_zone(z)).size()
 	# 시계는 봇이 어림한 시간으로 돌린다 (크리처를 기다리며 빨리 돌리는 동안 시계가 흐르지 않게)
 	main.clock_running = false
 	farm = main.farm
@@ -162,7 +170,7 @@ func _ready() -> void:
 	var trained := 0
 	for s: Creature in main.creatures:
 		trained += s.data.train_total()
-	_log("\n사냥: %d번 · 맞은 횟수 %d (하루 평균 %.1f) · 쓰러짐 %d번 · 대장 처음 쓰러뜨린 날 %s" % [hunt_days, hunt_hurt, float(hunt_hurt) / maxi(hunt_days, 1), hunt_knocked, cleared_day])
+	_log("\n사냥: %d번 · 잃은 체력 %d (하루 평균 %.1f) · 방패가 막음 %d · 쓰러짐 %d번 · 대장 처음 쓰러뜨린 날 %s" % [hunt_days, hunt_hurt, float(hunt_hurt) / maxi(hunt_days, 1), hunt_blocks, hunt_knocked, cleared_day])
 	_log("\n하루 끝 시각 (봇 · 사람 어림 x%.0f, 6시 시작, 실제 1초 = 게임 %s분): %s" % [HUMAN_MULT, Config.CLOCK_MINUTES_PER_SECOND, ", ".join(clock_ends)])
 	_log("\n들나물·채집 (14일 합계): 손일 %d번 · 들나물 손으로 %d포기 · 크리처가 %d포기 · 도라지 %d뿌리 (%d원)" % [total_manual, total_hand_herbs, total_creature_herbs, total_roots, total_roots * Config.ROOT_PRICE])
 	_log("\n크리처 일 배분 (14일 합계): 밭 4구역이 모두 농사로 찬 날 %s · 농사 크리처가 한가할 때 캔 나물·뿌리 %d · 물 준 풀밭 덕분에 더 돋은 나물 %d포기" % ["%d일" % full_day if full_day > 0 else "없음", total_idle_herbs, total_water_bonus])
@@ -178,31 +186,31 @@ func _ready() -> void:
 	for d in [30, 35, 40]:
 		if money_by_day.has(d):
 			money_at.append("%d일 %d원" % [d, money_by_day[d]])
-	_log("\n광동리: 첫 도착 %s · 첫 대장 처치 %s · 광동리 사냥 %d번 · 거기서 맞은 횟수 %d (한 번에 %.1f) · 쓰러짐 %d번 · 끝 돈 %s · 아기 까마귀 %d마리" % [
+	_log("\n광동리: 첫 도착 %s · 첫 대장 처치 %s · 광동리 사냥 %d번 · 거기서 잃은 체력 %d (한 번에 %.1f) · 쓰러짐 %d번 · 끝 돈 %s · 아기 까마귀 %d마리" % [
 		"%d일" % gwang_day if gwang_day > 0 else "없음", cleared_day.get(Config.HUNT_ZONES[2].name, "없음"), gwang_hunts, gwang_hurt,
 		float(gwang_hurt) / maxi(gwang_hunts, 1), gwang_knocked, money_at, main.creatures.filter(func(c: Creature) -> bool: return c.data.species == CreatureCatalog.SPARROW).size()])
 	var money_late := []
 	for d in [40, 45, 50]:
 		if money_by_day.has(d):
 			money_late.append("%d일 %d원" % [d, money_by_day[d]])
-	_log("\n도마리: 첫 도착 %s · 2막 대장(장승 한 쌍) 첫 처치 %s · 도마리 사냥 %d번 · 거기서 맞은 횟수 %d (한 번에 %.1f) · 쓰러짐 %d번 · 끝 돈 %s · 아기 나무 정령 %d마리" % [
+	_log("\n도마리: 첫 도착 %s · 2막 대장(장승 한 쌍) 첫 처치 %s · 도마리 사냥 %d번 · 거기서 잃은 체력 %d (한 번에 %.1f) · 쓰러짐 %d번 · 끝 돈 %s · 아기 나무 정령 %d마리" % [
 		"%d일" % doma_day if doma_day > 0 else "없음", cleared_day.get(Config.HUNT_ZONES[DOMA].name, "없음"), doma_hunts, doma_hurt,
 		float(doma_hurt) / maxi(doma_hunts, 1), doma_knocked, money_late, main.creatures.filter(func(c: Creature) -> bool: return c.data.species == CreatureCatalog.TREE_SPIRIT).size()])
-	_log("\n약방 · 번천: 약방 터 %s · 복구 %s (장승 조각 %d · 도라지 %d) · 번천 첫 도착 %s · 유령 막차 첫 처치 %s · 번천 사냥 %d번 · 거기서 맞은 횟수 %d (한 번에 %.1f) · 쓰러짐 %d번 · 만든 것 %s · 보약 먹인 날 %d · 도라지밭 %s · 아기 도깨비불 %d마리" % [
+	_log("\n약방 · 번천: 약방 터 %s · 복구 %s (장승 조각 %d · 도라지 %d) · 번천 첫 도착 %s · 유령 막차 첫 처치 %s · 번천 사냥 %d번 · 거기서 잃은 체력 %d (한 번에 %.1f) · 쓰러짐 %d번 · 만든 것 %s · 보약 먹인 날 %d · 도라지밭 %s · 아기 도깨비불 %d마리" % [
 		"%d일" % yak_site_day if yak_site_day > 0 else "없음", "%d일" % yak_restore_day if yak_restore_day > 0 else "없음", GameState.material2, GameState.roots,
 		"%d일" % bun_day if bun_day > 0 else "없음", cleared_day.get(Config.HUNT_ZONES[BUNJEON].name, "없음"), bun_hunts, bun_hurt,
 		float(bun_hurt) / maxi(bun_hunts, 1), bun_knocked, brewed, tonic_days, herb_creature.describe() if herb_creature else "없음",
 		main.creatures.filter(func(c: Creature) -> bool: return c.data.species == CreatureCatalog.WILL_O).size()])
-	_log("\n밀목 · 축사: 밀목 첫 도착 %s · 산군 백호 첫 처치 %s · 밀목 사냥 %d번 · 거기서 맞은 횟수 %d (한 번에 %.1f) · 쓰러짐 %d번 · 산군 발톱 %d · 축사 터 %s · 복구 %s · 암탉 %d (병아리 %d) · 판 달걀 %d · 먹은 도시락 %d · 족제비 %d밤 · 얻은 알 %s · 모이 주기 %s" % [
+	_log("\n밀목 · 축사: 밀목 첫 도착 %s · 산군 백호 첫 처치 %s · 밀목 사냥 %d번 · 거기서 잃은 체력 %d (한 번에 %.1f) · 쓰러짐 %d번 · 산군 발톱 %d · 축사 터 %s · 복구 %s · 암탉 %d (병아리 %d) · 판 달걀 %d · 먹은 도시락 %d · 족제비 %d밤 · 얻은 알 %s · 모이 주기 %s" % [
 		"%d일" % mil_day if mil_day > 0 else "없음", cleared_day.get(Config.HUNT_ZONES[MILMOK].name, "없음"), mil_hunts, mil_hurt,
 		float(mil_hurt) / maxi(mil_hunts, 1), mil_knocked, GameState.material3, "%d일" % barn_site_day if barn_site_day > 0 else "없음",
 		"%d일" % barn_restore_day if barn_restore_day > 0 else "없음", GameState.hens, GameState.chicks.size(), hen_eggs_sold, lunches_eaten, weasel_nights, tigers_got,
 		feed_creature.describe() if feed_creature else "없음"])
-	_log("\n역동: 첫 도착 %s · 역마 장군 첫 처치 %s · 역동 사냥 %d번 · 거기서 맞은 횟수 %d (한 번에 %.1f) · 쓰러짐 %d번 · 아기 망아지 알 %d · 농사 맡은 망아지 %d · 깊이 간 칸에서 더 거둔 무 %d" % [
+	_log("\n역동: 첫 도착 %s · 역마 장군 첫 처치 %s · 역동 사냥 %d번 · 거기서 잃은 체력 %d (한 번에 %.1f) · 쓰러짐 %d번 · 아기 망아지 알 %d · 농사 맡은 망아지 %d · 깊이 간 칸에서 더 거둔 무 %d" % [
 		"%d일" % yd_day if yd_day > 0 else "없음", cleared_day.get(Config.HUNT_ZONES[YEOKDONG].name, "없음"), yd_hunts, yd_hurt,
 		float(yd_hurt) / maxi(yd_hunts, 1), yd_knocked, foals_got,
 		main.creatures.filter(func(c: Creature) -> bool: return c.data.species == CreatureCatalog.FOAL and c.job == CreatureJobs.FARM).size(), plow_bonus])
-	_log("\n곤지암: 첫 도착 %s · 마왕 첫 처치 %s · 곤지암 사냥 %d번 · 거기서 맞은 횟수 %d (한 번에 %.1f) · 쓰러짐 %d번 · 아기 악귀 알 %d · 아기 악귀 %d마리 · 밤일 %d번" % [
+	_log("\n곤지암: 첫 도착 %s · 마왕 첫 처치 %s · 곤지암 사냥 %d번 · 거기서 잃은 체력 %d (한 번에 %.1f) · 쓰러짐 %d번 · 아기 악귀 알 %d · 아기 악귀 %d마리 · 밤일 %d번" % [
 		"%d일" % gj_day if gj_day > 0 else "없음", cleared_day.get(Config.HUNT_ZONES[GONJIAM].name, "없음"), gj_hunts, gj_hurt,
 		float(gj_hurt) / maxi(gj_hunts, 1), gj_knocked, imps_got,
 		main.creatures.filter(func(c: Creature) -> bool: return c.data.species == CreatureCatalog.IMP).size(), night_jobs])
@@ -926,6 +934,9 @@ func hunt_day() -> void:
 		if pick == null or s.data.species.id == &"gold_toad" or (s.data.elements[0].id == &"earth" and pick.data.species.id != &"gold_toad"):
 			pick = s
 	var zone: int = GameState.waypoints.max()
+	# ZONE (2026-10-02 3~4막 난이도): 이 구역 웨이포인트에서만 사냥 (역동처럼 봇이 지나쳐 버리는 구역을 재려고)
+	if OS.get_environment("ZONE") != "" and int(OS.get_environment("ZONE")) in GameState.waypoints:
+		zone = int(OS.get_environment("ZONE"))
 	# 2막 구역(웨이포인트)에서 쓰러졌으면 다음 날 하트를 채워 같은 웨이포인트에서 다시 (아래 구역부터 걸어오면 하트가 깎인 채 들어가 또 쓰러짐)
 	if zone == knocked_zone and zone > 0 and zone < 2:
 		# 어제 여기서 쓰러졌으면 한 구역 아래부터 (사람이라면 그럴 것)
@@ -972,8 +983,12 @@ func hunt_day() -> void:
 	var kills := 0
 	var zones_seen: Array[String] = [Config.HUNT_ZONES[h.zone].name]
 	var hurt := 0
-	var last_hearts := h.hearts
+	var last_life := h.life
 	var stuck_t := 0.0
+	var ignored := {}
+	var stuck_s: WildSlime = null
+	var stuck_hp := 0
+	var stuck_s_t := 0.0
 	var money0 := GameState.money
 	var potions0 := GameState.potions
 	var junk0 := GameState.junk
@@ -1037,7 +1052,7 @@ func hunt_day() -> void:
 		var hunter: Character = main.hunter
 		var feet := hunter.feet()
 		# 물약: 하트 2 이하면 마신다
-		if h.hearts <= 2 and GameState.potions > 0:
+		if h.life * 4 <= h.max_life() and GameState.potions > 0:
 			h.drink_potion()
 		var target: Vector2
 		var goal := &""
@@ -1051,8 +1066,25 @@ func hunt_day() -> void:
 			elif not full_at.has(d.at):
 				pickups.append(d.at)
 		var nearest_s: WildSlime = h._nearest_slime(feet)
+		# 막힌 몬스터 (2026-10-02): 20초 넘게 같은 몬스터 체력이 그대로면 (화살이 안 닿는 자리 등) 이번 사냥에선 건너뛴다
+		if nearest_s != null and ignored.has(nearest_s):
+			nearest_s = null
+			var best_d := INF
+			for o: WildSlime in h.slimes:
+				if not ignored.has(o) and o.position.distance_to(feet) < best_d:
+					best_d = o.position.distance_to(feet)
+					nearest_s = o
 		if nearest_s != null:
 			fight_t += DT
+			if nearest_s != stuck_s or nearest_s.hp != stuck_hp:
+				stuck_s = nearest_s
+				stuck_hp = nearest_s.hp
+				stuck_s_t = 0.0
+			else:
+				stuck_s_t += DT
+				if stuck_s_t > 20.0:
+					ignored[nearest_s] = true
+					stuck_s_t = 0.0
 		# 번천 유령: 불빛 안(맞힐 수 있는) 것부터, 없으면 가장 가까운 것에 다가가 호롱으로 비춘다
 		var lit_s: WildSlime = h._nearest_slime(feet, true)
 		if lit_s != null and h.is_night():
@@ -1088,9 +1120,9 @@ func hunt_day() -> void:
 			# 구르기 (2026-10-02 손맛): 쓸 수 있으면 비킬 쪽으로 구른다 (사람도 그럴 것)
 			if h.dash(escape.normalized()):
 				h.tick(DT)
-				if h.hearts < last_hearts:
-					hurt += last_hearts - h.hearts
-				last_hearts = h.hearts
+				if h.life < last_life:
+					hurt += last_life - h.life
+				last_life = h.life
 				t += DT
 				zone_t += DT
 				continue
@@ -1100,15 +1132,15 @@ func hunt_day() -> void:
 			if hunter.position.distance_to(p0) < 0.01:
 				hunter.step(-escape.normalized().orthogonal() * Config.CHARACTER_SPEED * mult * DT)
 			h.tick(DT)
-			if h.hearts < last_hearts:
-				hurt += last_hearts - h.hearts
-			last_hearts = h.hearts
+			if h.life < last_life:
+				hurt += last_life - h.life
+			last_life = h.life
 			t += DT
 			zone_t += DT
 			continue
 		# 더 깊은 구역으로 넘어가기 전, 하트가 모자라면 물약을 마신다 (사람이라면 그럴 것)
-		var need_hearts := 5 if h.zone + 1 >= 2 else 3
-		if nearest_s == null and h.path_open and h.path_block() == "" and h.hearts < need_hearts and GameState.potions > 0:
+		var need_life := h.max_life() * (0.5 if h.zone + 1 >= 2 else 0.3)
+		if nearest_s == null and h.path_open and h.path_block() == "" and h.life < need_life and GameState.potions > 0:
 			h.drink_potion()
 		if not pickups.is_empty():
 			pickups.sort_custom(func(a: Vector2, b: Vector2) -> bool: return a.distance_to(feet) < b.distance_to(feet))
@@ -1117,7 +1149,7 @@ func hunt_day() -> void:
 		elif nearest_s != null:
 			target = nearest_s.position
 			goal = &"fight"
-		elif h.path_open and h.path_block() == "" and h.hearts >= (5 if h.zone + 1 >= 2 else 3):
+		elif h.path_open and h.path_block() == "" and h.life >= h.max_life() * (0.5 if h.zone + 1 >= 2 else 0.3):
 			# 2막 구역(광동리 · 도마리)엔 하트가 넉넉할 때만 넘어간다 (사람이라면 반쯤 남은 하트로 더 센 구역에 들어가지 않음)
 			target = h.next_area().get_center()
 			goal = &"next"
@@ -1191,17 +1223,18 @@ func hunt_day() -> void:
 		h.tick(DT)
 		if h.slimes.size() < before_k and (goal != &"fight" or ranged):
 			kills += before_k - h.slimes.size()
-		if h.hearts < last_hearts:
-			hurt += last_hearts - h.hearts
-		last_hearts = h.hearts
+		if h.life < last_life:
+			hurt += last_life - h.life
+		last_life = h.life
 		t += DT
 		zone_t += DT
 	zone_times.append("%s %.0f초" % [Config.HUNT_ZONES[h.zone].name, zone_t])
 	hunt_sec = t
-	var hearts_left := h.hearts
+	var life_left := h.life
 	var knocked := h.knocked
 	hunt_days += 1
 	hunt_hurt += hurt
+	hunt_blocks += h.guard_blocks
 	hunt_knocked += int(knocked)
 	knocked_zone = h.zone if knocked else -1
 	if gwang_hurt0 >= 0:
@@ -1237,8 +1270,8 @@ func hunt_day() -> void:
 			foals_got += 1
 		if sp == CreatureCatalog.IMP:
 			imps_got += 1
-	_log("사냥: 시작 %s · 동행 %s · %s · 싸움 %.0f초 · 처치 %d · 맞은 횟수 %d · 비킨 틱 %d · 남은 하트 %d%s · 알 %s · 돈 %+d · 물약 %+d · 젤리 %+d · 장비 %+d · Lv %d" % [
-		Config.HUNT_ZONES[zone].name, comp, " → ".join(zone_times), fight_t, kills, hurt, dodges, hearts_left, " (쓰러짐)" if knocked else "",
+	_log("사냥: 시작 %s · 동행 %s · %s · 싸움 %.0f초 · 처치 %d · 잃은 체력 %d · 방패 %d · 비킨 틱 %d · 남은 체력 %d/%d%s · 알 %s · 돈 %+d · 물약 %+d · 젤리 %+d · 장비 %+d · Lv %d" % [
+		Config.HUNT_ZONES[zone].name, comp, " → ".join(zone_times), fight_t, kills, hurt, h.guard_blocks, dodges, life_left, h.max_life(), " (쓰러짐)" if knocked else "",
 		eggs, GameState.money - money0, GameState.potions - potions0, GameState.junk - junk0, GameState.gear.size() + GameState.owned_wear.size() - gear0, GameState.hunter_level])
 	level_by_day[GameState.day] = GameState.hunter_level
 	if t >= 900.0:

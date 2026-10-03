@@ -652,7 +652,7 @@ func enter_hunt(companion: Creature = null, zone := 0) -> bool:
 		GameState.speed -= 1
 		hunt.quick = true
 		drank.append("빠르기 물약")
-	# 목축인 사냥 도시락 (2026-09-30 축사 닭장): 들어갈 때 하나 먹고 그 사냥 동안 하트 +LUNCH_HEARTS
+	# 목축인 사냥 도시락 (2026-09-30 축사 닭장): 들어갈 때 하나 먹고 그 사냥 동안 최대 체력 +LUNCH_HP
 	if GameState.lunches > 0:
 		GameState.lunches -= 1
 		hunt.eat_lunch()
@@ -1130,7 +1130,7 @@ func _on_wear_changed() -> void:
 	hunter.refresh_wear()
 	if hunt:
 		# 하트를 늘리는 장비를 벗으면 하트 칸이 줄어든다 (다시 입는다고 하트가 차지는 않음)
-		hunt.hearts = clampi(hunt.hearts, 1, hunt.max_hearts())
+		hunt.life = clampi(hunt.life, 1, hunt.max_life())
 	GameState.touch()
 
 
@@ -1635,7 +1635,7 @@ func coop_option_text(id: StringName) -> String:
 		&"feed":
 			return "모이 주기 (무 %d, 오늘 암탉 %d마리 모두)" % [Config.FEED_CROP_COST, GameState.hens]
 		&"lunch":
-			return "사냥 도시락 싸기 (달걀 %d · 무 %d, 다음 사냥 하트 +%d)" % [Config.LUNCH_EGGS, Config.LUNCH_CROPS, Config.LUNCH_HEARTS]
+			return "사냥 도시락 싸기 (달걀 %d · 무 %d, 다음 사냥 체력 +%d)" % [Config.LUNCH_EGGS, Config.LUNCH_CROPS, Config.LUNCH_HP]
 	return "닫기"
 
 
@@ -1667,7 +1667,7 @@ func coop_action(id: StringName) -> bool:
 			GameState.hen_eggs -= Config.LUNCH_EGGS
 			GameState.crops -= Config.LUNCH_CROPS
 			GameState.lunches += 1
-			GameState.notify("사냥 도시락을 쌌다 (%d개). 사냥꾼이 다음 사냥에 들어갈 때 먹고 하트 +%d." % [GameState.lunches, Config.LUNCH_HEARTS])
+			GameState.notify("사냥 도시락을 쌌다 (%d개). 사냥꾼이 다음 사냥에 들어갈 때 먹고 체력 +%d." % [GameState.lunches, Config.LUNCH_HP])
 		_:
 			return false
 	return true
@@ -1832,7 +1832,7 @@ func dock_option_text(id: StringName) -> String:
 		&"take_fish":
 			return "바구니 물고기 꺼내기 (%d마리)" % GameState.basket
 		&"stew":
-			return "매운탕 끓이기 (물고기 %d · 무 %d, 다음 사냥 하트 +%d · 경험치 +%d%%)" % [Config.STEW_FISH, Config.STEW_CROPS, Config.STEW_HEARTS, roundi((Config.STEW_XP_MULT - 1.0) * 100)]
+			return "매운탕 끓이기 (물고기 %d · 무 %d, 다음 사냥 체력 +%d · 경험치 +%d%%)" % [Config.STEW_FISH, Config.STEW_CROPS, Config.STEW_HP, roundi((Config.STEW_XP_MULT - 1.0) * 100)]
 	return "닫기"
 
 
@@ -1988,7 +1988,7 @@ func waypoint_option_text(id: StringName) -> String:
 	var z := String(id).trim_prefix("zone_").to_int()
 	if z == 0:
 		return "1구역 %s부터 걸어가기" % Config.HUNT_ZONES[0].name
-	var text := "%d구역 %s 웨이포인트 (%s)" % [z + 1, Config.HUNT_ZONES[z].name, Config.HUNT_ZONES[z].monster]
+	var text := "%d구역 %s 웨이포인트 (%s Lv %d)" % [z + 1, Config.HUNT_ZONES[z].name, Config.HUNT_ZONES[z].monster, HunterSkills.monster_level(z)]
 	if Config.HUNT_ZONES[z].has("advice"):
 		text += " · " + Config.HUNT_ZONES[z].advice
 	return text

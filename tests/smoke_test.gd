@@ -186,7 +186,7 @@ func _ready() -> void:
 	var hunt: HuntGround = main.hunt
 	_check(hunt != null and hunt.companion == null and not main.menu_open and not main.farm.visible and not farmer.visible and hunt.slimes.size() == Config.WILD_SLIME_COUNT, "사냥터 입구 F → 사냥터 화면, 야생 슬라임 %d마리" % Config.WILD_SLIME_COUNT)
 	hunt.set_ai(false)
-	_check(hunt.hearts == Config.HUNTER_HEARTS, "하트 5개로 시작")
+	_check(hunt.life == hunt.max_life() and hunt.max_life() == Config.HUNTER_HP, "체력 가득 (%d) 으로 시작" % Config.HUNTER_HP)
 	# Space(바라보는 쪽)로 두 번 휘두르면 쓰러진다
 	var wild: WildSlime = hunt.slimes[0]
 	hunter.facing = Vector2i.UP
@@ -213,7 +213,7 @@ func _ready() -> void:
 	hunt.tick(0.01)
 	wild3.position = hunter.feet()
 	hunt.tick(0.01)
-	_check(hunt.hearts == Config.HUNTER_HEARTS - 1, "부딪히면 하트 -1, 바로 다시 맞지는 않음")
+	_check(hunt.life == hunt.max_life() - wild3.damage and wild3.damage == Config.HP_PER_HEART, "부딪히면 체력 -%d, 바로 다시 맞지는 않음" % wild3.damage)
 	wild3.position = Vector2(20 * Config.TILE, 5 * Config.TILE)
 	# 떨어진 알 줍기
 	hunter.position = hunt.drops[0].at - Vector2(0, Character.FEET_Y)
@@ -480,7 +480,7 @@ func _ready() -> void:
 	h2.tick(Config.SWING_COOLDOWN)
 	h2.swing()
 	_check(h2.drops.size() == 1, "알 확률에 걸리면 알이 떨어짐")
-	h2.hearts = 1
+	h2.life = 1
 	var w2: WildSlime = h2.slimes[0]
 	w2.position = main.hunter.feet()
 	h2.tick(0.01)
@@ -526,7 +526,7 @@ func _ready() -> void:
 	for i in 30:
 		h3.tick(0.05)
 	_check(h3.companion.position.distance_to(main.hunter.feet()) <= Config.COMPANION_FOLLOW_DISTANCE + 4.0, "사냥꾼 뒤를 따라온다")
-	_check(h3.hearts == Config.HUNTER_HEARTS, "크리처 동행 중에도 하트는 그대로 (크리처는 다치지 않음)")
+	_check(h3.life == h3.max_life(), "크리처 동행 중에도 체력은 그대로 (크리처는 다치지 않음)")
 	# 돌아오면 원래 자리·원래 일
 	var eggs_before_buddy := GameState.hunter_eggs.size()
 	main.hunter.position = h3.spawn_at()
@@ -605,7 +605,7 @@ func _ready() -> void:
 	main.menu_confirm()
 	var h5: HuntGround = main.hunt
 	h5.set_ai(false)
-	var base_hearts := h5.max_hearts()
+	var base_hearts := h5.max_life()
 	# 20%가 나올 때까지 같은 자리에서 쓰러뜨린다 (시드 고정)
 	h5.loot_rng.seed = 3
 	var target: WildSlime = h5.slimes[0]
@@ -620,12 +620,12 @@ func _ready() -> void:
 	main.hunter.position = h5.loot[0].at - Vector2(0, Character.FEET_Y)
 	h5.tick(0.01)
 	_check(h5.loot.is_empty() and GameState.worn[&"hunter"].get(&"hat") == &"acorn_helm" and Wearables.is_owned(&"acorn_helm"), "주우면 바로 입음 (모자 칸)")
-	_check(h5.max_hearts() == base_hearts + 1 and h5.hearts == h5.max_hearts(), "도토리 투구: 하트 칸 +1, 그만큼 채워짐")
+	_check(h5.max_life() == base_hearts + Config.HP_PER_HEART and h5.life == h5.max_life(), "도토리 투구: 최대 체력 +10, 그만큼 채워짐")
 	# 빨간 물약
 	GameState.potions = 1
-	h5.hearts = h5.max_hearts() - 1
+	h5.life = h5.max_life() - 1
 	main._unhandled_input(_action(&"use_potion"))
-	_check(h5.hearts == h5.max_hearts() and GameState.potions == 0, "1 키로 빨간 물약을 마시면 하트 +1")
+	_check(h5.life == h5.max_life() and GameState.potions == 0, "1 키로 빨간 물약을 마시면 하트 +1")
 	GameState.potions = 1
 	_check(not h5.drink_potion() and GameState.potions == 1, "하트가 가득하면 물약을 아낌")
 	# 나머지 세트 조각과 잡템·돈은 땅에 둔 채 떠나도 챙긴다
@@ -694,7 +694,7 @@ func _ready() -> void:
 	main._unhandled_input(_action(&"inventory"))
 	_check(inv.visible and not h6.is_processing(), "사냥터에서도 I 키 가방, 여는 동안 사냥터 멈춤")
 	inv.primary(&"equip", 0)
-	_check(h6.hearts <= h6.max_hearts() and h6.max_hearts() == Config.HUNTER_HEARTS, "사냥터에서 도토리 투구를 벗으면 하트 칸이 줄어듦")
+	_check(h6.life <= h6.max_life() and h6.max_life() == Config.HUNTER_HP + Config.HP_PER_LEVEL * (GameState.hunter_level - 1), "사냥터에서 도토리 투구를 벗으면 하트 칸이 줄어듦")
 	main._unhandled_input(_action(&"menu_close"))
 	_check(not inv.visible and h6.is_processing(), "Esc로 닫으면 사냥터 다시 움직임")
 
@@ -887,25 +887,25 @@ func _ready() -> void:
 	_check(main.hunt == sh and sh.zone == 0, "위쪽 길에서 멀면 F로 넘어가지 않음")
 	# 드롭이 하트 장비면 하트 칸이 바뀌므로 비교 전에 치운다
 	sh.loot.clear()
-	var hearts_before := sh.hearts - 1
-	sh.hearts = hearts_before
+	var hearts_before := sh.life - 1
+	sh.life = hearts_before
 	main.hunter.position = sh.next_area().get_center()
 	main.interact()
 	_check(sh.zone == 1 and not sh.path_open and not sh.boss_spawned, "위쪽 길에서 F → 2구역 %s" % z2.name)
-	_check(sh.hearts == hearts_before and GameState.hunts_today == 1, "하트는 그대로, 같은 날 같은 사냥 (%d/%d, %d번)" % [sh.hearts, hearts_before, GameState.hunts_today])
+	_check(sh.life == hearts_before and GameState.hunts_today == 1, "체력은 그대로, 같은 날 같은 사냥 (%d/%d, %d번)" % [sh.life, hearts_before, GameState.hunts_today])
 	_check(1 in GameState.waypoints, "%s에 도착하면 웨이포인트가 켜짐" % z2.name)
 	_check(sh.slimes.size() == z2.count and sh.slimes[0].hp == z2.hp and sh.slimes[0].speed == z2.speed and sh.slimes[0].title == z2.monster, "2구역 몬스터: %s 체력 %d · 빠르기 %s" % [z2.monster, z2.hp, z2.speed])
 	# 금사리 (사용자 선택: 모래게 + 대장 금두꺼비, 입구에 "금사리(구터)" 회색 항아리 표지)
 	var crab: WildSlime = sh.slimes[0]
 	_check(crab.buried and crab.sheet.resource_path.ends_with("wild_sand_crab.png"), "모래게는 모래에 숨어 있음")
 	_check(sh.sign_node != null and z2.sign == "금사리(구터)", "금사리 입구에 마을 표지")
-	var hearts_c := sh.hearts
+	var hearts_c := sh.life
 	crab.position = main.hunter.feet() + Vector2(Config.WILD_BURROW_POP_DISTANCE + 20, 0)
 	sh.tick(0.01)
 	_check(crab.buried, "멀면 숨은 채로")
 	crab.position = main.hunter.feet() + Vector2(Config.WILD_BURROW_POP_DISTANCE - 10, 0)
 	sh.tick(0.01)
-	_check(not crab.buried and sh.hearts == hearts_c, "가까이 가면 모래에서 튀어나옴 (아직 안 부딪힘)")
+	_check(not crab.buried and sh.life == hearts_c, "가까이 가면 모래에서 튀어나옴 (아직 안 부딪힘)")
 	for i in z2.count:
 		var zw: WildSlime = sh.slimes[0]
 		zw.position = main.hunter.feet() + Vector2(0, -8 - Config.SWING_REACH)
@@ -913,7 +913,7 @@ func _ready() -> void:
 			sh.tick(Config.SWING_COOLDOWN)
 			sh.swing()
 			zw.position = main.hunter.feet() + Vector2(0, -8 - Config.SWING_REACH)
-	_check(sh.boss_spawned and sh.slimes.size() == 1 and sh.slimes[0].hp == z2.boss_hp, "2구역 대장 체력 %d" % z2.boss_hp)
+	_check(sh.boss_spawned and sh.slimes.size() == 1 and sh.slimes[0].hp == HunterSkills.monster_hp(1, z2.boss_hp), "2구역 대장 체력 %d (레벨 반영)" % sh.slimes[0].hp)
 	_check(sh.slimes[0].title == z2.boss_monster and not sh.slimes[0].buried and sh.slimes[0].sheet.resource_path.ends_with("wild_gold_toad_hd.png"), "금사리 대장은 %s" % z2.boss_monster)
 	sh.slimes[0].hp = 1
 	sh.slimes[0].position = main.hunter.feet() + Vector2(0, -8 - Config.SWING_REACH)
@@ -1034,10 +1034,10 @@ func _ready() -> void:
 	th.tick(Config.COMPANION_PULL_INTERVAL * 2)
 	th.tick(Config.COMPANION_PULL_TIME)
 	_check(pulled.hp == hp_before - 1 and pulled.position.distance_to(pc.position) <= Config.COMPANION_PULL_GAP + 1 and pulled.stunned(), "혀 당기기: 멀리 있는 몬스터를 끌어와 피해 1 + 멈춤")
-	var hearts_t := th.hearts
+	var hearts_t := th.life
 	pulled.position = main.hunter.feet()
 	th.tick(0.01)
-	_check(th.hearts == hearts_t, "멈춘 몬스터에 닿아도 다치지 않음")
+	_check(th.life == hearts_t, "멈춘 몬스터에 닿아도 다치지 않음")
 	pulled.tick(Config.COMPANION_PULL_STUN, main.hunter.feet())
 	_check(not pulled.stunned(), "%.0f초 뒤 다시 움직임" % Config.COMPANION_PULL_STUN)
 	main.leave_hunt()
@@ -1303,15 +1303,15 @@ func _ready() -> void:
 		o.position = d_hf + Vector2(0, 300)
 	d_lw.position = d_hf + Vector2(40, 0)
 	d_lw.ai_enabled = true
-	var d_h0 := d_dh.hearts
+	var d_h0 := d_dh.life
 	d_dh.tick(0.05)
 	var d_tg := d_lw.telegraph()
-	_check(not d_tg.is_empty() and d_tg.kind == &"lane" and d_dh.hearts == d_h0, "A. 가까이 오면 웅크리고 붉은 띠로 예고 (아직 안 맞음)")
+	_check(not d_tg.is_empty() and d_tg.kind == &"lane" and d_dh.life == d_h0, "A. 가까이 오면 웅크리고 붉은 띠로 예고 (아직 안 맞음)")
 	d_dh.swing(Vector2.RIGHT)
 	_check(not d_lw.telegraph().is_empty(), "A. 웅크리는 중엔 맞아도 달려들기가 멈추지 않음")
 	for i in 30:
 		d_dh.tick(1.0 / 30.0)
-	_check(d_dh.hearts == d_h0 - 1 and d_lw.recovering(), "A. 띠 위에 서 있으면 돌진에 맞고, 몬스터는 헐떡임 (하트 %d → %d)" % [d_h0, d_dh.hearts])
+	_check(d_dh.life == d_h0 - d_lw.damage and d_lw.recovering(), "A. 띠 위에 서 있으면 돌진에 맞고, 몬스터는 헐떡임 (하트 %d → %d)" % [d_h0, d_dh.life])
 	# 비켜서면 안 맞는다
 	d_dh._invulnerable = 0.0
 	d_lw.hp = 99
@@ -1321,11 +1321,11 @@ func _ready() -> void:
 			break
 	d_lw.position = main.hunter.feet() + Vector2(40, 0)
 	d_lw._lunge_dir = Vector2.LEFT
-	var d_h1 := d_dh.hearts
+	var d_h1 := d_dh.life
 	main.hunter.position += Vector2(0, 40)
 	for i in 25:
 		d_dh.tick(1.0 / 30.0)
-	_check(d_dh.hearts == d_h1, "A. 예고를 보고 옆으로 비키면 안 맞음")
+	_check(d_dh.life == d_h1, "A. 예고를 보고 옆으로 비키면 안 맞음")
 	main.leave_hunt()
 	# B. 금사리: 하트 -2, 무리로 튀어나옴
 	GameState.hunts_today = 0
@@ -1333,7 +1333,7 @@ func _ready() -> void:
 	var d_gh: HuntGround = main.hunt
 	d_gh.set_ai(false)
 	var d_z2d: Dictionary = Config.HUNT_ZONES[1]
-	_check(d_z2d.damage == 2 and d_gh.slimes[0].damage == 2 and d_gh.slimes[0].hp == d_z2d.hp and d_z2d.hp > Config.HUNT_ZONES[0].hp, "B. 금사리는 체력 %d · 하트 -%d" % [d_z2d.hp, d_z2d.damage])
+	_check(d_z2d.damage == 2 and d_gh.slimes[0].damage == HunterSkills.monster_damage(1, 2) and d_gh.slimes[0].hp == HunterSkills.monster_hp(1, d_z2d.hp) and d_z2d.hp > Config.HUNT_ZONES[0].hp, "B. 금사리는 체력 %d · 피해 %d" % [d_gh.slimes[0].hp, d_gh.slimes[0].damage])
 	_check(main.waypoint_option_text(&"zone_1").contains(d_z2d.advice), "B. 웨이포인트 메뉴에 권장 준비")
 	var d_gf: Vector2 = main.hunter.feet()
 	for o: WildSlime in d_gh.slimes:
@@ -1345,27 +1345,27 @@ func _ready() -> void:
 	d_pb.position = d_gf + Vector2(50 + Config.WILD_PACK_DISTANCE - 10, 0)
 	d_gh.tick(0.01)
 	_check(not d_pa.buried and not d_pb.buried and d_gh.slimes[2].buried, "B. 하나가 튀어나오면 근처 모래게도 무리로 튀어나옴 (먼 것은 그대로)")
-	var d_h2 := d_gh.hearts
+	var d_h2 := d_gh.life
 	d_pa.position = d_gf
 	d_gh.tick(0.01)
-	_check(d_gh.hearts == d_h2 - 2, "B. 모래게에 부딪히면 하트 -2")
+	_check(d_gh.life == d_h2 - d_pa.damage and d_pa.damage == HunterSkills.monster_damage(1, 2), "B. 모래게에 부딪히면 체력 -%d (하트 2 x 레벨)" % d_pa.damage)
 	# C. 금두꺼비 혀 채찍 + 금가루
 	d_gh._invulnerable = 0.0
-	d_gh.hearts = d_gh.max_hearts()
+	d_gh.life = d_gh.max_life()
 	for o: WildSlime in d_gh.slimes.duplicate():
 		o.hp = 1
 		d_gh._defeat(o)
 	var d_toad_b: WildSlime = d_gh._boss()
-	_check(d_toad_b != null and d_toad_b.pattern == &"tongue" and d_toad_b.hp == d_z2d.boss_hp, "C. 금두꺼비 대장 (혀 채찍, 체력 %d)" % d_z2d.boss_hp)
+	_check(d_toad_b != null and d_toad_b.pattern == &"tongue" and d_toad_b.hp == HunterSkills.monster_hp(1, d_z2d.boss_hp), "C. 금두꺼비 대장 (혀 채찍, 체력 %d)" % d_toad_b.hp)
 	d_toad_b.ai_enabled = true
 	d_toad_b._pattern_cd = 0.0
 	main.hunter.position = d_toad_b.position + Vector2(60, 0) - Vector2(0, main.hunter.feet().y - main.hunter.position.y)
-	var d_h3 := d_gh.hearts
+	var d_h3 := d_gh.life
 	d_gh.tick(0.02)
-	_check(not d_toad_b.telegraph().is_empty() and d_gh.hearts == d_h3, "C. 혀 채찍 예고 (직선 띠)")
+	_check(not d_toad_b.telegraph().is_empty() and d_gh.life == d_h3, "C. 혀 채찍 예고 (직선 띠)")
 	for i in int(Config.TONGUE_WINDUP * 30) + 3:
 		d_gh.tick(1.0 / 30.0)
-	_check(d_gh.hearts == d_h3 - d_z2d.damage and d_gh.dust.size() == 3, "C. 혀에 맞으면 하트 -%d, 지나간 자리에 금가루 3곳" % d_z2d.damage)
+	_check(d_gh.life == d_h3 - d_toad_b.damage and d_gh.dust.size() == 3, "C. 혀에 맞으면 체력 -%d, 지나간 자리에 금가루 3곳" % d_toad_b.damage)
 	main.hunter.position += d_gh.dust[0].at - main.hunter.feet()
 	d_gh.tick(0.01)
 	_check(is_equal_approx(main.hunter.slow_mult, Config.GOLD_DUST_SLOW), "C. 금가루를 밟으면 느려짐")
@@ -1384,7 +1384,7 @@ func _ready() -> void:
 	d_sb.ai_enabled = true
 	d_sb._pattern_cd = 0.0
 	main.hunter.position = d_sb.position + Vector2(0, 80)
-	var d_h4 := d_bh2.hearts
+	var d_h4 := d_bh2.life
 	d_bh2.tick(0.02)
 	_check(d_sb.airborne() and d_sb.telegraph().kind == &"circle", "C. 대장 슬라임이 뛰어올라 사냥꾼 발밑에 그림자 원")
 	var d_sb_hp := d_sb.hp
@@ -1395,7 +1395,7 @@ func _ready() -> void:
 	for i in int(Config.SLAM_AIR_TIME * 30) + 3:
 		d_bh2.tick(1.0 / 30.0)
 	var d_minions := d_bh2.slimes.filter(func(o: WildSlime) -> bool: return o.minion)
-	_check(d_bh2.hearts == d_h4 - 1 and d_minions.size() == Config.SLAM_MINIONS and d_sb.recovering(), "C. 쿵! 원 안이면 하트 -1, 새끼 %d마리, 대장은 헐떡임" % Config.SLAM_MINIONS)
+	_check(d_bh2.life == d_h4 - d_sb.damage and d_minions.size() == Config.SLAM_MINIONS and d_sb.recovering(), "C. 쿵! 원 안이면 하트 -1, 새끼 %d마리, 대장은 헐떡임" % Config.SLAM_MINIONS)
 	var d_drops_before := d_bh2.drops.size() + d_bh2.loot.size()
 	d_minions[0].hp = 1
 	d_bh2._defeat(d_minions[0])
@@ -1778,28 +1778,28 @@ func _ready() -> void:
 	sp_a.ai_enabled = true
 	sp_a._rest = 0.0
 	sp_a.position = main.hunter.feet() + Vector2(80, 0)
-	gh.hearts = 9
+	gh.life = 90
 	gh.tick(0.05)
 	_check(sp_a.in_air() and sp_a.airborne(), "사냥꾼이 다가오면 날아오름")
 
 	GameState.worn[&"hunter"].erase(&"weapon")  # 드롭으로 무기를 들었으면 사냥칼로 (이 아래는 칼 휘두르기 점검)
 	sp_a.position = main.hunter.feet() + Vector2(0, -8 - Config.SWING_REACH)
 	gh._cooldown = 0.0
-	_check(gh.swing(Vector2.UP) == 0 and sp_a.hp == g_z.hp, "나는 까마귀는 칼에 안 맞음")
+	_check(gh.swing(Vector2.UP) == 0 and sp_a.hp == sp_a.max_hp, "나는 까마귀는 칼에 안 맞음")
 	sp_a._fly = 0.0
 	gh.tick(0.05)
 	_check(sp_a._swoop >= 0.0 and not sp_a.telegraph().is_empty() and sp_a.telegraph().kind == &"circle", "맴돌다가 발밑에 그림자 원 예고")
-	var g_h0 := gh.hearts
+	var g_h0 := gh.life
 	for i in 60:
 		gh._invulnerable = 0.0 if i == 0 else gh._invulnerable
 		gh.tick(0.05)
 		if sp_a._rest > 0.0 and not sp_a.in_air():
 			break
-	_check(gh.hearts == g_h0 - g_z.damage, "원 안에 있으면 내려꽂기에 하트 -%d" % g_z.damage)
+	_check(gh.life == g_h0 - sp_a.damage, "원 안에 있으면 내려꽂기에 체력 -%d" % sp_a.damage)
 	_check(not sp_a.in_air() and sp_a._rest > 0.0, "내려앉아 낟알을 쫌 (칠 틈)")
 	gh._cooldown = 0.0
 	sp_a.position = main.hunter.feet() + Vector2(0, -8 - Config.SWING_REACH)
-	_check(gh.swing(Vector2.UP) == 1 and sp_a.hp == g_z.hp - 1, "앉은 까마귀는 칼에 맞음")
+	_check(gh.swing(Vector2.UP) == 1 and sp_a.hp == sp_a.max_hp - 1, "앉은 까마귀는 칼에 맞음")
 	_check(sp_a._rest <= Config.SWOOP_HIT_RECOVER, "맞으면 곧 다시 날아오름")
 	# 내려꽂기 원 밖이면 안 다침
 	sp_a._rest = 0.0
@@ -1809,20 +1809,20 @@ func _ready() -> void:
 	sp_a._fly = 0.0
 	gh.tick(0.05)
 	main.hunter.position += Vector2(0, 60)
-	var g_h1 := gh.hearts
+	var g_h1 := gh.life
 	for i in 40:
 		gh.tick(0.05)
-	_check(gh.hearts == g_h1, "비켜서면 내려꽂기에 안 맞음")
+	_check(gh.life == g_h1, "비켜서면 내려꽂기에 안 맞음")
 	# 대장 허수아비 장수: 짚단 셋 + 두 번에 한 번 까마귀 부르기
 	for o in gh.slimes.duplicate():
 		gh.slimes.erase(o)
 		o.queue_free()
 	var g_b := gh.spawn_boss()
-	_check(g_b.title == "허수아비 장수" and g_b.hp == g_z.boss_hp and not g_b.flyer, "대장 허수아비 장수 체력 %d" % g_z.boss_hp)
+	_check(g_b.title == "허수아비 장수" and g_b.hp == HunterSkills.monster_hp(2, g_z.boss_hp) and not g_b.flyer, "대장 허수아비 장수 체력 %d" % g_b.hp)
 	g_b.ai_enabled = true
 	g_b._pattern_cd = 0.0
 	g_b.position = main.hunter.feet() + Vector2(0, -100)
-	gh.hearts = 9
+	gh.life = 90
 	gh._invulnerable = 0.0
 	gh.tick(0.05)
 	_check(g_b.telegraphs().size() == Config.STRAW_BALES, "짚단 %d개 예고" % Config.STRAW_BALES)
@@ -1830,7 +1830,7 @@ func _ready() -> void:
 		gh.tick(0.05)
 		if g_b.telegraphs().is_empty():
 			break
-	_check(gh.hearts < 9, "발밑 짚단에 맞음")
+	_check(gh.life < 90, "발밑 짚단에 맞음")
 	g_b._recover = 0.0
 	g_b._pattern_cd = 0.0
 	for i in 80:
@@ -1920,7 +1920,7 @@ func _ready() -> void:
 	dh.companion_ai = false
 	_check(dh.zone == d_zi and dh.slimes.size() == d_z.count, "도마리에 들어옴 (고목 그루터기 %d)" % d_z.count)
 	var d_s: WildSlime = dh.slimes[0]
-	_check(d_s.buried and d_s.disguise and d_s.hp == d_z.hp, "고목 그루터기는 그루터기인 척 숨어 있음 (체력 %d)" % d_z.hp)
+	_check(d_s.buried and d_s.disguise and d_s.hp == HunterSkills.monster_hp(3, d_z.hp), "고목 그루터기는 그루터기인 척 숨어 있음 (체력 %d)" % d_s.hp)
 	d_s.position = main.hunter.feet() + Vector2(Config.WILD_BURROW_POP_DISTANCE - 10, 0)
 	dh.tick(0.01)
 	_check(not d_s.buried, "가까이 가면 일어남")
@@ -1936,7 +1936,7 @@ func _ready() -> void:
 		o.queue_free()
 	dh.spawn_boss()
 	var d_bs := dh.slimes.filter(func(o: WildSlime) -> bool: return o.boss)
-	_check(d_bs.size() == 2 and d_bs[0].title == "천하대장군" and d_bs[1].title == "지하여장군" and d_bs[0].pattern == &"log" and d_bs[1].pattern == &"slam" and d_bs[0].hp == d_z.boss_hp, "장승 한 쌍 (천하대장군 통나무 · 지하여장군 내려찍기, 체력 %d씩)" % d_z.boss_hp)
+	_check(d_bs.size() == 2 and d_bs[0].title == "천하대장군" and d_bs[1].title == "지하여장군" and d_bs[0].pattern == &"log" and d_bs[1].pattern == &"slam" and d_bs[0].hp == HunterSkills.monster_hp(3, d_z.boss_hp), "장승 한 쌍 (천하대장군 통나무 · 지하여장군 내려찍기, 체력 %d씩)" % d_bs[0].hp)
 	var d_ch: WildSlime = d_bs[0]
 	var d_ji: WildSlime = d_bs[1]
 	d_ji.position = Vector2(-500, -500)
@@ -1944,32 +1944,32 @@ func _ready() -> void:
 	d_ch._pattern_cd = 0.0
 	main.hunter.position = dh.map.pixel_size() / 2.0 + Vector2(0, 60)
 	d_ch.position = main.hunter.feet() + Vector2(0, -120)
-	dh.hearts = 10
+	dh.life = 100
 	dh._invulnerable = 0.0
 	dh.tick(0.05)
 	var d_tel := d_ch.telegraph()
 	_check(d_tel.get("kind", &"") == &"lane" and d_tel.from.distance_to(d_tel.to) > 150.0, "천하대장군 통나무 굴리기 긴 띠 예고")
 	for i in 40:
 		dh.tick(0.05)
-	_check(dh.hearts == 10 - d_z.damage, "띠 위에 서 있으면 굴러온 통나무에 치임")
+	_check(dh.life == 100 - d_ch.damage, "띠 위에 서 있으면 굴러온 통나무에 치임")
 	d_ch._recover = 0.0
 	d_ch._pattern_cd = 0.0
-	dh.hearts = 10
+	dh.life = 100
 	dh._invulnerable = 0.0
 	dh.tick(0.05)
 	main.hunter.position += Vector2(60, 0)
 	for i in 40:
 		dh.tick(0.05)
-	_check(dh.hearts == 10, "옆으로 비키면 통나무에 안 맞음")
+	_check(dh.life == 100, "옆으로 비키면 통나무에 안 맞음")
 	d_ch.ai_enabled = false
 	# 대장은 몸에 닿기만 해선 안 다침 (예고 패턴으로만)
 	d_ch._recover = 1.0
 	d_ch.position = main.hunter.feet()
-	dh.hearts = 10
+	dh.life = 100
 	dh._invulnerable = 0.0
 	for i in 5:
 		dh.tick(0.05)
-	_check(dh.hearts == 10, "대장 몸에 닿기만 해선 하트가 안 줆")
+	_check(dh.life == 100, "대장 몸에 닿기만 해선 하트가 안 줆")
 	d_ch.position = main.hunter.feet() + Vector2(0, -120)
 	# 하나만 쓰러뜨리면 보상 없음, 둘 다 쓰러뜨리면 대장 알 (확률 고정)
 	HuntGround.egg_roll = 0.0
@@ -2187,12 +2187,12 @@ func _ready() -> void:
 	b_w.position = b_feet + Vector2(16, 0)
 	b_w.ai_enabled = true
 	bjh._invulnerable = 0.0
-	var b_h0 := bjh.hearts
+	var b_h0 := bjh.life
 	bjh.tick(0.02)
 	_check(b_w._burst >= 0.0, "호롱 불빛에 들어온 도깨비불이 부풂 (예고)")
 	for i in int(b_z.windup * 30) + 3:
 		bjh.tick(1.0 / 30.0)
-	_check(bjh.hearts == b_h0 - b_z.damage and b_w._recover > 0.0, "불똥에 다침 (하트 -%d), 쪼그라든 동안 칠 틈" % b_z.damage)
+	_check(bjh.life == b_h0 - b_w.damage and b_w._recover > 0.0, "불똥에 다침 (체력 -%d), 쪼그라든 동안 칠 틈" % b_w.damage)
 	b_w.ai_enabled = false
 	# 유령 막차: 전조등 띠 예고 → 도로 따라 돌진, 닿으면 다침. 대장은 어둠에서도 맞음
 	bjh.lamps.assign(b_lamps)
@@ -2200,17 +2200,18 @@ func _ready() -> void:
 		bjh.slimes.erase(o)
 		o.queue_free()
 	var b_bus: WildSlime = bjh.spawn_boss()
-	_check(b_bus.boss_frame == Vector2i(96, 48) and b_bus.pattern == &"bus" and b_bus.hp == b_z.boss_hp and bjh.hittable(b_bus), "유령 막차 (96x48, 체력 %d, 어둠에서도 맞음)" % b_z.boss_hp)
+	_check(b_bus.boss_frame == Vector2i(96, 48) and b_bus.pattern == &"bus" and b_bus.hp == HunterSkills.monster_hp(4, b_z.boss_hp) and bjh.hittable(b_bus), "유령 막차 (96x48, 체력 %d, 어둠에서도 맞음)" % b_bus.hp)
 	b_bus.position = b_feet + Vector2(150, 0)
 	b_bus.ai_enabled = true
 	b_bus._pattern_cd = 0.0
 	bjh._invulnerable = 0.0
-	b_h0 = bjh.hearts
+	bjh.life = 200
+	b_h0 = bjh.life
 	bjh.tick(0.02)
 	_check(b_bus._bus_aim >= 0.0 and b_bus._bus_to.y == b_bus._bus_from.y, "막차가 전조등으로 가로 띠를 비춤 (예고)")
 	for i in int((Config.BUS_WINDUP + Config.BUS_TIME) * 30) + 5:
 		bjh.tick(1.0 / 30.0)
-	_check(bjh.hearts < b_h0 and b_bus._runs == 1, "막차 돌진에 치임 (하트 %d → %d)" % [b_h0, bjh.hearts])
+	_check(bjh.life < b_h0 and b_bus._runs == 1, "막차 돌진에 치임 (체력 %d → %d)" % [b_h0, bjh.life])
 	b_bus.ai_enabled = false
 	main.leave_hunt()
 
@@ -2350,17 +2351,17 @@ func _ready() -> void:
 		o.queue_free()
 	m_feet = main.hunter.feet()
 	var m_boss: WildSlime = mh.spawn_boss()
-	_check(m_boss.pattern == &"tiger" and m_boss.hp == m_z.boss_hp and m_boss.title == "산군 백호", "산군 백호 (체력 %d)" % m_z.boss_hp)
+	_check(m_boss.pattern == &"tiger" and m_boss.hp == HunterSkills.monster_hp(5, m_z.boss_hp) and m_boss.title == "산군 백호", "산군 백호 (체력 %d)" % m_boss.hp)
 	m_boss.position = m_feet + Vector2(120, 0)
 	m_boss.ai_enabled = true
 	m_boss._pattern_cd = 0.0
 	mh._invulnerable = 0.0
-	var m_h0 := mh.hearts
+	var m_h0 := mh.life
 	mh.tick(0.02)
 	_check(m_boss._air_t >= 0.0 and m_boss.telegraph().kind == &"circle", "백호 도약 (착지 원 예고)")
 	for i in int(Config.SLAM_AIR_TIME * 30) + 4:
 		mh.tick(1.0 / 30.0)
-	_check(mh.hearts == m_h0 - m_z.damage and mh.slimes.size() == 1, "착지에 다침 (하트 -%d), 새끼는 안 나옴" % m_z.damage)
+	_check(mh.life == m_h0 - m_boss.damage and mh.slimes.size() == 1, "착지에 다침 (체력 -%d), 새끼는 안 나옴" % m_boss.damage)
 	m_boss._recover = 0.0
 	m_boss._pattern_cd = 0.0
 	m_boss.position = main.hunter.feet() + Vector2(60, 0)
@@ -2461,7 +2462,7 @@ func _ready() -> void:
 	_check(GameState.money >= m_m0 + 3 * Config.HEN_EGG_PRICE and GameState.displayed_hen_eggs == 0, "진열한 달걀이 밤사이 팔림")
 	GameState.hunts_today = 0
 	main.enter_hunt(null, 0)
-	_check(main.hunt.lunch and GameState.lunches == 0 and main.hunt.hearts == main.hunt.max_hearts() and main.hunt.max_hearts() == Config.HUNTER_HEARTS + Wearables.bonus_hearts(&"hunter") + Config.LUNCH_HEARTS, "사냥 도시락: 들어갈 때 먹고 하트 +%d" % Config.LUNCH_HEARTS)
+	_check(main.hunt.lunch and GameState.lunches == 0 and main.hunt.life == main.hunt.max_life() and main.hunt.max_life() == Config.HUNTER_HP + Config.HP_PER_LEVEL * (GameState.hunter_level - 1) + Config.HP_PER_HEART * Wearables.bonus_hearts(&"hunter") + Config.LUNCH_HP, "사냥 도시락: 들어갈 때 먹고 체력 +%d" % Config.LUNCH_HP)
 	main.leave_hunt()
 
 	# 38) 테스트용 시작 지점 (2026-09-29 사용자: "매번 처음부터 시작하는게 조금 어려운거같아")
@@ -2846,11 +2847,11 @@ func _pace_checks() -> void:
 	_check(m.hunter.position.distance_to(p0) >= Config.DASH_DISTANCE * 0.8 and not m.hunter.dashing, "구르면 휙 움직임 (%.0fpx)" % m.hunter.position.distance_to(p0))
 	# 구르는 동안은 몸에 부딪혀도 안 다침
 	h.dash_cd = 0.0
-	var hearts0 := h.hearts
+	var hearts0 := h.life
 	h.dash(Vector2.RIGHT)
 	h.slimes[0].position = m.hunter.feet()
 	h.tick(1.0 / 30.0)
-	_check(h.hearts == hearts0, "구르는 동안은 안 맞음")
+	_check(h.life == hearts0, "구르는 동안은 안 맞음")
 	for i in 40:
 		h.tick(1.0 / 30.0)
 	h.slimes[0].position = feet + Vector2(0, 300)
@@ -3038,6 +3039,13 @@ func _hunter_skill_checks() -> void:
 	h.swing(Vector2.RIGHT)
 	_check(h.shots.size() == 5, "부채살 5단계: 화살 5발 (%d)" % h.shots.size())
 	h.shots.clear()
+	# 부채살 4발 (3 · 4단계): 가운데 한 발이 늘 있어야 바로 앞 몬스터를 맞힘 (2026-10-02 고침)
+	h._cooldown = 0.0
+	GameState.skills[&"spread"] = 4
+	h.swing(Vector2.RIGHT)
+	_check(h.shots.size() == 4 and h.shots.any(func(sh: Dictionary) -> bool: return sh.dir.angle_to(Vector2.RIGHT) == 0.0 or absf(sh.dir.angle()) < 0.001), "부채살 4발에도 가운데 화살이 있음")
+	h.shots.clear()
+	GameState.skills[&"spread"] = 5
 	# 화살비: 원 안 몬스터가 세 번 맞음
 	var feet: Vector2 = m.hunter.feet()
 	for o: WildSlime in h.slimes:
@@ -3130,13 +3138,13 @@ func _hunter_skill_checks() -> void:
 	h.set_process(false)
 	h.set_ai(false)
 	_check(h.companion != null and h.companion2 != null and c2.process_mode == Node.PROCESS_MODE_DISABLED, "둘이 함께: 동행 둘")
-	var hearts: int = h.hearts
+	var hearts: int = h.life
 	h._invulnerable = 0.0
 	h._hurt(m.hunter.feet() + Vector2(10, 0))
-	_check(h.hearts == hearts and h.guard_cd > 0.0, "크리처 방패: 첫 한 번은 동행이 대신 맞음")
+	_check(h.life == hearts and h.guard_cd > 0.0, "크리처 방패: 첫 한 번은 동행이 대신 맞음")
 	h._invulnerable = 0.0
 	h._hurt(m.hunter.feet() + Vector2(10, 0))
-	_check(h.hearts == hearts - 1, "방패 쿨 동안엔 그대로 맞음")
+	_check(h.life == hearts - 1, "방패 쿨 동안엔 그대로 맞음")
 	feet = m.hunter.feet()
 	for o: WildSlime in h.slimes:
 		o.position = feet + Vector2(-400, 0)
@@ -3219,12 +3227,12 @@ func _yeokdong_checks() -> void:
 	l.tick(1.0 / 30.0, feet)
 	var tg := l.telegraph()
 	_check(l.attacking() and not tg.is_empty() and tg.from.distance_to(tg.to) > 120.0, "창기병: %d px 밖에서 긴 띠 예고 (돌격 %d px)" % [100, roundi(tg.from.distance_to(tg.to)) if not tg.is_empty() else 0])
-	var hearts0 := h.hearts
+	var hearts0 := h.life
 	for i in 90:
 		h.tick(1.0 / 30.0)
 		if l.recovering():
 			break
-	_check(h.hearts == hearts0 - z.damage and l.recovering() and l.position.x < feet.x, "돌격에 받히면 하트 -%d, 지나쳐서 돌아서는 동안이 칠 틈" % z.damage)
+	_check(h.life == hearts0 - l.damage and l.recovering() and l.position.x < feet.x, "돌격에 받히면 체력 -%d, 지나쳐서 돌아서는 동안이 칠 틈" % l.damage)
 	l.queue_free()
 	h.slimes.erase(l)
 	for o: WildSlime in h.slimes.duplicate():
@@ -3238,8 +3246,8 @@ func _yeokdong_checks() -> void:
 	b._pattern_cd = 0.0
 	b.tick(1.0 / 30.0, m.hunter.feet())
 	_check(b._charges_left == Config.GENERAL_CHARGES and b._bus_aim > 0.0 and not b.telegraph().is_empty(), "역마 장군: 창 돌격 %d번 예고" % Config.GENERAL_CHARGES)
-	h.hearts = 20  # 돌격 여러 번에 받혀도 쓰러지지 않게 (피해 3)
-	var hearts1 := h.hearts
+	h.life = 200  # 돌격 여러 번에 받혀도 쓰러지지 않게
+	var hearts1 := h.life
 	var charges_seen := 0
 	var last := b._charges_left
 	for i in 300:
@@ -3249,7 +3257,7 @@ func _yeokdong_checks() -> void:
 			last = b._charges_left
 		if b.recovering():
 			break
-	_check(charges_seen == Config.GENERAL_CHARGES and b.recovering() and h.hearts < hearts1, "꺾이는 돌격 %d번 뒤 헐떡임, 받히면 다침 (하트 %d → %d)" % [charges_seen, hearts1, h.hearts])
+	_check(charges_seen == Config.GENERAL_CHARGES and b.recovering() and h.life < hearts1, "꺾이는 돌격 %d번 뒤 헐떡임, 받히면 다침 (체력 %d → %d)" % [charges_seen, hearts1, h.life])
 	# 파발 나팔: 창기병이 원래 크기로 달려옴
 	h._on_called(b.position)
 	var calls := h.slimes.filter(func(o: WildSlime) -> bool: return o.minion)
@@ -3349,13 +3357,13 @@ func _gonjiam_checks() -> void:
 	_check(not back.watched and back.position.x > feet.x - 80.0 + 10.0, "등 뒤 악귀는 걸어서 다가옴 (%d px)" % roundi(back.position.x - (feet.x - 80.0)))
 	# 등 뒤에서 붙으면 팔을 치켜들고 내려찍음
 	h._invulnerable = 0.0
-	h.hearts = 20
-	var hearts0 := h.hearts
+	h.life = 200
+	var hearts0 := h.life
 	for i in 150:
 		h.tick(1.0 / 30.0)
-		if h.hearts < hearts0:
+		if h.life < hearts0:
 			break
-	_check(h.hearts == hearts0 - z.damage, "등 뒤 악귀가 둘레를 내려찍음 (하트 -%d)" % z.damage)
+	_check(h.life == hearts0 - back.damage, "등 뒤 악귀가 둘레를 내려찍음 (체력 -%d)" % back.damage)
 	# 아기 악귀 겁주기: 맞은 악귀는 달아남
 	h.companion_attack(front, h.companion)
 	_check(front._fear > 0.0 and not front.gazed_frozen(), "겁먹은 악귀는 바라봐도 달아남")
@@ -3390,13 +3398,13 @@ func _gonjiam_checks() -> void:
 	var pillars := b.telegraphs().filter(func(t: Dictionary) -> bool: return t.get("pillar", false))
 	_check(pillars.size() == Config.ARCH_PILLARS, "다음 차례: 지옥불 기둥 %d" % Config.ARCH_PILLARS)
 	h._invulnerable = 0.0
-	h.hearts = 20
-	var hearts1 := h.hearts
+	h.life = 200
+	var hearts1 := h.life
 	for i in 60:
 		h.tick(1.0 / 30.0)
-		if h.hearts < hearts1:
+		if h.life < hearts1:
 			break
-	_check(h.hearts == hearts1 - z.damage, "발밑 지옥불 기둥에 휩싸이면 하트 -%d" % z.damage)
+	_check(h.life == hearts1 - b.damage, "발밑 지옥불 기둥에 휩싸이면 체력 -%d" % b.damage)
 	b.hp = b.max_hp / 2 - 1
 	b._bales.clear()
 	b._recover = 0.0
@@ -3476,9 +3484,9 @@ func _naru_checks() -> void:
 	var h: HuntGround = m.hunt
 	_check(h.stew and GameState.stews == 0, "사냥에 들어갈 때 매운탕을 먹음")
 	h.stew = false
-	hearts0 = h.max_hearts()
+	hearts0 = h.max_life()
 	h.stew = true
-	_check(h.max_hearts() == hearts0 + Config.STEW_HEARTS, "매운탕: 하트 칸 +%d" % Config.STEW_HEARTS)
+	_check(h.max_life() == hearts0 + Config.STEW_HP, "매운탕: 최대 체력 +%d" % Config.STEW_HP)
 	m.leave_hunt()
 	# 입양: 뱃사공도 받아 줌
 	_check(Expedition.villager_open(&"ferryman") and Config.ADOPT_SPOTS[&"ferryman"].size() == 4, "뱃사공도 크리처 입양을 받음")

@@ -15,7 +15,7 @@ const ELEMENT_EFFECTS := {&"water": "느려짐", &"earth": "잠깐 멈춤", &"fi
 
 ## who: 누가 입는지 (&"farmer" / &"hunter"). speed: 걷기 배율. sow_reach: 씨앗 뿌리는 칸 수.
 ## from: &"hunt" 면 공급함에서 팔지 않고 사냥터에서만 떨어진다. set: 세트 id (SETS).
-## hearts: 사냥터 하트 +. swing_radius: 휘두르기 반지름 (px, 큰 값 하나만).
+## hearts: 사냥터 최대 체력 + (1 = Config.HP_PER_HEART, 2026-10-02 하트 → 체력 숫자). swing_radius: 휘두르기 반지름 (px, 큰 값 하나만).
 const ITEMS := {
 	&"straw_hat": {"name": "밀짚모자", "who": &"farmer", "slot": &"hat", "price": 80, "effect": "꾸미기",
 		"sheet": preload("res://assets/wear/straw_hat.png")},
@@ -28,7 +28,7 @@ const ITEMS := {
 	&"hiking_shoes": {"name": "등산화", "who": &"hunter", "slot": &"shoes", "price": 150, "effect": "걷기 +15%", "speed": 1.15,
 		"sheet": preload("res://assets/wear/hiking_shoes.png")},
 	# 사냥터 드롭 숲 공터 세트 (2026-09-27 결정 A + 드롭표). 판타지풍, 디아블로2처럼 세트 장비는 초록 이름.
-	&"acorn_helm": {"name": "도토리 투구", "who": &"hunter", "slot": &"hat", "from": &"hunt", "set": &"forest", "effect": "하트 +1", "hearts": 1,
+	&"acorn_helm": {"name": "도토리 투구", "who": &"hunter", "slot": &"hat", "from": &"hunt", "set": &"forest", "effect": "체력 +10", "hearts": 1,
 		"sheet": preload("res://assets/wear/acorn_helm.png")},
 	&"forest_cape": {"name": "숲지기 망토", "who": &"hunter", "slot": &"clothes", "from": &"hunt", "set": &"forest", "effect": "휘두르기 범위 넓게", "swing_radius": 24.0,
 		"sheet": preload("res://assets/wear/forest_cape.png")},
@@ -82,7 +82,7 @@ const ITEMS := {
 }
 
 ## 옵션 (디아블로2 접두·접미). 첫 조각은 효과가 이미 있는 것만. 수치는 전부 임시.
-## stat: hearts 하트 + · speed 걷기 +% · swing 휘두르기 반지름 + · money 돈 드롭 +% · find 드롭 확률 +%p
+## stat: hearts 최대 체력 + (값 x HP_PER_HEART) · speed 걷기 +% · swing 휘두르기 반지름 + · money 돈 드롭 +% · find 드롭 확률 +%p
 ## prefix: 마법 이름 앞말, suffix: 옵션이 둘일 때 맨 앞에 붙는 말
 ## who: 그 옵션이 붙는 장비 주인 (&"" = 둘 다). 사냥터 장비는 사냥꾼 것이라 농부 옵션은 대장간 제작품에만 붙는다.
 ## sow 씨앗 뿌리는 칸 + · reach 괭이 · 물뿌리개 앞 칸 + (2026-09-29 대장간 제작, 농부용)
@@ -106,7 +106,7 @@ const RARITIES: Array[StringName] = [&"normal", &"magic", &"rare"]
 
 ## 세트: 조각을 모두 입으면 보너스 (디아블로2 세트 장비처럼)
 const SETS := {
-	&"forest": {"name": "숲 공터 세트", "pieces": [&"acorn_helm", &"forest_cape", &"feather_boots"], "effect": "하트 +1 더", "hearts": 1},
+	&"forest": {"name": "숲 공터 세트", "pieces": [&"acorn_helm", &"forest_cape", &"feather_boots"], "effect": "체력 +10 더", "hearts": 1},
 }
 
 
@@ -204,7 +204,7 @@ static func is_rolled(id: StringName) -> bool:
 static func affix_line(a: Dictionary) -> String:
 	match a.stat:
 		&"hearts":
-			return "하트 +%d" % a.value
+			return "체력 +%d" % (a.value * Config.HP_PER_HEART)
 		&"speed":
 			return "걷기 +%d%%" % a.value
 		&"swing":
@@ -442,7 +442,7 @@ static func set_complete(set_id: StringName, who: StringName) -> bool:
 	return true
 
 
-## 입은 장비와 완성한 세트가 더하는 사냥터 하트
+## 입은 장비와 완성한 세트가 더하는 사냥터 체력 (하트 단위, x Config.HP_PER_HEART)
 static func bonus_hearts(who: StringName) -> int:
 	var n := 0
 	for id in worn_by(who):

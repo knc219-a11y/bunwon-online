@@ -51,7 +51,7 @@ var _stun := 0.0
 ## 느려진 남은 시간 (물의 지팡이). 그동안 움직임 · 예고 · 공격이 Config.STAFF_SLOW_MULT 배로 흐른다.
 var _slow := 0.0
 
-## 부딪히면 잃는 하트 · 맞았을 때 밀려나는 거리 · 달려들기 예고 시간 (구역마다, Config.HUNT_ZONES)
+## 부딪히면 잃는 체력 (구역 damage 는 옛 하트 단위, 레벨을 곱해 체력으로) · 맞았을 때 밀려나는 거리 · 달려들기 예고 시간 (구역마다, Config.HUNT_ZONES)
 var damage := 1
 var knockback := 14.0
 var windup_time := 0.6
@@ -103,6 +103,8 @@ var wisp := false
 var lit := true
 ## 부푸는 예고 남은 시간 (-1 = 아님)
 var _burst := -1.0
+## 뿔 악귀 두 번째 내려찍기 중 (2026-10-02 3~4막 난이도: 한 번 찍고 곧바로 한 걸음 다가와 또 찍음)
+var _second := false
 ## 유령 막차 (번천 대장 bus): 예고 남은 시간(-1 = 아님) → 돌진 진행(0~1, -1 = 아님), 돌진 길, 돌진 횟수 (두 번에 한 번 승객)
 var _bus_aim := -1.0
 var _bus_t := -1.0
@@ -185,13 +187,14 @@ func setup_zone(zone: int) -> void:
 	var z: Dictionary = Config.HUNT_ZONES[zone]
 	title = z.monster
 	speed = z.speed
-	hp = z.hp
-	max_hp = z.hp
+	# 몬스터 레벨 (2026-10-02 체력 숫자): 구역 몬스터 레벨이 높을수록 체력 · 피해가 오른다
+	hp = HunterSkills.monster_hp(zone, z.hp)
+	max_hp = hp
 	_tint = z.monster_tint
 	sheet = load(z.sheet)
 	buried = z.burrow
 	disguise = z.get("disguise", false)
-	damage = z.get("damage", 1)
+	damage = HunterSkills.monster_damage(zone, z.get("damage", 1))
 	knockback = z.get("knockback", 14.0)
 	windup_time = z.get("windup", 0.6)
 	flyer = z.get("flyer", false)
@@ -212,7 +215,7 @@ func setup_zone(zone: int) -> void:
 ## 대장으로 만든다 (트리에 넣기 전후 모두 가능)
 func make_boss(zone := 0) -> void:
 	boss = true
-	hp = Config.HUNT_ZONES[zone].boss_hp
+	hp = HunterSkills.monster_hp(zone, Config.HUNT_ZONES[zone].boss_hp)
 	max_hp = hp
 	var z: Dictionary = Config.HUNT_ZONES[zone]
 	title = z.boss_monster
@@ -221,7 +224,7 @@ func make_boss(zone := 0) -> void:
 	_tint = z.boss_tint
 	buried = false
 	flyer = false
-	damage = z.get("damage", 1)
+	damage = HunterSkills.monster_damage(zone, z.get("damage", 1))
 	knockback = z.get("knockback", 14.0)
 	pattern = z.get("boss_pattern", &"")
 	wisp = false
@@ -283,6 +286,7 @@ func scare(seconds: float) -> void:
 	_fear = maxf(_fear, seconds)
 	_windup = -1.0
 	_burst = -1.0
+	_second = false
 	_hop_t = -1.0
 
 
@@ -415,7 +419,7 @@ func _telegraph_one() -> Dictionary:
 	if _log_aim >= 0.0:
 		return {kind = &"lane", from = _log_from, to = _log_to, width = Config.LOG_WIDTH, progress = 1.0 - _log_aim / Config.LOG_WINDUP}
 	if _burst >= 0.0:
-		return {kind = &"circle", at = position, radius = Config.DEMON_SLAM_RADIUS if demon else Config.WISP_BURST_RADIUS, progress = 1.0 - _burst / windup_time}
+		return {kind = &"circle", at = position, radius = Config.DEMON_SLAM_RADIUS if demon else Config.WISP_BURST_RADIUS, progress = 1.0 - _burst / (Config.DEMON_SECOND_WINDUP if _second else windup_time)}
 	if _roar >= 0.0:
 		return {kind = &"circle", at = position, radius = Config.TIGER_ROAR_RADIUS, progress = 1.0 - _roar / Config.TIGER_ROAR_WINDUP, roar = true}
 	if _bus_aim >= 0.0 and pattern == &"general":
@@ -696,6 +700,13 @@ func _tick_attack(delta: float, target: Vector2) -> bool:
 		_burst -= delta
 		if _burst < 0.0:
 			burst.emit(position)
+			if demon and not _second:
+				# 둘째 내려찍기: 사냥꾼 쪽으로 한 걸음 다가와 짧은 예고로 한 번 더 (바라보면 이것도 얼어붙음)
+				_second = true
+				_burst = Config.DEMON_SECOND_WINDUP
+				position = _stand(position.move_toward(target, Config.DEMON_SECOND_STEP))
+				return true
+			_second = false
 			_recover = Config.DEMON_RECOVER if demon else Config.WISP_RECOVER
 			_lunge_cd = Config.DEMON_COOLDOWN if demon else Config.WISP_COOLDOWN
 		return true

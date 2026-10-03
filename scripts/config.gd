@@ -112,8 +112,11 @@ const FIRST_CREATURE_MIN_RADIUS := 2
 const HUNTS_PER_DAY := 1
 
 ## 사냥터 첫 조각 (2026-09-27 결정 A. 실시간 한 화면). 값은 전부 임시.
-## 사냥꾼 하트 수, 야생 슬라임 수와 맞아야 쓰러지는 횟수
-const HUNTER_HEARTS := 5
+## 사냥꾼 체력 (2026-10-02 사용자: 하트 대신 "일반 체력방식"). 옛 하트 1 = 체력 HP_PER_HEART.
+## 최대 체력 = HUNTER_HP + 레벨마다 HP_PER_LEVEL + 장비 · 세트 (하트 옵션 1 = HP_PER_HEART) + 도시락 · 매운탕
+const HP_PER_HEART := 10
+const HUNTER_HP := 50
+const HP_PER_LEVEL := 2
 ## 1구역 분원농협 야생 슬라임 수. 넓은 맵(창고 마당)이 되며 3 → 7 (2026-09-28, 임시)
 const WILD_SLIME_COUNT := 7
 const WILD_SLIME_HP := 2
@@ -186,13 +189,14 @@ const BOW_VOLLEY_COOLDOWN := 1.6
 
 ## 사냥꾼 레벨 · 스킬 (2026-10-02 사용자 선택: 디아2식 사냥꾼 레벨 + 스킬 포인트). 값은 전부 임시.
 ## 경험치: 처치마다 KILL_XP_BASE x KILL_XP_GROWTH^구역, 대장은 x BOSS_XP_MULT, 대장을 처음 잡으면 x FIRST_BOSS_XP_MULT 를 더.
-## 다음 레벨까지 = XP_BASE x Lv^XP_EXP (어림: 2일 Lv5 · 20일 Lv11 · 70일 Lv21 · 130일 Lv30 안팎, 끝판에서 LEVEL_CAP).
+## 다음 레벨까지 = XP_BASE x Lv^XP_EXP. 2026-10-02 3~4막 난이도 (사용자 A+C 추천 → 체력 숫자로 이어짐): 1.9 → 2.1 로 늦춰
+## 구역에 도착할 때 레벨이 그 구역 몬스터 레벨쯤 (봇: 40일 밀목 Lv 14~15 · 60일 역동 Lv 18 · 곤지암 Lv 21 안팎).
 const KILL_XP_BASE := 4.0
 const KILL_XP_GROWTH := 1.32
 const BOSS_XP_MULT := 10
 const FIRST_BOSS_XP_MULT := 60
 const XP_BASE := 12.0
-const XP_EXP := 1.9
+const XP_EXP := 2.1
 const LEVEL_CAP := 50
 ## 디아2식 레벨 차 벌칙: 사냥꾼 레벨이 구역 몬스터 레벨 + XP_GAP_FREE 를 넘으면 한 레벨마다 XP_GAP_STEP 씩 줄어든다 (최저 XP_GAP_MIN)
 const XP_GAP_FREE := 5
@@ -200,6 +204,12 @@ const XP_GAP_STEP := 0.25
 const XP_GAP_MIN := 0.05
 ## 구역 몬스터 레벨 (HUNT_ZONES 순서, 모자라면 마지막 + 3씩)
 const ZONE_MONSTER_LEVEL: Array[int] = [1, 3, 6, 9, 12, 15, 18, 21, 24, 27]
+## 몬스터 레벨 → 체력 · 피해 (2026-10-02 체력 숫자 + 몬스터 레벨 반영, 임시). 몬스터 Lv 이 MON_LV_BASE 를 넘는 만큼
+## 체력 MON_HP_PER_LV · 피해 MON_DMG_PER_LV 씩 오른다 (1 · 2막은 그대로, 3막부터: 번천 x1.27 · 밀목 x1.54 · 역동 x1.81 · 곤지암 x2.08 체력).
+## 처음엔 Lv 1 부터 올렸더니 봇 120일에서 도마리 근거리가 한 번에 체력 67 · 19번 중 11번 쓰러짐 → 2막까지는 손대지 않음.
+const MON_LV_BASE := 9
+const MON_HP_PER_LV := 0.09
+const MON_DMG_PER_LV := 0.05
 ## 막 대장 (막의 두 번째 구역 대장: 금사리 · 도마리 · 밀목) 을 처음 잡으면 스킬 포인트 하나 더 (디아2 퀘스트 보상처럼)
 const ACT_BOSS_SKILL_POINT := 1
 ## 스킬 값 (B 무기 트리 셋 + 조련, 단계마다 per). 전부 임시.
@@ -388,8 +398,8 @@ const HUNT_LOOT_CHANCE := 0.2
 const HUNT_LOOT_WEIGHTS := {&"money": 40, &"potion": 25, &"junk": 20, &"gear": 15}
 const HUNT_MONEY_MIN := 10
 const HUNT_MONEY_MAX := 30
-## 빨간 물약: 1 키로 마시면 하트 회복
-const POTION_HEAL := 1
+## 빨간 물약: 1 키로 마시면 체력 회복 (체력 숫자로 바꾸며 하트 1 → 30, 임시)
+const POTION_HEAL := 30
 ## 잡템(슬라임 젤리)은 사냥꾼이 마을 공급함에서 F로 판다
 const JUNK_PRICE := 15
 
@@ -457,7 +467,7 @@ const HUNT_ZONES: Array[Dictionary] = [
 		## 금사리부터 확 세다 (2026-09-29 B): 체력 3→5, 하트 -2, 덜 밀림, 모래게가 무리로 튀어나옴. 대장 체력 6→9
 		damage = 2, knockback = 6.0, windup = 0.4, pack = true, boss_pattern = &"tongue",
 		## 입구 메뉴·들어올 때 보여 주는 권장 준비
-		advice = "권장: 하트 7 · 사냥칼",
+		advice = "권장: 사냥칼",
 		## 대장 재료 (2026-09-29 대장간 복구 A): 대장을 쓰러뜨릴 때마다 하나 (1막 대장 재료 사금 덩이)
 		boss_material = true,
 		loot = {&"money": 38, &"potion": 25, &"junk": 19, &"gear": 18},
@@ -485,7 +495,7 @@ const HUNT_ZONES: Array[Dictionary] = [
 		## 몰아잡기 떼 (2026-10-02): 까마귀는 이미 많아서 두 마리씩
 		swarm = 2,
 		damage = 2, knockback = 4.0, windup = 0.35, pack = false, boss_pattern = &"straw",
-		advice = "권장: 하트 9 · 제작 장비",
+		advice = "권장: 제작 장비",
 		loot = {&"money": 38, &"potion": 25, &"junk": 19, &"gear": 18},
 		rarity = {&"normal": 40, &"magic": 42, &"rare": 18}, boss_rarity = {&"normal": 15, &"magic": 55, &"rare": 30},
 		money = [30, 60], boss_money = [70, 120],
@@ -511,7 +521,7 @@ const HUNT_ZONES: Array[Dictionary] = [
 		damage = 2, knockback = 4.0, windup = 0.4, pack = false, boss_pattern = &"log", disguise = true,
 		## 2막 대장 재료 (2026-09-29 약방 복구): 장승 한 쌍을 쓰러뜨릴 때마다 장승 조각 하나, 처음 잡으면 다음 날 마을에 약방 터
 		boss_material2 = true,
-		advice = "권장: 하트 10 · 제작 장비",
+		advice = "권장: 제작 장비",
 		loot = {&"money": 38, &"potion": 25, &"junk": 19, &"gear": 18},
 		rarity = {&"normal": 35, &"magic": 44, &"rare": 21}, boss_rarity = {&"normal": 10, &"magic": 55, &"rare": 35},
 		money = [35, 70], boss_money = [90, 150],
@@ -537,7 +547,7 @@ const HUNT_ZONES: Array[Dictionary] = [
 		## 3막이라 도마리보다 한 계단 더 (임시). 도깨비불은 불빛 안에서만 맞아서 체력은 조금 낮게.
 		count = 12, hp = 6, speed = 1.2, boss_hp = 40,
 		damage = 2, knockback = 4.0, windup = 0.5, pack = false, boss_pattern = &"bus",
-		advice = "권장: 하트 11 · 호롱 기름",
+		advice = "권장: 호롱 기름",
 		loot = {&"money": 36, &"potion": 26, &"junk": 20, &"gear": 18},
 		rarity = {&"normal": 30, &"magic": 45, &"rare": 25}, boss_rarity = {&"normal": 5, &"magic": 55, &"rare": 40},
 		money = [40, 80], boss_money = [110, 180],
@@ -564,7 +574,7 @@ const HUNT_ZONES: Array[Dictionary] = [
 		damage = 2, knockback = 4.0, windup = 0.35, pack = false, boss_pattern = &"tiger",
 		## 3막 대장 재료 (2026-09-30 축사 닭장): 백호를 쓰러뜨릴 때마다 산군 발톱 하나, 처음 잡으면 다음 날 마을에 축사 터
 		boss_material3 = true,
-		advice = "권장: 하트 12 · 사냥 도시락",
+		advice = "권장: 사냥 도시락",
 		loot = {&"money": 34, &"potion": 26, &"junk": 20, &"gear": 20},
 		rarity = {&"normal": 25, &"magic": 45, &"rare": 30}, boss_rarity = {&"normal": 5, &"magic": 50, &"rare": 45},
 		money = [45, 90], boss_money = [140, 220],
@@ -592,7 +602,7 @@ const HUNT_ZONES: Array[Dictionary] = [
 		count = 10, hp = 13, speed = 1.3, boss_hp = 80,
 		swarm = 2,
 		damage = 3, knockback = 4.0, windup = 0.4, pack = false, boss_pattern = &"general",
-		advice = "권장: 하트 13 · 사냥 도시락",
+		advice = "권장: 사냥 도시락",
 		loot = {&"money": 34, &"potion": 26, &"junk": 20, &"gear": 20},
 		rarity = {&"normal": 22, &"magic": 46, &"rare": 32}, boss_rarity = {&"normal": 5, &"magic": 48, &"rare": 47},
 		money = [50, 95], boss_money = [150, 240],
@@ -618,11 +628,13 @@ const HUNT_ZONES: Array[Dictionary] = [
 		egg_chance = 0.012, boss_egg_chance = 0.2,
 		## 역동보다 한 계단 (임시, 봇으로 맞춤). 악귀는 넷씩 떼 (등 뒤를 노려 둘러쌈).
 		count = 9, hp = 14, speed = 1.3, boss_hp = 100,
-		swarm = 4,
-		damage = 3, knockback = 3.0, windup = 0.35, pack = false, boss_pattern = &"archdemon",
+		swarm = 5,
+		## 함께 덤비는 수 (2026-10-02 3~4막 난이도: 악귀 떼가 등 뒤에서 함께 덮치게, 기본 MAX_ATTACKERS)
+		max_attackers = 4,
+		damage = 3, knockback = 3.0, windup = 0.3, pack = false, boss_pattern = &"archdemon",
 		## 4막 대장 재료 (2026-10-02 나루터): 마왕을 쓰러뜨릴 때마다 마왕 뿔 하나, 처음 잡으면 다음 날 마을 팔당호 물가에 나루터 터
 		boss_material4 = true,
-		advice = "권장: 하트 14 · 사냥 도시락",
+		advice = "권장: 사냥 도시락",
 		loot = {&"money": 32, &"potion": 26, &"junk": 20, &"gear": 22},
 		rarity = {&"normal": 20, &"magic": 46, &"rare": 34}, boss_rarity = {&"normal": 0, &"magic": 45, &"rare": 55},
 		money = [55, 105], boss_money = [180, 280],
@@ -631,11 +643,12 @@ const HUNT_ZONES: Array[Dictionary] = [
 ]
 ## 켄타우로스 창기병 (역동 lancer, 2026-10-02): 사냥꾼이 LANCER_TRIGGER 안이면 발을 구르며 (구역 windup) 긴 띠 예고 →
 ## LANCER_TIME 동안 LANCER_DISTANCE 만큼 돌격 (나무 · 바위에 막히면 거기서 멈춤). 돌격 뒤 LANCER_RECOVER 초 돌아섬 = 칠 틈.
+## 2026-10-02 3~4막 난이도: 돌격 쿨 1.8 → 1.2, 돌아서는 틈 1.1 → 0.8 (임시)
 const LANCER_TRIGGER := 150.0
 const LANCER_DISTANCE := 170.0
 const LANCER_TIME := 0.45
-const LANCER_RECOVER := 1.1
-const LANCER_COOLDOWN := 1.8
+const LANCER_RECOVER := 0.8
+const LANCER_COOLDOWN := 1.2
 ## 역마 장군 (역동 대장 general): GENERAL_RANGE 안이면 창 돌격 GENERAL_CHARGES 번. 첫 돌격 예고 GENERAL_WINDUP, 다음은 GENERAL_NEXT_WINDUP
 ## (그때 사냥꾼 쪽으로 다시 꺾음). 돌격에 닿으면 (GENERAL_HIT_RADIUS) 하트 -피해. 다 달린 뒤 GENERAL_RECOVER 초 헐떡임 = 칠 틈.
 ## 두 번에 한 번 파발 나팔: 창기병 GENERAL_CALL 마리 (원래 크기, 체력 낮음, 드롭 · 알 없음, 최대 SLAM_MINION_MAX).
@@ -662,14 +675,19 @@ const PLOW_BONUS := 1
 ## 뿔 악귀 (곤지암 demon, 2026-10-02): 사냥꾼이 바라보는 쪽 (바라보는 방향에서 DEMON_GAZE 라디안 안, DEMON_GAZE_RANGE 거리 안) 에선
 ## 얼어붙는다 (예고 중이어도 멈춤). 아니면 DEMON_NOTICE 안에서 DEMON_WALK 빠르기로 걸어 다가와, DEMON_TRIGGER 안이면 팔을 치켜들고
 ## (구역 windup) 둘레 DEMON_SLAM_RADIUS 를 내려찍는다. 찍은 뒤 DEMON_RECOVER 초 숨 고름 = 칠 틈.
-const DEMON_GAZE := 1.0
-const DEMON_GAZE_RANGE := 220.0
+## 2026-10-02 3~4막 난이도: 봇 기준 악귀가 거의 닿지 못해 (사냥 한 번에 내려찍기 0번) 바라보는 폭을 좁히고, 안 볼 때 더 빨리 걷고,
+## 한 번 더 내려찍게 함 (돌아서서 바라보면 이것도 얼어붙음 = 피하는 법). 값은 임시.
+const DEMON_GAZE := 0.6
+const DEMON_GAZE_RANGE := 150.0
 const DEMON_NOTICE := 200.0
-const DEMON_WALK := 60.0
-const DEMON_TRIGGER := 30.0
-const DEMON_SLAM_RADIUS := 34.0
+const DEMON_WALK := 150.0
+const DEMON_TRIGGER := 36.0
+const DEMON_SLAM_RADIUS := 42.0
 const DEMON_RECOVER := 1.1
 const DEMON_COOLDOWN := 1.6
+## 둘째 내려찍기 (2026-10-02 3~4막 난이도): 첫 내려찍기 뒤 DEMON_SECOND_STEP 만큼 다가와 DEMON_SECOND_WINDUP 예고로 한 번 더
+const DEMON_SECOND_WINDUP := 0.45
+const DEMON_SECOND_STEP := 18.0
 ## 마왕 (곤지암 대장 archdemon): ARCH_RANGE 안이면 등불 깜빡임 (ARCH_DIM_WINDUP) → 정전 ARCH_BLACKOUT 초 (절반 아래 ARCH_BLACKOUT_ENRAGED)
 ## + 사냥꾼 등 뒤에 악귀 ARCH_CALL 마리 (원래 크기, 체력 ARCH_MINION_HP, 드롭 · 알 없음, 최대 SLAM_MINION_MAX).
 ## 다음 차례는 지옥불 기둥: 사냥꾼 발밑 + 둘레에 원 ARCH_PILLARS 개 (절반 아래 ARCH_PILLARS_ENRAGED), 예고 ARCH_PILLAR_WINDUP, 원 안이면 하트 -피해.
@@ -823,7 +841,7 @@ const HERB_BED_PER_DAY := 6
 ## 만드는 것: potion 빨간 물약 · lamp_oil 호롱 기름 (밤 구역 불빛 x LAMP_OIL_MULT) · strength 힘 물약 (다음 사냥 한 번 공격 피해 +1)
 ## · speed 빠르기 물약 (다음 사냥 한 번 걸음 x SPEED_POTION_MULT) · tonic 크리처 보약 (먹인 날 모든 크리처 일 속도 x TONIC_SPEED_MULT)
 const BREWS := {
-	&"potion": {name = "빨간 물약", count = 2, cost = {herbs = 2, junk = 1}, effect = "하트 +1 (1 키), 두 병"},
+	&"potion": {name = "빨간 물약", count = 2, cost = {herbs = 2, junk = 1}, effect = "체력 +30 (1 키), 두 병"},
 	&"lamp_oil": {name = "호롱 기름", count = 1, cost = {roots = 2}, effect = "밤 구역 호롱 불빛이 넓어짐 (들어갈 때 하나)"},
 	&"strength": {name = "힘 물약", count = 1, cost = {roots = 3, junk = 1}, effect = "다음 사냥 한 번 공격 피해 +1"},
 	&"speed": {name = "빠르기 물약", count = 1, cost = {herbs = 2, junk = 1}, effect = "다음 사냥 한 번 걸음 +25%"},
@@ -860,10 +878,10 @@ const HEN_EGG_PRICE := 25
 const WEASEL_CHANCE := 0.3
 ## 모이 주기: 닭장에서 F로 한 번에 다 먹이면 무 FEED_CROP_COST 개. 크리처에게 모이 주기(R)를 맡기면 무 없이 한 마리씩 먹인다.
 const FEED_CROP_COST := 1
-## 목축인 제작 (닭장에서 목축인 F): 사냥 도시락 = 다음 사냥 한 번 하트 +LUNCH_HEARTS (그 사냥 동안 하트 칸도 늘어남)
+## 목축인 제작 (닭장에서 목축인 F): 사냥 도시락 = 다음 사냥 한 번 최대 체력 +LUNCH_HP (늘어난 만큼 참)
 const LUNCH_EGGS := 2
 const LUNCH_CROPS := 1
-const LUNCH_HEARTS := 2
+const LUNCH_HP := 20
 
 ## 팔당호 물가 (2026-10-02 나루터): 마을 오른쪽 아래 구석은 처음부터 물이다 (분원리는 팔당호 옆 마을). 줄 번호: 그 줄에서 물이 시작하는 칸.
 ## 물 칸은 아무도 못 들어가고 들나물도 안 돋는다. 그림 assets/props/lake.png (칸 31~39 · 16~23, tools/make_naru_sheets.py).
@@ -894,10 +912,10 @@ const TRAP_CELLS: Array[Vector2i] = [Vector2i(37, 19), Vector2i(36, 21), Vector2
 const FISH_PRICE := 45
 ## 물고기 몰기 (크리처 일): 통발이 놓여 있으면 한 번 할 때마다 내일 아침 물고기 +1 (하루 FISH_DRIVE_CAP 번까지). 물속성이 두 배 빠르다.
 const FISH_DRIVE_CAP := 4
-## 뱃사공 매운탕 (나루터에서 뱃사공 F): 다음 사냥 한 번 하트 +STEW_HEARTS · 경험치 xSTEW_XP_MULT (들어갈 때 먹음)
+## 뱃사공 매운탕 (나루터에서 뱃사공 F): 다음 사냥 한 번 최대 체력 +STEW_HP · 경험치 xSTEW_XP_MULT (들어갈 때 먹음)
 const STEW_FISH := 2
 const STEW_CROPS := 1
-const STEW_HEARTS := 1
+const STEW_HP := 10
 const STEW_XP_MULT := 1.5
 
 ## 크리처 원정 + 입양 (2026-10-01 사용자 선택 B + D, Expedition). 값은 전부 임시.
