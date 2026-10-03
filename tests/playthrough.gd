@@ -222,9 +222,9 @@ func _ready() -> void:
 		fish_caught, fish_sold, stews_made, stews_eaten, fish_creature.describe() if fish_creature else "없음"])
 	for zi: int in [8, 9]:
 		var a: Dictionary = act5.get(zi, {})
-		_log("\n%s: 첫 도착 %s · 대장 첫 처치 %s · 사냥 %d번 · 잃은 체력 %d (한 번에 %.1f) · 쓰러짐 %d번 · 만난 대장 %s" % [
+		_log("\n%s: 첫 도착 %s · 대장 첫 처치 %s · 사냥 %d번 · 잃은 체력 %d (한 번에 %.1f) · 쓰러짐 %d번 · 방패에 막힌 공격 %d · 만난 대장 %s" % [
 			Config.HUNT_ZONES[zi].name, "%d일" % a.day if a.has("day") else "없음", cleared_day.get(Config.HUNT_ZONES[zi].name, "없음"),
-			a.get("hunts", 0), a.get("hurt", 0), float(a.get("hurt", 0)) / maxi(a.get("hunts", 0), 1), a.get("knocked", 0), a.get("dragons", {})])
+			a.get("hunts", 0), a.get("hurt", 0), float(a.get("hurt", 0)) / maxi(a.get("hunts", 0), 1), a.get("knocked", 0), a.get("blocked", 0), a.get("dragons", {})])
 	_log("마지막 대장 처치: %s" % ("예" if GameState.final_boss_down else "아니오"))
 	var crowd := []
 	for d in [20, 40, 60, 80, 100]:
@@ -1086,6 +1086,8 @@ func hunt_day() -> void:
 			for s: WildSlime in h.slimes:
 				var c := Vector2i(s.position / Config.TILE)
 				_log("  ! 남은 %s%s 칸 %s '%s' · 사냥꾼 칸 %s" % [s.title, " (대장)" if s.boss else "", c, h.map.at(c) if h.map else "", Vector2i(main.hunter.feet() / Config.TILE)])
+			# 2026-10-03 소내섬: 드물게 막히는 원인을 찾으려고 사냥꾼 상태도 남긴다
+			_log("  ! 사냥꾼 발 %s · 느려짐 %.2f · 구르기 %.2f · 막힌 시간 %.1f · 무시한 몬스터 %d · 정전 %.1f" % [main.hunter.feet(), main.hunter.slow_mult, h.dash_t, stuck_t, ignored.size(), h.blackout_t])
 		var hunter: Character = main.hunter
 		var feet := hunter.feet()
 		# 물약: 하트 2 이하면 마신다
@@ -1227,6 +1229,15 @@ func hunt_day() -> void:
 			elif clear and d <= w.range * 0.85:
 				# 쏠 틈을 기다린다 (제자리)
 				target = feet
+		# 귀여리 방패 도마뱀 (2026-10-03): 방패가 이쪽이면 옆 · 뒤로 돌아간다 (찌른 뒤 방패가 내려가면 그대로 침)
+		var flank: bool = goal == &"fight" and nearest_s.blocks(feet)
+		if flank:
+			shoot = false
+			away = false
+			var side: Vector2 = nearest_s._face.orthogonal()
+			if (feet - nearest_s.position).dot(side) < 0.0:
+				side = -side
+			target = nearest_s.position + side * 56.0 - nearest_s._face * 24.0
 		# 오른클릭 큰 스킬: 쓸 수 있으면 가까운 몬스터에 (봇은 쿨마다 바로)
 		var rs := HunterSkills.right_skill(w.kind)
 		if skills_on and goal == &"fight" and rs != &"" and h.right_cd <= 0.0 and h.hittable(nearest_s) and not (nearest_s.buried and not nearest_s.disguise) \
@@ -1235,7 +1246,7 @@ func hunt_day() -> void:
 		if shoot:
 			h.swing(nearest_s.position + Vector2(0, -8 * nearest_s.scale.y) - (feet + Vector2(0, -8)))
 			shots_fired += 1
-		elif goal == &"fight" and not ranged and nearest_s.position.distance_to(feet + Vector2(0, -8)) <= w.reach + w.radius - 2:
+		elif goal == &"fight" and not ranged and not flank and nearest_s.position.distance_to(feet + Vector2(0, -8)) <= w.reach + w.radius - 2:
 			if nearest_s.buried and nearest_s.position.distance_to(feet) > Config.WILD_BURROW_POP_DISTANCE:
 				pass
 			var before := h.slimes.size()
@@ -1297,8 +1308,9 @@ func hunt_day() -> void:
 	if h.boss_spawned and h._boss() == null:
 		_cleared(h.zone)
 	if h.zone >= 8:
-		var a: Dictionary = act5.get(h.zone, {day = GameState.day, hunts = 0, hurt = 0, knocked = 0, dragons = {}})
+		var a: Dictionary = act5.get(h.zone, {day = GameState.day, hunts = 0, hurt = 0, knocked = 0, dragons = {}, blocked = 0})
 		a.hunts += 1
+		a.blocked += h.blocked_hits
 		a.hurt += hurt
 		a.knocked += int(knocked)
 		for nm: String in boss_names:

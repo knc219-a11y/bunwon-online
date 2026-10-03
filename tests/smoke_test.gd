@@ -2608,6 +2608,7 @@ func _ready() -> void:
 
 	# 50) 5막 (2026-10-03 사용자: 9구역 귀여리 · 10구역 소내섬 와이번 + 일반 용, 드물게 희귀 용 셋)
 	await _sonae_checks()
+	await _guiyeo_checks()
 
 	# 41) 저장/불러오기 (2026-09-30 사용자 선택 C 디아2식): 저장 → 장면을 버리고 → 새 장면에 불러오면 모든 상태가 같다
 	await _save_load_checks()
@@ -3791,5 +3792,111 @@ func _sonae_checks() -> void:
 	_check(cd.data.species.display_name == "아기 운룡" and gd.data.species.display_name == "아기 황금 드래곤" and gd.data.species.daily_gold.y > 0, "아기 운룡 · 아기 황금 드래곤")
 	# 저장: 마지막 대장 처치
 	_check(SaveGame.snapshot(m).gs.get("final_boss_down", false), "마지막 대장 처치 기록도 저장됨")
+	m.queue_free()
+	await get_tree().process_frame
+
+
+func _guiyeo_checks() -> void:
+	var m: Node2D = load("res://scenes/main.tscn").instantiate()
+	add_child(m)
+	await get_tree().process_frame
+	var zi := 8
+	var z: Dictionary = Config.HUNT_ZONES[zi]
+	_check(z.monster == "방패 도마뱀" and z.boss_monster == "도마뱀 족장" and z.shield and z.boss_pattern == &"chief", "귀여리: 방패 도마뱀 · 도마뱀 족장 (임시 A)")
+	GameState.reset()
+	TestStarts.apply(m, &"guiyeo")
+	var baby: Creature = m._hatch(CreatureCatalog.LIZARD, Config.FORAGE_CELLS[5])
+	_check(baby.data.species.display_name == "아기 도마뱀" and baby.data.elements[0].id == &"earth" and baby.data.species.market and baby.data.species.lid, "아기 도마뱀 (땅, 장보기 · 냄비뚜껑)")
+	baby.job = CreatureJobs.FORAGE
+	var money0 := GameState.money
+	_check(m.market_bonus(1000) == 200 and GameState.money == money0 + 200, "장보기: 밤사이 판매값 +20%")
+	baby.job = CreatureJobs.REST
+	_check(m.market_bonus(1000) == 0, "쉬는 아기 도마뱀은 장에 안 감")
+	baby.job = CreatureJobs.FORAGE
+	GameState.hunts_today = 0
+	m.enter_hunt(baby, zi)
+	var h: HuntGround = m.hunt
+	h.set_ai(false)
+	h.set_process(false)
+	h.companion_ai = false
+	_check(h.zone == zi and h.slimes.all(func(o: WildSlime) -> bool: return o.shield), "귀여리에 들어옴: 모두 방패 도마뱀")
+	# 냄비뚜껑: 한 번 대신 막고, 쿨 동안은 맞음
+	h.life = 200
+	h._invulnerable = 0.0
+	h._hurt(m.hunter.feet() + Vector2(10, 0), 5)
+	_check(h.life == 200 and h.lid_cd > 0.0, "아기 도마뱀 냄비뚜껑이 한 번 막음")
+	h._invulnerable = 0.0
+	h._hurt(m.hunter.feet() + Vector2(10, 0), 5)
+	_check(h.life == 195, "뚜껑 쿨 동안은 맞음")
+	var l: WildSlime = h.slimes[0]
+	for o: WildSlime in h.slimes.duplicate():
+		if o != l:
+			h.slimes.erase(o)
+			o.queue_free()
+	m.hunter.position = Vector2(25, 14) * Config.TILE
+	var feet: Vector2 = m.hunter.feet()
+	l.position = feet + Vector2(60, 0)
+	l.tick(1.0 / 30.0, feet)
+	var hp0 := l.hp
+	_check(l.blocks(feet) and not h._strike(l, feet, 1) and l.hp == hp0 and h.blocked_hits == 1, "앞에서 치면 방패에 막힘")
+	_check(not h._strike(l, l.position + Vector2(40, 0), 1) and l.hp < hp0, "등 뒤에서 치면 맞음")
+	l._recover = 1.0
+	_check(not l.blocks(feet), "창을 찌른 뒤엔 방패가 내려가 앞도 열림")
+	l.gold_t = 2.0
+	_check(l.blocks(feet) and l.blocks(l.position + Vector2(0, 40)) and not l.blocks(l.position + Vector2(40, 0)), "금빛 방패: 찌른 뒤에도 앞 · 옆을 막고 등 뒤만 열림")
+	l.gold_t = 0.0
+	l._recover = 0.0
+	# 창 찌르기: 당겼다 길게 찌름
+	l.ai_enabled = true
+	l.alert = true
+	l.position = feet + Vector2(50, 0)
+	l._lunge_cd = 0.0
+	h._invulnerable = 0.0
+	h.lid_cd = 99.0
+	h.life = 200
+	for i in 90:
+		h.tick(1.0 / 30.0)
+		if h.life < 200:
+			break
+	_check(h.life < 200, "방패 도마뱀 창 찌르기에 맞음")
+	h.slimes.erase(l)
+	l.queue_free()
+	# 도마뱀 족장: 전쟁 북 → 도마뱀 둘 + 금빛 방패
+	var b: WildSlime = h.spawn_boss()
+	_check(b.title == "도마뱀 족장" and b.pattern == &"chief" and not b.shield, "도마뱀 족장 (방패 없음)")
+	b.position = feet + Vector2(120, 0)
+	b.ai_enabled = true
+	b._pattern_cd = 0.0
+	b.tick(1.0 / 30.0, feet)
+	_check(b._drum > 0.0, "족장: 전쟁 북 예고")
+	for i in 60:
+		h.tick(1.0 / 30.0)
+		if h.slimes.size() > 1:
+			break
+	var called := h.slimes.filter(func(o: WildSlime) -> bool: return o.minion)
+	_check(called.size() == Config.CHIEF_CALL and called.all(func(o: WildSlime) -> bool: return o.shield and o.gold_t > 0.0), "북이 울리면 방패 도마뱀 %d (금빛 방패)" % Config.CHIEF_CALL)
+	for o: WildSlime in called:
+		h.slimes.erase(o)
+		o.queue_free()
+	b._recover = 0.0
+	b._pattern_cd = 0.0
+	b.position = feet + Vector2(30, 0)
+	b.tick(1.0 / 30.0, feet)
+	_check(b.telegraphs().any(func(t: Dictionary) -> bool: return t.get("tail", false)), "다음 차례: 꼬리 휘두르기 (둘레 원)")
+	h._invulnerable = 0.0
+	h.life = 200
+	for i in 60:
+		h.tick(1.0 / 30.0)
+		if h.life < 200:
+			break
+	_check(h.life == 200 - b.damage, "꼬리에 휩쓸리면 체력 -%d" % b.damage)
+	b.hp = b.max_hp / 2 - 1
+	b._bales.clear()
+	b._recover = 0.0
+	b._pattern_cd = 0.0
+	b._chief_step = 2
+	b.tick(1.0 / 30.0, feet)
+	_check(b.telegraphs().filter(func(t: Dictionary) -> bool: return t.get("spear", false)).size() == Config.CHIEF_SPEARS, "체력 절반 아래: 창 던지기 %d" % Config.CHIEF_SPEARS)
+	m.leave_hunt()
 	m.queue_free()
 	await get_tree().process_frame

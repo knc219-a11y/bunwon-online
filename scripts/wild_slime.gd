@@ -157,6 +157,14 @@ var variant := &""
 var _dragon_step := 0
 ## 방금 떨어진 짚단 · 기둥 · 날개 바람 · 금화 (bale_landed 를 받는 HuntGround 가 종류를 본다)
 var landing := {}
+## 귀여리 방패 도마뱀 (shield, 2026-10-03 임시 A): 바라보는 쪽 (_face) 에서 친 공격은 방패에 막힌다.
+## 창을 찌른 뒤 (_recover 동안) 방패가 내려가고, 옆 · 등 뒤는 늘 열려 있다. gold_t 동안 (족장 전쟁 북) 금빛 방패 = 찌른 뒤에도 앞 · 옆을 막음.
+var shield := false
+var gold_t := 0.0
+var _face := Vector2.DOWN
+## 도마뱀 족장 (chief): 전쟁 북 예고 남은 시간 (-1 = 없음), 다음 패턴 차례 (0 북 · 1 꼬리 휘두르기 · 2 창 던지기 셋 = 절반부터)
+var _drum := -1.0
+var _chief_step := 0
 
 ## 까마귀가 내려꽂았다 (내려앉은 곳). HuntGround 가 받아 원 안의 사냥꾼을 다치게 한다.
 signal swooped(at: Vector2)
@@ -209,7 +217,11 @@ func setup_zone(zone: int) -> void:
 	wolf = z.get("wolf", false)
 	lancer = z.get("lancer", false)
 	demon = z.get("demon", false)
+	shield = z.get("shield", false)
 	_angle = randf() * TAU
+	if shield:
+		_lunge_len = Config.LIZARD_THRUST
+		_lunge_time = Config.LIZARD_THRUST_TIME
 	if lancer:
 		_lunge_len = Config.LANCER_DISTANCE
 		_lunge_time = Config.LANCER_TIME
@@ -238,6 +250,7 @@ func make_boss(zone := 0) -> void:
 	wolf = false
 	lancer = false
 	demon = false
+	shield = false
 	_lunge_len = Config.LUNGE_DISTANCE
 	_lunge_time = Config.LUNGE_TIME
 	sheet = load(z.boss_sheet)
@@ -321,6 +334,16 @@ func make_variant(v: Dictionary) -> void:
 	sheet = load(v.sheet)
 	if _sprite:
 		_apply_sheet()
+
+
+## 방패 도마뱀이 from 에서 온 공격을 방패로 막는지 (앞 = _face 쪽, 금빛이면 옆까지 · 찌른 뒤에도)
+func blocks(from: Vector2) -> bool:
+	if not shield or _stun > 0.0:
+		return false
+	var to := (from - position).normalized()
+	if gold_t > 0.0:
+		return to.dot(_face) > Config.LIZARD_GOLD_DOT
+	return _recover <= 0.0 and _lunge_t < 0.0 and to.dot(_face) > Config.LIZARD_FRONT_DOT
 
 
 func sort_y() -> float:
@@ -423,9 +446,9 @@ func telegraphs() -> Array[Dictionary]:
 		out.append({kind = &"circle", at = _dive_to, radius = Config.SWOOP_RADIUS, progress = 1.0 - _swoop / windup_time})
 	for b in _bales:
 		var w: float = b.get("w", Config.STRAW_WINDUP)
-		var plain: bool = not (b.get("pillar", false) or b.get("gust", false) or b.get("coin", false))
+		var plain: bool = not (b.get("pillar", false) or b.get("gust", false) or b.get("coin", false) or b.get("tail", false) or b.get("spear", false))
 		out.append({kind = &"circle", at = b.at, radius = b.get("r", Config.STRAW_RADIUS), progress = clampf(1.0 - b.t / w, 0.0, 1.0), bale = plain, pillar = b.get("pillar", false),
-			water = b.get("water", false), coin = b.get("coin", false), gust = b.get("gust", false)})
+			water = b.get("water", false), coin = b.get("coin", false), gust = b.get("gust", false), tail = b.get("tail", false), spear = b.get("spear", false)})
 	var one := _telegraph_one()
 	if not one.is_empty():
 		out.append(one)
@@ -538,6 +561,10 @@ func tick(delta: float, target: Vector2) -> void:
 	_flash = maxf(_flash - delta, 0.0)
 	_stun = maxf(_stun - delta, 0.0)
 	_fear = maxf(_fear - delta, 0.0)
+	gold_t = maxf(gold_t - delta, 0.0)
+	if shield and _windup < 0.0 and _lunge_t < 0.0 and _recover <= 0.0 and _stun <= 0.0 and target != position:
+		# 방패는 사냥꾼 쪽을 본다 (찌르는 중 · 찌른 뒤엔 찌른 쪽 그대로)
+		_face = (target - position).normalized()
 	if buried and position.distance_to(target) <= Config.WILD_BURROW_POP_DISTANCE:
 		# 사냥꾼이 다가오면 모래에서 튀어나온다
 		buried = false
@@ -663,6 +690,9 @@ func tick(delta: float, target: Vector2) -> void:
 	if _slow > 0.0 and _flash <= 0.0:
 		# 물의 지팡이에 느려진 동안 푸르게
 		_sprite.modulate = _tint * Color(0.7, 0.85, 1.4)
+	elif gold_t > 0.0 and _flash <= 0.0:
+		# 족장 전쟁 북: 금빛 방패 (몸 전체가 금빛으로 번쩍)
+		_sprite.modulate = _tint * Color(1.35, 1.15, 0.55) if int(_anim_time * 6.0) % 2 == 0 else _tint * Color(1.2, 1.05, 0.6)
 	elif gazed and _flash <= 0.0:
 		# 바라보는 동안 얼어붙은 악귀: 잿빛으로
 		_sprite.modulate = _tint * Color(0.72, 0.72, 0.84)
@@ -690,7 +720,7 @@ func _tick_attack(delta: float, target: Vector2) -> bool:
 		position = to
 		if _lunge_t >= 1.0 or blocked:
 			_lunge_t = -1.0
-			_recover = Config.LANCER_RECOVER if lancer else Config.LUNGE_RECOVER
+			_recover = Config.LANCER_RECOVER if lancer else (Config.LIZARD_SHIELD_DOWN if shield else Config.LUNGE_RECOVER)
 			_lunge_cd = Config.WOLF_LUNGE_COOLDOWN if wolf else (Config.LANCER_COOLDOWN if lancer else Config.LUNGE_COOLDOWN)
 		return true
 	if _air_t >= 0.0:
@@ -797,6 +827,14 @@ func _tick_attack(delta: float, target: Vector2) -> bool:
 			if _runs % 2 == 0:
 				called.emit(position)
 		return true
+	if _drum >= 0.0:
+		_drum -= delta
+		if _drum < 0.0:
+			# 전쟁 북: 도마뱀 둘을 부르고 모든 방패가 금빛 (HuntGround._on_called)
+			called.emit(position)
+			_recover = Config.CHIEF_RECOVER
+			_pattern_cd = Config.CHIEF_COOLDOWN
+		return true
 	if not _bales.is_empty():
 		for i in range(_bales.size() - 1, -1, -1):
 			_bales[i].t -= delta
@@ -807,6 +845,9 @@ func _tick_attack(delta: float, target: Vector2) -> bool:
 		if _bales.is_empty() and pattern == &"dragon":
 			_recover = Config.DRAGON_SPECIAL_RECOVER
 			_pattern_cd = Config.DRAGON_COOLDOWN
+		elif _bales.is_empty() and pattern == &"chief":
+			_recover = Config.CHIEF_RECOVER
+			_pattern_cd = Config.CHIEF_COOLDOWN
 		elif _bales.is_empty() and pattern == &"archdemon":
 			_recover = Config.ARCH_RECOVER
 			_pattern_cd = Config.ARCH_COOLDOWN
@@ -906,6 +947,20 @@ func _tick_attack(delta: float, target: Vector2) -> bool:
 				_bales.append({at = position, t = Config.DRAGON_GUST_WINDUP, w = Config.DRAGON_GUST_WINDUP, r = Config.DRAGON_GUST_RADIUS, gust = true})
 			else:
 				_dragon_special(target)
+			return true
+		if pattern == &"chief" and _pattern_cd <= 0.0 and d <= Config.CHIEF_RANGE:
+			# 전쟁 북 → 꼬리 휘두르기 (→ 체력 절반부터 창 던지기 셋) 를 돌아가며
+			var step := _chief_step % (3 if enraged() else 2)
+			_chief_step += 1
+			if step == 0:
+				_drum = Config.CHIEF_DRUM_WINDUP
+			elif step == 1:
+				_bales.append({at = position, t = Config.CHIEF_TAIL_WINDUP, w = Config.CHIEF_TAIL_WINDUP, r = Config.CHIEF_TAIL_RADIUS, tail = true})
+			else:
+				var turn := randf() * TAU
+				for i in Config.CHIEF_SPEARS:
+					var at := target if i == 0 else target + Vector2.from_angle(turn + TAU * i / maxf(Config.CHIEF_SPEARS - 1, 1)) * Config.ARCH_PILLAR_SPREAD * Vector2(1.0, 0.7)
+					_bales.append({at = at.clamp(area.position, area.end), t = Config.CHIEF_SPEAR_WINDUP + i * 0.25, w = Config.CHIEF_SPEAR_WINDUP, r = Config.CHIEF_SPEAR_RADIUS, spear = true})
 			return true
 		if pattern == &"tongue" and _pattern_cd <= 0.0 and d <= Config.TONGUE_RANGE:
 			_tongue_to = position + (target - position).normalized() * Config.TONGUE_RANGE
@@ -1084,6 +1139,10 @@ func _draw() -> void:
 	if hp < max_hp:
 		draw_rect(Rect2(-10, -24 + top, 20, 3), Color(0.25, 0.2, 0.2))
 		draw_rect(Rect2(-10, -24 + top, 20.0 * hp / max_hp, 3), Color(0.9, 0.5, 0.3))
+	if _drum >= 0.0:
+		# 전쟁 북: 북 치는 손 위에 퍼지는 고리
+		var k := 1.0 - _drum / Config.CHIEF_DRUM_WINDUP
+		draw_arc(Vector2(0, -16), 6.0 + 18.0 * fmod(k * 3.0, 1.0), 0.0, TAU, 20, Color(1.0, 0.85, 0.35, 0.8), 1.5)
 	# 멈춤 (혀 당기기): 머리 위에 빙글 도는 별 셋
 	if _stun > 0.0:
 		for i in 3:

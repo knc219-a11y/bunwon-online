@@ -103,6 +103,10 @@ var order_cd := 0.0
 var guard_cd := 0.0
 ## 크리처 방패가 대신 막은 횟수 (봇 기록용)
 var guard_blocks := 0
+## 방패 도마뱀 방패에 막힌 공격 수 (봇 기록)
+var blocked_hits := 0
+## 아기 도마뱀 냄비뚜껑 방패 쿨 (초)
+var lid_cd := 0.0
 ## 화살비: {at, radius, waves, t} · 대지 가르기 그림: {from, to, t} · 돌격 중인 동행: {c, target}
 var _rains: Array[Dictionary] = []
 var _splits: Array[Dictionary] = []
@@ -655,6 +659,7 @@ func tick(delta: float) -> void:
 	right_cd = maxf(right_cd - delta, 0.0)
 	order_cd = maxf(order_cd - delta, 0.0)
 	guard_cd = maxf(guard_cd - delta, 0.0)
+	lid_cd = maxf(lid_cd - delta, 0.0)
 	_tick_dash(delta)
 	if blackout_t > 0.0:
 		blackout_t = maxf(blackout_t - delta, 0.0)
@@ -866,6 +871,14 @@ func swing(dir := Vector2.ZERO) -> int:
 ## 한 번 맞힌다 (피해 숫자를 띄우고, 쓰러지면 처치). 쓰러뜨렸으면 true.
 ## units = 옛 피해 (1 · 2 ...). 실제 피해는 x DMG_UNIT x 스탯 · 직업 (2026-10-03). by_companion = 동행 크리처가 침 (교감)
 func _strike(s: WildSlime, from: Vector2, units: int, by_companion := false) -> bool:
+	# 귀여리 방패 도마뱀: 바라보는 쪽에서 친 공격은 방패에 막힌다 (구슬처럼 몸에서 터지면 사냥꾼 쪽에서 온 것으로 본다)
+	var origin := from if from.distance_to(s.position) > 12.0 or by_companion else hunter.feet()
+	if s.blocks(origin):
+		blocked_hits += 1
+		if feel:
+			_pops.append({at = s.position + Vector2(randf_range(-4, 4), -18 * s.scale.y), text = "막힘", t = 0.5, big = false})
+		Sound.sfx(&"hit", 0.0, 1.7)
+		return false
 	var amount := HunterClass.companion_damage(units) if by_companion else HunterClass.hunter_damage(units, Wearables.weapon().kind)
 	if feel:
 		_pops.append({at = s.position + Vector2(randf_range(-4, 4), -18 * s.scale.y), text = str(amount), t = 0.5, big = units > 1})
@@ -1560,6 +1573,12 @@ func _on_bale_landed(at: Vector2) -> void:
 	if boss and boss.pattern == &"dragon":
 		_dragon_landed(at, boss)
 		return
+	if boss and boss.pattern == &"chief":
+		# 도마뱀 족장 꼬리 휘두르기 · 창 던지기 (귀여리)
+		var b: Dictionary = boss.landing
+		if _in_circle(at, b.get("r", Config.STRAW_RADIUS)) and _invulnerable <= 0.0 and not knocked:
+			_hurt(at, boss.damage, boss.title, "%s의 %s!" % [boss.title, "꼬리에 휩쓸렸다" if b.get("tail", false) else "창에 맞았다"])
+		return
 	if boss and boss.pattern == &"archdemon":
 		# 마왕 지옥불 기둥 (곤지암)
 		if _in_circle(at, Config.ARCH_PILLAR_RADIUS) and _invulnerable <= 0.0 and not knocked:
@@ -1584,7 +1603,10 @@ func _dragon_landed(at: Vector2, boss: WildSlime) -> void:
 	if b.get("gust", false):
 		_hurt(at, boss.damage, boss.title, "%s의 날개 바람에 휩쓸렸다!" % boss.title)
 		var away := (hunter.feet() - at).normalized()
-		hunter.step((away if away != Vector2.ZERO else Vector2.DOWN) * Config.DRAGON_GUST_PUSH)
+		# 조금씩 민다 (한 번에 40px 를 옮기면 나무 · 바위 한 칸을 건너뛰어 갇힌 칸에 들어갈 수 있음, 2026-10-03 봇이 갇힘)
+		var push := (away if away != Vector2.ZERO else Vector2.DOWN) * Config.DRAGON_GUST_PUSH
+		for i in 10:
+			hunter.step(push / 10.0)
 	else:
 		_hurt(at, boss.damage, boss.title, "%s의 물기둥에 휩쓸렸다!" % boss.title)
 
@@ -1599,6 +1621,29 @@ func _on_called(at: Vector2) -> void:
 		for i in mini(Config.DRAGON_CALL, Config.SLAM_MINION_MAX - minions):
 			_add_called_flyer(at + Vector2(-60 if i == 0 else 60, -20), "부름 받은 ", Config.DRAGON_MINION_HP)
 		GameState.notify("%s이(가) 포효하자 하늘에서 와이번이 내려왔다!" % _boss().title if _boss() else "와이번이 내려왔다!")
+		GameState.touch()
+		return
+	if Config.HUNT_ZONES[zone].get("boss_pattern") == &"chief":
+		# 도마뱀 족장 전쟁 북 (2026-10-03 귀여리 임시 A): 방패 도마뱀 둘이 달려오고, 모든 방패가 한동안 금빛
+		for i in mini(Config.CHIEF_CALL, Config.SLAM_MINION_MAX - minions):
+			var l := WildSlime.new()
+			l.setup_zone(zone)
+			l.minion = true
+			l.title = "북소리에 온 " + l.title
+			l.hp = HunterSkills.minion_hp(zone, Config.CHIEF_MINION_HP)
+			l.max_hp = l.hp
+			l.area = monster_area()
+			l.terrain = map
+			l.position = l._stand(at + Vector2(-44 if i == 0 else 44, 26))
+			l.ai_enabled = _ai_on
+			l.alert = true
+			l._lunge_cd = 1.0 + i * 0.6
+			add_child(l)
+			slimes.append(l)
+		for o in slimes:
+			if o.shield:
+				o.gold_t = Config.CHIEF_GOLD_TIME
+		GameState.notify("도마뱀 족장이 전쟁 북을 울렸다! 방패가 금빛으로 번쩍인다 (옆까지 막음, 등 뒤를 노리자).")
 		GameState.touch()
 		return
 	if Config.HUNT_ZONES[zone].get("boss_pattern") == &"general":
@@ -1732,6 +1777,15 @@ func _take(d: Dictionary) -> bool:
 func _hurt(from: Vector2, damage := 1, who := "야생 슬라임", what := "") -> void:
 	# 조련 크리처 방패 (2026-10-02): 동행이 한 번 대신 맞아 준다 (다시 막기까지 쿨)
 	var guard := HunterSkills.rank(&"creature_guard")
+	if companion != null and companion.data.species.lid and lid_cd <= 0.0:
+		# 아기 도마뱀 냄비뚜껑 방패 (2026-10-03 귀여리 임시 A): 몇 초마다 한 번 대신 막아 준다
+		lid_cd = Config.LID_COOLDOWN
+		guard_blocks += 1
+		_invulnerable = Config.HURT_INVULNERABLE_TIME
+		companion.play_attack(hunter.feet())
+		_pops.append({at = companion.position + Vector2(0, -18), text = "뚜껑!", t = 0.5, big = true})
+		GameState.notify("%s이(가) 냄비뚜껑으로 막아 주었다!" % companion.display_name())
+		return
 	if guard > 0 and guard_cd <= 0.0 and companion != null:
 		guard_cd = Config.GUARD_COOLDOWN - Config.GUARD_COOLDOWN_STEP * (guard - 1)
 		guard_blocks += 1
@@ -1815,6 +1869,15 @@ func _draw() -> void:
 				var cp: Vector2 = tg.at + Vector2(0, -70.0 * (1.0 - tg.progress))
 				draw_circle(cp, 5.0, Color(0.85, 0.65, 0.2))
 				draw_circle(cp + Vector2(-1, -1), 3.5, Color(1.0, 0.88, 0.45))
+			if tg.get("spear", false):
+				# 족장 창 던지기: 떨어질수록 낮아지는 창
+				var tip: Vector2 = tg.at + Vector2(0, -80.0 * (1.0 - tg.progress))
+				draw_line(tip + Vector2(-3, -18), tip, Color(0.5, 0.34, 0.2), 2.0)
+				draw_colored_polygon(PackedVector2Array([tip + Vector2(-3, -1), tip + Vector2(3, -1), tip + Vector2(0, 5)]), Color(0.8, 0.82, 0.86))
+			if tg.get("tail", false):
+				# 족장 꼬리 휘두르기: 둘레를 도는 꼬리 끝
+				var ta: float = tg.progress * TAU * 1.5
+				draw_arc(tg.at, tg.radius * 0.8, ta - 1.2, ta, 12, Color(0.45, 0.62, 0.35, 0.8), 4.0)
 			if tg.get("gust", false):
 				# 용 날개 바람: 원 둘레에 바람 줄
 				for i in 6:

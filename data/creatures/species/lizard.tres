@@ -1,0 +1,29 @@
+[gd_resource type="Resource" script_class="CreatureSpecies" load_steps=7 format=3]
+
+[ext_resource type="Script" path="res://scripts/creatures/creature_species.gd" id="1"]
+[ext_resource type="Resource" path="res://data/creatures/traits/ordinary.tres" id="2"]
+[ext_resource type="Resource" path="res://data/creatures/traits/diligent.tres" id="3"]
+[ext_resource type="Resource" path="res://data/creatures/traits/keen_eye.tres" id="4"]
+[ext_resource type="Resource" path="res://data/creatures/elements/earth.tres" id="5"]
+[ext_resource type="Texture2D" path="res://assets/creatures/baby_lizard.png" id="6"]
+
+[resource]
+script = ExtResource("1")
+id = &"lizard"
+display_name = "아기 도마뱀"
+faces = 1
+possible_elements = Array[Resource]([ExtResource("5")])
+job_aptitude = {
+&"forage": 1.25
+}
+work_speed_range = Vector2(0.9, 1.3)
+radius_range = Vector2i(1, 2)
+traits = Array[Resource]([ExtResource("2"), ExtResource("3"), ExtResource("4")])
+market = true
+lid = true
+sprite_sheets = {
+&"earth": ExtResource("6")
+}
+egg_color = Color(0.86, 0.84, 0.6, 1)
+egg_spot_color = Color(0.4, 0.58, 0.3, 1)
+color = Color(0.5, 0.68, 0.4, 1)

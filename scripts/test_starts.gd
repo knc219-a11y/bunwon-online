@@ -194,6 +194,7 @@ const SPECIES := {
 	&"imp": "res://data/creatures/species/imp.tres",
 	&"wyvern": "res://data/creatures/species/wyvern.tres",
 	&"blue_dragon": "res://data/creatures/species/blue_dragon.tres",
+	&"lizard": "res://data/creatures/species/lizard.tres",
 }
 const ELEMENTS := {
 	&"water": "res://data/creatures/elements/water.tres",

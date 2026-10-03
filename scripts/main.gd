@@ -2507,31 +2507,40 @@ func next_day() -> Array[String]:
 	GameState.minutes = float(Config.DAY_START_MINUTE)
 	_update_dusk()
 	var lines: Array[String] = []
+	var sold := 0
 	if GameState.displayed_crops > 0:
 		var earned := GameState.displayed_crops * Config.CROP_PRICE
 		GameState.money += earned
+		sold += earned
 		lines.append("공급함의 무 %d개가 팔렸다. 돈통에 +%d원" % [GameState.displayed_crops, earned])
 		GameState.displayed_crops = 0
 	if GameState.displayed_herbs > 0:
 		var earned := GameState.displayed_herbs * Config.HERB_PRICE
 		GameState.money += earned
+		sold += earned
 		lines.append("공급함의 들나물 %d포기가 팔렸다. 돈통에 +%d원" % [GameState.displayed_herbs, earned])
 		GameState.displayed_herbs = 0
 	if GameState.displayed_roots > 0:
 		var earned := GameState.displayed_roots * Config.ROOT_PRICE
 		GameState.money += earned
+		sold += earned
 		lines.append("공급함의 %s %d뿌리가 팔렸다. 돈통에 +%d원" % [Config.ROOT_NAME, GameState.displayed_roots, earned])
 		GameState.displayed_roots = 0
 	if GameState.displayed_fish > 0:
 		var earned := GameState.displayed_fish * Config.FISH_PRICE
 		GameState.money += earned
+		sold += earned
 		lines.append("공급함의 물고기 %d마리가 팔렸다. 돈통에 +%d원" % [GameState.displayed_fish, earned])
 		GameState.displayed_fish = 0
 	if GameState.displayed_hen_eggs > 0:
 		var earned := GameState.displayed_hen_eggs * Config.HEN_EGG_PRICE
 		GameState.money += earned
+		sold += earned
 		lines.append("공급함의 달걀 %d개가 팔렸다. 돈통에 +%d원" % [GameState.displayed_hen_eggs, earned])
 		GameState.displayed_hen_eggs = 0
+	var market := market_bonus(sold)
+	if market > 0:
+		lines.append("아기 도마뱀이 장에 내다 팔아 +%d원 더 받았다." % market)
 	var forge_line := _forge_morning()
 	if forge_line != "":
 		lines.append(forge_line)
@@ -2609,6 +2618,19 @@ func gather_gold_dust() -> int:
 			total += _rng.randi_range(r.x, r.y)
 	GameState.money += total
 	return total
+
+
+## 장보기 (아기 도마뱀, 2026-10-03 귀여리 임시 A): 일을 맡은 (쉬지 않고 원정도 안 간) 아기 도마뱀이 있으면 밤사이 판매값 +MARKET_BONUS.
+## 더 받은 돈을 돌려준다 (돈통에 이미 넣음).
+func market_bonus(sold: int) -> int:
+	if sold <= 0:
+		return 0
+	for c in creatures:
+		if c.data.species.market and c.job != CreatureJobs.REST and c.expedition_zone < 0:
+			var extra := roundi(sold * Config.MARKET_BONUS)
+			GameState.money += extra
+			return extra
+	return 0
 
 
 ## 비 내리기 (아기 청룡, 2026-10-03 소내섬): 일을 맡은 (쉬지 않고 원정도 안 간) 아기 청룡이 하나라도 있으면 아침에 밭 전체에 물.

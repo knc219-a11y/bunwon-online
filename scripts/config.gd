@@ -671,12 +671,18 @@ const HUNT_ZONES: Array[Dictionary] = [
 		map = "guiyeo", from_village = true,
 		labels = [[Vector2(26.5, 7.3), "도마뱀 야영지"]],
 		sheet = "res://assets/creatures/wild_shield_lizard.png", boss_sheet = "res://assets/creatures/wild_lizard_chief.png", burrow = false,
-		egg = "res://data/creatures/species/imp.tres", boss_egg = "res://data/creatures/species/imp.tres",
+		## 방패 도마뱀 (shield, 2026-10-03 귀여리 카드 추천 A, 사용자 선택 전 임시): 바라보는 쪽에서 친 공격은 방패에 막힘 (팅!).
+		## 창을 당겼다 (구역 windup) 길게 찌른 뒤 (LIZARD_THRUST) 방패가 내려간 틈 (LIZARD_SHIELD_DOWN) · 옆 · 등 뒤를 노린다. 떼 4.
+		## 대장 도마뱀 족장 (chief): 전쟁 북 (모든 방패 금빛 CHIEF_GOLD_TIME + 도마뱀 CHIEF_CALL 마리) → 꼬리 휘두르기 (둘레 원),
+		## 체력 절반부터 창 던지기 CHIEF_SPEARS 개.
+		shield = true,
+		## 알: 아기 도마뱀 (땅, 장보기 = 공급함 판매값 +20%, 동행 냄비뚜껑 방패). 대장도 가끔 같은 알.
+		egg = "res://data/creatures/species/lizard.tres", boss_egg = "res://data/creatures/species/lizard.tres",
 		egg_chance = 0.012, boss_egg_chance = 0.2,
 		## 곤지암보다 한 계단 (임시, 봇으로 맞춤)
 		count = 9, hp = 15, speed = 1.3, boss_hp = 110,
 		swarm = 4, max_attackers = 3,
-		damage = 3, knockback = 3.0, windup = 0.4, pack = false, boss_pattern = &"",
+		damage = 3, knockback = 3.0, windup = 0.45, pack = false, boss_pattern = &"chief",
 		advice = "권장: 사냥 도시락",
 		loot = {&"money": 32, &"potion": 26, &"junk": 20, &"gear": 22},
 		rarity = {&"normal": 18, &"magic": 46, &"rare": 36}, boss_rarity = {&"normal": 0, &"magic": 44, &"rare": 56},
@@ -705,7 +711,7 @@ const HUNT_ZONES: Array[Dictionary] = [
 			{id = &"cloud", name = "운룡", sheet = "res://assets/creatures/wild_cloud_dragon.png", egg = "res://data/creatures/species/cloud_dragon.tres", egg_chance = 0.5},
 			{id = &"gold", name = "황금 드래곤", sheet = "res://assets/creatures/wild_gold_dragon.png", egg = "res://data/creatures/species/gold_dragon.tres", egg_chance = 0.5},
 		],
-		count = 9, hp = 15, speed = 1.3, boss_hp = 160,
+		count = 9, hp = 15, speed = 1.3, boss_hp = 200,
 		swarm = 3, max_attackers = 3,
 		damage = 3, knockback = 3.0, windup = 0.4, pack = false, boss_pattern = &"dragon",
 		advice = "권장: 사냥 도시락 · 매운탕",
@@ -746,6 +752,29 @@ const GENERAL_RECOVER := 1.8
 const GENERAL_COOLDOWN := 2.2
 const GENERAL_CALL := 2
 const GENERAL_MINION_HP := 3
+## 귀여리 방패 도마뱀 (shield, 2026-10-03 임시 A): 창 찌르기 길이 · 시간, 찌른 뒤 방패가 내려가 있는 시간 (= 앞에서도 칠 틈).
+## 방패는 바라보는 쪽 LIZARD_FRONT_DOT (cos, 약 ±70도) 안을 막고, 금빛 (족장 북) 이면 LIZARD_GOLD_DOT (약 ±115도) 까지 · 찌른 뒤에도 막음.
+const LIZARD_THRUST := 64.0
+const LIZARD_THRUST_TIME := 0.22
+const LIZARD_SHIELD_DOWN := 1.3
+const LIZARD_FRONT_DOT := 0.35
+const LIZARD_GOLD_DOT := -0.4
+## 도마뱀 족장 (chief): CHIEF_RANGE 안이면 전쟁 북 (예고 CHIEF_DRUM_WINDUP) → 꼬리 휘두르기 (원 CHIEF_TAIL_RADIUS) → (절반부터) 창 던지기.
+const CHIEF_RANGE := 220.0
+const CHIEF_DRUM_WINDUP := 1.0
+const CHIEF_GOLD_TIME := 4.0
+const CHIEF_CALL := 2
+const CHIEF_MINION_HP := 3
+const CHIEF_TAIL_WINDUP := 0.7
+const CHIEF_TAIL_RADIUS := 56.0
+const CHIEF_SPEARS := 3
+const CHIEF_SPEAR_WINDUP := 0.8
+const CHIEF_SPEAR_RADIUS := 18.0
+const CHIEF_RECOVER := 1.2
+const CHIEF_COOLDOWN := 1.4
+## 아기 도마뱀 장보기: 공급함 밤사이 판매값 +20% · 냄비뚜껑 방패 쿨 (초)
+const MARKET_BONUS := 0.2
+const LID_COOLDOWN := 6.0
 ## 소내섬 용 (dragon, 2026-10-03, 값 전부 임시): DRAGON_RANGE 안이면 물어뜯기 돌진 → 날개 바람 (→ 희귀 용은 자기 기술) 을 돌아가며.
 ## 돌진은 역마 장군 창 돌격과 같은 식 (첫 예고 DRAGON_WINDUP, 꺾어 잇는 돌진 DRAGON_NEXT_WINDUP, DRAGON_CHARGES 번, 절반부터 +1),
 ## 몸통 반지름 DRAGON_HIT_RADIUS. 다 달리면 DRAGON_RECOVER 초 숨 고름 = 칠 틈, 두 번에 한 번 와이번 DRAGON_CALL 마리를 부름.

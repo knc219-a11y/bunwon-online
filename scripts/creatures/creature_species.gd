@@ -38,6 +38,10 @@ extends Resource
 @export var rains := false
 ## 하늘 배달 (아기 와이번, 2026-10-03 소내섬): 원정대에 끼면 그 구역 고향 종만큼 (Config.EXPEDITION_HOME_MULT) 잘 맞는다
 @export var courier := false
+## 장보기 (아기 도마뱀, 2026-10-03 귀여리 임시 A): 일하는 개체가 하나라도 있으면 공급함 밤사이 판매값 +MARKET_BONUS
+@export var market := false
+## 냄비뚜껑 방패 (아기 도마뱀 동행): 사냥에서 몇 초마다 한 번 대신 막아 줌 (조련 크리처 방패와 같은 식)
+@export var lid := false
 
 @export_group("그래픽")
 ## 속성 id → 스프라이트 시트 (규격은 docs/sprites.md). 시트가 없으면 color 로 도형을 그린다.
