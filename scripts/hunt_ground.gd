@@ -1255,6 +1255,12 @@ func _defeat(s: WildSlime) -> void:
 		if not GameState.naru_boss_down:
 			GameState.naru_boss_down = true
 			material_text += " 마을 쪽 물가에서 뱃노래가 희미하게 들렸다..."
+	# 5막 대장 재료 (2026-10-03 시설 5 마을회관): 용을 잡을 때마다 용 비늘 하나. 처음 잡으면 (final_boss_down) 다음 날 마을에 회관 터
+	if last_boss and z.get("boss_material5", false):
+		GameState.material5 += 1
+		material_text += " %s을(를) 얻었다 (%d개)." % [Config.BOSS_MATERIAL5_NAME, GameState.material5]
+		if not GameState.final_boss_down:
+			material_text += " 마을 쪽에서 확성기 소리가 희미하게 들렸다..."
 	# 그림자 늑대 (밀목): 하나가 쓰러지면 둘레 늑대가 멈칫한다 (칠 틈)
 	if s.wolf:
 		for o in slimes:

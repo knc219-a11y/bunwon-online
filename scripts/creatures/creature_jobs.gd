@@ -32,6 +32,9 @@ const NIGHT := &"night"
 ## 물고기 몰기 (2026-10-02 나루터 통발): 나루터를 고치면 생기는 일. 물가에서 물고기를 통발 쪽으로 몰아
 ## 한 번 할 때마다 내일 아침 물고기 +1 (GameState.fish_drive, 하루 FISH_DRIVE_CAP 번, 통발이 놓여 있을 때만). 물속성이 두 배 빠르다.
 const FISH := &"fish"
+## 심부름 (2026-10-03 시설 5 마을회관): 회관을 고치면 생기는 일. 회관 게시판까지 오가며 오늘 부탁 물건을 하나씩 대신 모아 온다
+## (GameState.errands, 하루 Config.ERRAND_CAP 번, 부탁 개수까지). 날거나 빠른 크리처가 유리하다 (재능 배율 없음).
+const ERRAND := &"errand"
 
 const NAMES := {
 	REST: "쉬는 중",
@@ -46,6 +49,7 @@ const NAMES := {
 	PLOW: "밭 갈기",
 	NIGHT: "밤일",
 	FISH: "물고기 몰기",
+	ERRAND: "심부름",
 	&"expedition": "원정",
 }
 
@@ -77,6 +81,8 @@ static func jobs() -> Array[StringName]:
 		out.append(FEED)
 	if GameState.naru_state >= 2:
 		out.append(FISH)
+	if GameState.hall_state >= 2:
+		out.append(ERRAND)
 	return out
 
 

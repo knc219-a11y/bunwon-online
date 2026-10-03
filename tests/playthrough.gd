@@ -120,6 +120,16 @@ const GONJIAM := 7
 ## 5막 (2026-10-03): 귀여리 (마을 입구) · 소내섬 (나룻배). 둘 다 웨이포인트에서 따로 들어가므로 사냥 한 번 통째로 센다.
 ## 구역 번호 → {day 첫 도착, hunts, hurt, knocked, boss 처음 잡은 날, dragons 만난 대장 이름별 수}
 var act5 := {}
+## 마을회관 · 잔치 (2026-10-03 시설 5 · 엔딩): 터 · 복구 · 잔치를 연 날, 들어준 부탁, 심부름 크리처, 잔치상에 쓰려고 따로 둔 것
+var hall_site_day := -1
+var hall_restore_day := -1
+var final_day := -1
+var errand_creature: Creature = null
+var feast_hidden := {}
+## 1일째부터 센 사람 어림 시간 (초) · 잔치를 연 날까지의 그 값
+var total_human_sec := 0.0
+var feast_human_sec := -1.0
+var final_human_sec := -1.0
 var gj_day := -1
 var gj_hunts := 0
 var gj_hurt := 0
@@ -226,6 +236,13 @@ func _ready() -> void:
 			Config.HUNT_ZONES[zi].name, "%d일" % a.day if a.has("day") else "없음", cleared_day.get(Config.HUNT_ZONES[zi].name, "없음"),
 			a.get("hunts", 0), a.get("hurt", 0), float(a.get("hurt", 0)) / maxi(a.get("hunts", 0), 1), a.get("knocked", 0), a.get("blocked", 0), a.get("dragons", {})])
 	_log("마지막 대장 처치: %s" % ("예" if GameState.final_boss_down else "아니오"))
+	_feast_unhide()
+	_log("\n마을회관 · 잔치: 마지막 대장 첫 처치 %s (사람 어림 %s) · 회관 터 %s · 복구 %s · 들어준 부탁 %d · 남은 용 비늘 %d · 잔치상 %d/%d · 잔치 %s (사람 어림 %s) · 심부름 %s" % [
+		"%d일" % final_day if final_day > 0 else "없음", _hours(final_human_sec), "%d일" % hall_site_day if hall_site_day > 0 else "없음",
+		"%d일" % hall_restore_day if hall_restore_day > 0 else "없음", GameState.requests_done, GameState.material5,
+		GameState.feast_dishes.size(), Config.FEAST_DISHES.size(), "%d일" % GameState.feast_day if GameState.feast_day > 0 else "없음",
+		_hours(feast_human_sec), errand_creature.describe() if errand_creature else "없음"])
+	_log("1일째부터 사람 어림 시간 합: %s (%d일)" % [_hours(total_human_sec), GameState.day - 1])
 	var crowd := []
 	for d in [20, 40, 60, 80, 100]:
 		if crowd_by_day.has(d):
@@ -247,6 +264,10 @@ func _ready() -> void:
 		var f := FileAccess.open(out, FileAccess.WRITE)
 		f.store_string("\n".join(log_lines))
 	get_tree().quit()
+
+
+func _hours(sec: float) -> String:
+	return "%.1f시간" % (sec / 3600.0) if sec >= 0.0 else "없음"
 
 
 func _worn_text(who: StringName) -> String:
@@ -278,6 +299,8 @@ func play_day() -> void:
 		barn_site_day = GameState.day
 	if GameState.naru_state >= 1 and naru_site_day < 0:
 		naru_site_day = GameState.day
+	if GameState.hall_state >= 1 and hall_site_day < 0:
+		hall_site_day = GameState.day
 	_log("\n## %d일째 (시작 돈 %d, 씨앗 %d, 작물 %d)" % [GameState.day, GameState.money, GameState.seeds, GameState.crops])
 	main._set_active(main.farmer)
 	await place_new_creatures()
@@ -329,6 +352,10 @@ func play_day() -> void:
 	# 크리처는 농부가 손일하는 동안 같이 일한다 (더 긴 쪽). 사냥은 그 뒤 따로.
 	var bot_sec := maxf(hand_sec, creature_sec) + hunt_sec
 	var human_sec := maxf(hand_sec * HUMAN_MULT, creature_sec) + hunt_sec * HUMAN_MULT
+	total_human_sec += human_sec
+	if GameState.final_boss_down and final_day < 0:
+		final_day = GameState.day
+		final_human_sec = total_human_sec
 	main.advance_clock(bot_sec * Config.CLOCK_MINUTES_PER_SECOND)
 	var bot_end := GameState.clock_text(Config.DAY_START_MINUTE + bot_sec * Config.CLOCK_MINUTES_PER_SECOND)
 	var human_end := GameState.clock_text(minf(Config.DAY_START_MINUTE + human_sec * Config.CLOCK_MINUTES_PER_SECOND, Config.CLOCK_MAX_MINUTE))
@@ -480,6 +507,23 @@ func place_new_creatures() -> void:
 			while pick.job != CreatureJobs.FISH:
 				pick.next_job()
 			_log("크리처 배치: %s → 물고기 몰기 (칸 %s)" % [pick.describe(), pick.home])
+	# 마을회관을 고쳤으면 채집 전담 하나 (날개 · 빠른 크리처 먼저) 에게 심부름
+	if GameState.hall_state >= 2 and errand_creature == null:
+		var pick: Creature = null
+		for s: Creature in main.creatures:
+			if s.home == main.HATCH_CELL or s in [scrap_creature, herb_creature, feed_creature, fish_creature] or s.job != CreatureJobs.FORAGE or s.expedition_zone >= 0:
+				continue
+			if pick == null or s.data.move_speed() > pick.data.move_speed():
+				pick = s
+		if pick != null:
+			errand_creature = pick
+			main.farmer.position = pick.position
+			main.interact()
+			main.farmer.position = Farm.center_of(Creature.errand_spot() + Vector2i(0, 1))
+			main.interact()
+			while pick.job != CreatureJobs.ERRAND:
+				pick.next_job()
+			_log("크리처 배치: %s → 심부름 (칸 %s)" % [pick.describe(), pick.home])
 	if farmers >= Config.FIELD_PLOTS.size() and full_day < 0:
 		full_day = GameState.day
 
@@ -639,6 +683,16 @@ func shop() -> Array[String]:
 		else:
 			reserve = maxi(reserve, Config.NARU_COST_MONEY)
 			keep_crops = maxi(keep_crops, mini(GameState.crops, Config.NARU_COST_CROPS))
+	# 마을회관 (2026-10-03): 용 비늘이 다 모이면 무 · 돈을 남겨 두고 고친다
+	if GameState.hall_state == 1 and GameState.material5 >= Config.HALL_COST_MATERIAL:
+		_feast_unhide()
+		if VillageHall.restore(main):
+			hall_restore_day = GameState.day
+			did.append("마을회관 복구(%d원 · 무 %d · %s %d)" % [Config.HALL_COST_MONEY, Config.HALL_COST_CROPS, Config.BOSS_MATERIAL5_NAME, Config.HALL_COST_MATERIAL])
+		else:
+			reserve = maxi(reserve, Config.HALL_COST_MONEY)
+			keep_crops = maxi(keep_crops, mini(GameState.crops, Config.HALL_COST_CROPS))
+	hall_day(did)
 	if GameState.naru_state >= 2:
 		dock_day(did)
 	if GameState.yak_state >= 2:
@@ -702,6 +756,57 @@ func shop() -> Array[String]:
 	if held:
 		held_days.append(GameState.day)
 	return did
+
+
+## 마을회관 · 잔치 (2026-10-03): 용 비늘이 다 모이면 고치고, 게시판 부탁은 가진 것으로 되면 들어주고,
+## 잔치상은 차릴 수 있는 상부터 그 사람으로 바꿔 차린다. 아직 못 차린 상에 들 재료는 따로 빼 두어 (feast_hidden)
+## 팔거나 다른 데 쓰지 않는다 (사람이라면 잔치 재료를 모을 것). 다 차면 바로 잔치를 연다 (장면은 건너뜀).
+func hall_day(did: Array[String]) -> void:
+	_feast_unhide()
+	if GameState.hall_state >= 2 and not GameState.hall_request.is_empty():
+		var id: StringName = GameState.hall_request.id
+		if int(GameState.get(String(id))) - VillageHall.still_needed() >= _feast_need(String(id)) and VillageHall.turn_in(main):
+			did.append("부탁 (%s)" % Config.HALL_REQUESTS[id][0])
+	if GameState.feast_state == 1:
+		for d: Array in Config.FEAST_DISHES:
+			if d[0] in GameState.feast_dishes or not VillageHall.person_open(d[1]):
+				continue
+			var who: Character = main.people().filter(func(c: Character) -> bool: return c.who == d[1])[0]
+			main._set_active(who)
+			if VillageHall.set_dish(main, d[0]):
+				did.append("잔치상 %s" % d[2])
+		main._set_active(main.farmer)
+		if VillageHall.feast_full():
+			main.feast_instant = true
+			if main.start_feast():
+				feast_human_sec = total_human_sec
+				did.append("잔치!")
+	_feast_hide()
+
+
+## 아직 못 차린 상에 드는 그 재료 수
+func _feast_need(key: String) -> int:
+	if GameState.feast_state != 1:
+		return 0
+	var n := 0
+	for d: Array in Config.FEAST_DISHES:
+		if not d[0] in GameState.feast_dishes and d[3].has(key) and key != "money":
+			n += int(d[3][key])
+	return n
+
+
+func _feast_hide() -> void:
+	for key: String in ["crops", "herbs", "junk", "scrap", "roots", "hen_eggs", "fish"]:
+		var k := mini(int(GameState.get(key)), _feast_need(key))
+		if k > 0:
+			feast_hidden[key] = k
+			GameState.set(key, int(GameState.get(key)) - k)
+
+
+func _feast_unhide() -> void:
+	for key: String in feast_hidden:
+		GameState.set(key, int(GameState.get(key)) + int(feast_hidden[key]))
+	feast_hidden.clear()
 
 
 ## 나루터: 바구니 물고기를 꺼내 매운탕이 없으면 뱃사공이 하나 끓이고 나머지는 진열, 통발은 날마다 다시 놓는다.
@@ -797,6 +902,9 @@ func craft_day(did: Array[String]) -> void:
 		var base: StringName = bases[crafted % bases.size()]
 		var cost: Array = Config.CRAFT_COSTS[base]
 		if GameState.scrap < cost[0] or GameState.money < cost[1]:
+			break
+		# 마을회관 복구비를 모으는 중이면 그만큼은 남긴다
+		if GameState.hall_state == 1 and GameState.material5 >= Config.HALL_COST_MATERIAL and GameState.money - cost[1] < Config.HALL_COST_MONEY:
 			break
 		var id: StringName = main.craft(base)
 		if id == &"":
@@ -975,6 +1083,10 @@ func hunt_day() -> void:
 	# 대장간을 아직 못 고쳤으면 사금 덩이(금사리 금두꺼비)를 모으러 금사리 웨이포인트부터 걸어간다 (광동리로 건너뛰지 않음)
 	if GameState.forge_state < 2 and zone > Config.FORGE_ZONE and Config.FORGE_ZONE in GameState.waypoints:
 		zone = Config.FORGE_ZONE
+	# 나루터를 아직 못 고쳤으면 마왕 뿔 (곤지암 마왕) 을 모으러 곤지암으로 (2026-10-03: 귀여리가 마을 입구에 생긴 뒤로 봇이 곤지암을 다시 안 가서
+	# 나루터 · 소내섬에 못 감. 사람이라면 뿔을 모으러 갈 것)
+	if GameState.naru_state < 2 and zone > Config.NARU_ZONE and Config.NARU_ZONE in GameState.waypoints:
+		zone = Config.NARU_ZONE
 	# 광동리 까마귀는 날아다녀서 혀 · 박치기가 안 닿는다: 광동리로 가면 아기 까마귀를 데려간다
 	if GameState.waypoints.max() >= 2 or zone >= 1:
 		for s: Creature in pool:

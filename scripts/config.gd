@@ -696,6 +696,8 @@ const HUNT_ZONES: Array[Dictionary] = [
 		## → 솔숲 · 바위 → 가운데 돌계단 → 위 용소 물굽이 (대장 자리).
 		name = "소내섬", junk_name = "와이번 비늘", monster = "독꼬리 와이번", boss_monster = "용", waypoint = true,
 		map = "sonae", ferry = true, final = true,
+		## 5막 대장 재료 (용 비늘, 2026-10-03 시설 5 마을회관)
+		boss_material5 = true,
 		labels = [[Vector2(26.0, 6.4), "용소"]],
 		sheet = "res://assets/creatures/wild_wyvern.png", boss_sheet = "res://assets/creatures/wild_dragon.png", burrow = false,
 		## 와이번은 까마귀처럼 날다가 내려꽂는다 (flyer). 나는 동안은 안 맞고, 내려앉아 숨 고를 때 맞는다.
@@ -1060,6 +1062,57 @@ const STEW_CROPS := 1
 const STEW_HP := 10
 const STEW_XP_MULT := 1.5
 
+## 마을회관 · 이장 (2026-10-03 시설 5, 사용자 선택 A 마을회관 · 이장). 본편 마지막 시설. 값 · 자리 · 그림 전부 임시.
+## 5막 대장 (소내섬 용, 마지막 대장) 을 처음 쓰러뜨린 다음 날 아침, 마을 아랫길 아래 풀밭에 무너진 마을회관 터가 드러난다.
+## 터에서 F → 돈 · 무 · 용 비늘을 다 모았으면 한 번에 고친다. 고치면 이장 (일곱째 캐릭터, Tab) 이 오고:
+##  - 게시판: 아침마다 주민 부탁 하나 (HALL_REQUESTS 중 열린 시설 것). 회관에서 F 로 들어주면 돈 + 가끔 장비 (공용 창고)
+##  - 확성기 아침 방송: 크리처 일이 HALL_BROADCAST_MULT 배 빠름
+##  - 크리처 일 심부름: 부탁 물건을 하나씩 대신 모아 감 (하루 ERRAND_CAP 번)
+##  - 이장이 잔치를 알린다 → 당산나무 앞 잔치상 (사용자 선택 B 잔치상 차리기, FEAST_*)
+const HALL_ZONE := 9
+const BOSS_MATERIAL5_NAME := "용 비늘"
+const HALL_RECT := Rect2i(11, 20, 4, 2)
+## 이장이 처음 서는 칸 (회관 오른쪽 아래)
+const CHIEF_CELL := Vector2i(15, 22)
+## 복구에 드는 것. 용은 하루 한 번만 잡으니 재료는 적게 (로드맵: 5막 대장 ≈ 12시간, 잔치 ≈ 13시간)
+const HALL_COST_MONEY := 15000
+const HALL_COST_CROPS := 100
+const HALL_COST_MATERIAL := 5
+## 게시판 부탁: id → [이름, 개수, 한 개 값 (보상 계산), 필요한 시설 (&"" = 처음부터)]. 보상 = 개수 x 값 x HALL_REWARD_MULT
+const HALL_REQUESTS := {
+	&"crops": ["무", 20, CROP_PRICE, &""],
+	&"herbs": ["들나물", 8, HERB_PRICE, &""],
+	&"junk": ["사냥 잡템", 10, JUNK_PRICE, &""],
+	&"scrap": ["고철", 10, 20, &"forge"],
+	&"roots": [ROOT_NAME, 8, ROOT_PRICE, &"yak"],
+	&"hen_eggs": ["달걀", 6, HEN_EGG_PRICE, &"barn"],
+	&"fish": ["물고기", 4, FISH_PRICE, &"naru"],
+}
+const HALL_REWARD_MULT := 2.5
+## 부탁을 들어주면 이 확률로 장비 하나 (소내섬 등급, 공용 창고)
+const HALL_GEAR_CHANCE := 0.25
+const HALL_BROADCAST_MULT := 1.2
+const ERRAND_CAP := 4
+
+## 잔치 (2026-10-03 엔딩, 사용자 선택 B 잔치상 차리기). 마을회관을 고치면 이장이 잔치를 알리고 당산나무 앞에 빈 잔치상이 놓인다.
+## 직업마다 한 상씩 그 사람이 직접 차린다 (Tab 으로 바꿔 잔치상에서 F). 다 차리면 잔치 열기 → 잔치 장면 + 크레딧 → 다음 날 평소대로.
+## 상: [id, 차리는 사람, 이름, {GameState 변수: 개수}] (그림 assets/props/feast_dishes.png 순서)
+const FEAST_RECT := Rect2i(25, 17, 3, 1)
+const FEAST_DISHES: Array = [
+	[&"greens", &"farmer", "무 · 나물 한 상", {crops = 30, herbs = 10}],
+	[&"skewer", &"hunter", "사냥꾼 꼬치", {junk = 15}],
+	[&"cauldron", &"smith", "가마솥", {scrap = 20}],
+	[&"wine", &"alchemist", "약주", {roots = 10}],
+	[&"eggs", &"rancher", "달걀찜", {hen_eggs = 12}],
+	[&"stew_pot", &"ferryman", "매운탕 큰 솥", {fish = 8}],
+	[&"rice_cake", &"chief", "떡 · 막걸리", {money = 3000}],
+]
+## 잔치 장면: 제목만 보이는 시간 · 크레딧이 올라가는 시간 (초)
+const FEAST_TITLE_TIME := 4.0
+const FEAST_CREDITS_TIME := 16.0
+## 잔치 장면의 시각 (게임 분, 저녁 8시)
+const FEAST_MINUTE := 20 * 60
+
 ## 크리처 원정 + 입양 (2026-10-01 사용자 선택 B + D, Expedition). 값은 전부 임시.
 ## 원정대 크기 (쉬는 · 채집 크리처 중 잘 맞는 크리처부터)
 const EXPEDITION_TEAM_MIN := 3
@@ -1093,12 +1146,14 @@ const ADOPT_GIFTS := {
 	&"alchemist": {name = "연금술사", text = "빨간 물약 2병", count = 2},
 	&"rancher": {name = "목축인", text = "사냥 도시락 1개", count = 1},
 	&"ferryman": {name = "뱃사공", text = "물고기 4마리", count = 4},
+	&"chief": {name = "이장", text = "2000원", count = 2000},
 }
 const ADOPT_SPOTS := {
 	&"smith": [Vector2i(3, 17), Vector2i(2, 17), Vector2i(3, 18), Vector2i(2, 18)],
 	&"alchemist": [Vector2i(18, 19), Vector2i(17, 19), Vector2i(16, 18), Vector2i(16, 19)],
 	&"rancher": [Vector2i(21, 6), Vector2i(22, 6), Vector2i(21, 5), Vector2i(21, 7)],
-	&"ferryman": [Vector2i(30, 19), Vector2i(30, 20), Vector2i(31, 20), Vector2i(29, 20)]}
+	&"ferryman": [Vector2i(30, 19), Vector2i(30, 20), Vector2i(31, 20), Vector2i(29, 20)],
+	&"chief": [Vector2i(16, 22), Vector2i(16, 21), Vector2i(10, 22), Vector2i(17, 22)]}
 
 ## 농사가 아닌 크리처 (채집 · 고철 · 도라지밭 · 모이) 의 일 이름표는 조작 중인 캐릭터가 이 거리 (px) 안일 때만 보인다
 const CREATURE_TAG_DISTANCE := 56.0
