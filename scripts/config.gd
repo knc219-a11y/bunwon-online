@@ -1058,7 +1058,8 @@ const FISH_PRICE := 45
 const FISH_DRIVE_CAP := 4
 ## 뱃사공 매운탕 (나루터에서 뱃사공 F): 다음 사냥 한 번 최대 체력 +STEW_HP · 경험치 xSTEW_XP_MULT (들어갈 때 먹음)
 const STEW_FISH := 2
-const STEW_CROPS := 1
+## 매운탕 양념 = 고추 (2026-10-03 농사 다양화: 고추는 도마리 대장 뒤 열림, 나루터보다 한참 먼저)
+const STEW_PEPPERS := 1
 const STEW_HP := 10
 const STEW_XP_MULT := 1.5
 
@@ -1105,6 +1106,9 @@ const HALL_REQUESTS := {
 	&"roots": [ROOT_NAME, 8, ROOT_PRICE, &"yak"],
 	&"hen_eggs": ["달걀", 6, HEN_EGG_PRICE, &"barn"],
 	&"fish": ["물고기", 4, FISH_PRICE, &"naru"],
+	&"potatoes": ["감자", 12, 15, &"forge"],
+	&"peppers": ["고추", 8, 40, &"yak"],
+	&"cabbages": ["배추", 4, 110, &"barn"],
 }
 const HALL_REWARD_MULT := 2.5
 ## 부탁을 들어주면 이 확률로 장비 하나 (소내섬 등급, 공용 창고)
@@ -1118,7 +1122,8 @@ const ERRAND_CAP := 4
 const FEAST_RECT := Rect2i(25, 17, 3, 1)
 const FEAST_DISHES: Array = [
 	## 농부 상은 무만 (2026-10-03 봇: 늦게는 채집 크리처가 들나물을 다 캐서 농부 손에 나물이 안 모인다)
-	[&"greens", &"farmer", "무생채 · 뭇국", {crops = 40}],
+	## 2026-10-03 농사 다양화: 무 하나 → 밭 작물 넷을 고루 (모두 3막 대장 뒤면 열려 있음)
+	[&"greens", &"farmer", "김치 · 감자전 · 뭇국", {crops = 20, potatoes = 10, peppers = 6, cabbages = 4}],
 	[&"skewer", &"hunter", "사냥꾼 꼬치", {junk = 15}],
 	[&"cauldron", &"smith", "가마솥", {scrap = 20}],
 	[&"wine", &"alchemist", "약주", {roots = 10}],
@@ -1176,3 +1181,21 @@ const ADOPT_SPOTS := {
 
 ## 농사가 아닌 크리처 (채집 · 고철 · 도라지밭 · 모이) 의 일 이름표는 조작 중인 캐릭터가 이 거리 (px) 안일 때만 보인다
 const CREATURE_TAG_DISTANCE := 56.0
+
+## 밭 작물 (2026-10-03 백로그 5번 "농사가 무만이라 재미없음"). 값 · 날수는 전부 임시.
+## 막 대장을 처음 쓰러뜨리면 (GameState.bosses_beaten 에 zone) 다음 아침 그 땅에서 씨앗 CROP_UNLOCK_SEEDS 개를 얻고 열린다.
+## 밭 구역마다 심을 작물을 공급함 "밭 작물 · 씨앗" 에서 정한다 (농부 · 크리처 모두 그 구역 작물을 심는다).
+## 칸당 하루 벌이는 무 (50원 / 3일 ≈ 17원) 와 비슷하게: 다른 건 자라는 방식 · 일손 · 쓰임.
+##  - row: crops.png 줄 · held / seed_var: GameState 변수 (가진 수 · 씨앗) · days: 처음 익는 날수
+##  - picks: 한 번 심어 딸 수 있는 횟수 (고추 = 여러 번), regrow: 딴 뒤 다시 익는 날수 · amount: 한 번 딸 때 개수
+const CROP_UNLOCK_SEEDS := 10
+const CROPS := {
+	&"radish": {name = "무", row = 0, days = CROP_GROW_DAYS, picks = 1, regrow = 0, amount = 1, price = CROP_PRICE,
+		held = "crops", seed_var = "seeds", pack = SEED_PACK_SIZE, pack_price = SEED_PACK_PRICE, zone = -1, note = "3일 · 시설 복구 · 모이 · 미끼"},
+	&"potato": {name = "감자", row = 1, days = 2, picks = 1, regrow = 0, amount = 2, price = 15,
+		held = "potatoes", seed_var = "potato_seeds", pack = 5, pack_price = 50, zone = FORGE_ZONE, note = "2일 · 한 칸에 둘"},
+	&"pepper": {name = "고추", row = 2, days = 4, picks = 4, regrow = 2, amount = 1, price = 40,
+		held = "peppers", seed_var = "pepper_seeds", pack = 5, pack_price = 150, zone = YAK_ZONE, note = "4일 · 딴 뒤 2일마다 또 (4번) · 매운탕"},
+	&"cabbage": {name = "배추", row = 3, days = 6, picks = 1, regrow = 0, amount = 1, price = 110,
+		held = "cabbages", seed_var = "cabbage_seeds", pack = 5, pack_price = 200, zone = BARN_ZONE, note = "6일 · 비쌈 · 김치"},
+}

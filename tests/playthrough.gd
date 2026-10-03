@@ -129,6 +129,9 @@ var errand_creature: Creature = null
 var build_creature: Creature = null
 var build_start := {}
 var feast_hidden := {}
+## 밭 작물 (2026-10-03 농사 다양화): 판 수 (작물 id → 수) · 작물이 열린 날
+var crops_sold := {}
+var crop_open_day := {}
 ## 1일째부터 센 사람 어림 시간 (초) · 잔치를 연 날까지의 그 값
 var total_human_sec := 0.0
 var feast_human_sec := -1.0
@@ -246,6 +249,8 @@ func _ready() -> void:
 		GameState.feast_dishes.size(), Config.FEAST_DISHES.size(), "%d일" % GameState.feast_day if GameState.feast_day > 0 else "없음",
 		_hours(feast_human_sec), errand_creature.describe() if errand_creature else "없음"])
 	_log("1일째부터 사람 어림 시간 합: %s (%d일)" % [_hours(total_human_sec), GameState.day - 1])
+	_log("\n밭 작물: 구역에 심기 시작한 날 %s · 판 수 %s · 구역 작물 %s · 남은 씨앗 무 %d 감자 %d 고추 %d 배추 %d" % [crop_open_day, crops_sold,
+		range(GameState.open_plots).map(func(i: int) -> String: return Crops.display_name(Crops.plot_kind(i))), GameState.seeds, GameState.potato_seeds, GameState.pepper_seeds, GameState.cabbage_seeds])
 	var crowd := []
 	for d in [20, 40, 60, 80, 100]:
 		if crowd_by_day.has(d):
@@ -732,14 +737,20 @@ func shop() -> Array[String]:
 	if GameState.yak_state >= 2:
 		brew_day(did)
 	var held := false
-	if GameState.crops > keep_crops:
-		var shown := GameState.crops - keep_crops
-		GameState.crops = shown
-		did.append("무 %d 진열%s" % [shown, (" (복구용 %d 남김)" % keep_crops) if keep_crops > 0 else ""])
+	plan_plots(did)
+	# 무는 복구용 · 고추는 매운탕 두 그릇 몫을 남기고 나머지 작물은 모두 진열 (2026-10-03 밭 작물)
+	var keep_peppers := mini(GameState.peppers, 2 * Config.STEW_PEPPERS) if GameState.naru_state >= 1 else 0
+	GameState.crops -= keep_crops
+	GameState.peppers -= keep_peppers
+	if Crops.held_total() > 0:
+		for k in Crops.ORDER:
+			crops_sold[k] = int(crops_sold.get(k, 0)) + Crops.held(k)
+		did.append("작물 진열 %s%s" % [Crops.held_text(), (" (무 복구용 %d 남김)" % keep_crops) if keep_crops > 0 else ""])
 		main.supply_action(&"display_crops")
-		GameState.crops = keep_crops
 	elif keep_crops > 0:
 		did.append("무 %d 복구용으로 남김" % keep_crops)
+	GameState.crops += keep_crops
+	GameState.peppers += keep_peppers
 	if GameState.forge_state >= 2:
 		craft_day(did)
 	if GameState.herbs > 0:
@@ -748,13 +759,19 @@ func shop() -> Array[String]:
 	var keep := true
 	while keep:
 		keep = false
-		var empty := 0
+		var empty := {}
 		for c: Vector2i in farm._cells:
 			var cell: Farm.Cell = farm._cells[c]
-			empty += int(not cell.planted)
-		if empty > GameState.seeds and GameState.money >= Config.SEED_PACK_PRICE:
-			main.supply_action(&"buy_seeds")
-			did.append("씨앗")
+			if not cell.planted:
+				var k := Crops.kind_at(c)
+				empty[k] = int(empty.get(k, 0)) + 1
+		var bought_seed := false
+		for k: StringName in empty:
+			if empty[k] > Crops.seeds(k) and GameState.money >= int(Crops.info(k).pack_price) and Crops.buy_seeds(k):
+				did.append("%s 씨앗" % Crops.display_name(k))
+				bought_seed = true
+				break
+		if bought_seed:
 			keep = true
 			continue
 		for id: StringName in [&"expand_field", &"upgrade_can", &"upgrade_hoe", &"buy_knife", &"seed_vest", &"rain_boots", &"hiking_shoes", &"straw_hat", &"ball_cap"]:
@@ -790,6 +807,19 @@ func shop() -> Array[String]:
 	if held:
 		held_days.append(GameState.day)
 	return did
+
+
+## 밭 구역 작물 (2026-10-03 농사 다양화): 사람처럼 열린 작물을 구역마다 하나씩 (처음 밭은 시설 복구에 드는 무 그대로).
+## 구역 순서 = 열린 순서: 오른쪽 구역 감자 · 왼쪽 아래 고추 · 오른쪽 아래 배추.
+func plan_plots(did: Array[String]) -> void:
+	var want: Array[StringName] = [&"radish", &"potato", &"pepper", &"cabbage"]
+	for i in GameState.open_plots:
+		var k := want[i] if want[i] == &"radish" or want[i] in GameState.crop_unlocked else &"radish"
+		if Crops.plot_kind(i) != k:
+			Crops.set_plot(i, k)
+			if not crop_open_day.has(k):
+				crop_open_day[k] = GameState.day
+			did.append("%s → %s" % [Config.FIELD_PLOT_NAMES[i], Crops.display_name(k)])
 
 
 ## 마을회관 · 잔치 (2026-10-03): 용 비늘이 다 모이면 고치고, 게시판 부탁은 가진 것으로 되면 들어주고,
@@ -832,7 +862,7 @@ func _feast_need(key: String) -> int:
 
 
 func _feast_hide() -> void:
-	for key: String in ["crops", "herbs", "junk", "scrap", "roots", "hen_eggs", "fish"]:
+	for key: String in ["crops", "potatoes", "peppers", "cabbages", "herbs", "junk", "scrap", "roots", "hen_eggs", "fish"]:
 		var k := mini(int(GameState.get(key)), _feast_need(key))
 		if k > 0:
 			feast_hidden[key] = k

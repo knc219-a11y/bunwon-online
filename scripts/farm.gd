@@ -2,7 +2,7 @@ class_name Farm
 extends Node2D
 ## 농장 타일 상태와 농사 동작. 바닥은 assets/tiles 의 타일셋으로 그린다 (docs/sprites.md "농장 바닥 타일").
 
-## PLOW 깊이 갈기 (2026-10-02 아기 망아지): 심지 않은 칸을 깊이 갈아 두면 거둘 때 무 Config.PLOW_BONUS 개 더
+## PLOW 깊이 갈기 (2026-10-02 아기 망아지): 심지 않은 칸을 깊이 갈아 두면 거둘 때 작물 Config.PLOW_BONUS 개 더
 enum Work { TILL, SOW, WATER, HARVEST, PLOW }
 
 const TILES := preload("res://assets/tiles/farm_tiles.png")
@@ -28,11 +28,17 @@ class Cell:
 	var watered := false
 	## 물을 준 채로 지난 날 수
 	var growth := 0
-	## 깊이 간 칸 (아기 망아지 밭 갈기): 거두면 무가 더 나오고 보통 칸으로 돌아간다
+	## 깊이 간 칸 (아기 망아지 밭 갈기): 거두면 작물이 더 나오고 보통 칸으로 돌아간다
 	var plowed := false
+	## 심은 작물 (Config.CROPS id) · 이번에 심고 딴 횟수 (고추처럼 여러 번 따는 작물)
+	var kind := &"radish"
+	var picks := 0
+
+	func days() -> int:
+		return int(Crops.info(kind).days)
 
 	func is_ripe() -> bool:
-		return planted and growth >= Config.CROP_GROW_DAYS
+		return planted and growth >= days()
 
 
 var _cells: Dictionary[Vector2i, Cell] = {}
@@ -117,7 +123,7 @@ func can_do(work: Work, cell: Vector2i) -> bool:
 		Work.TILL:
 			return not c.tilled
 		Work.SOW:
-			return c.tilled and not c.planted and GameState.seeds > 0
+			return c.tilled and not c.planted and Crops.seeds(Crops.kind_at(cell)) > 0
 		Work.WATER:
 			return c.planted and not c.watered and not c.is_ripe()
 		Work.HARVEST:
@@ -138,19 +144,28 @@ func do_work(work: Work, cell: Vector2i) -> bool:
 		Work.SOW:
 			c.planted = true
 			c.growth = 0
-			GameState.seeds -= 1
+			c.kind = Crops.kind_at(cell)
+			c.picks = 0
+			Crops.add_seeds(c.kind, -1)
 		Work.WATER:
 			c.watered = true
 		Work.PLOW:
 			c.tilled = true
 			c.plowed = true
 		Work.HARVEST:
-			c.planted = false
-			c.watered = false
-			c.growth = 0
-			GameState.crops += 1 + (Config.PLOW_BONUS if c.plowed else 0)
+			var d := Crops.info(c.kind)
+			Crops.add_held(c.kind, int(d.amount) + (Config.PLOW_BONUS if c.plowed else 0))
 			c.plowed = false
-			GameState.seeds += Config.SEEDS_PER_HARVEST
+			c.watered = false
+			c.picks += 1
+			if c.picks < int(d.picks):
+				# 여러 번 따는 작물 (고추): 그대로 서서 regrow 날 뒤 또 익는다
+				c.growth = int(d.days) - int(d.regrow)
+			else:
+				c.planted = false
+				c.growth = 0
+				c.picks = 0
+				Crops.add_seeds(c.kind, Config.SEEDS_PER_HARVEST)
 	queue_redraw()
 	GameState.touch()
 	return true
@@ -187,7 +202,7 @@ func boost_growth(center: Vector2i, radius: int, chance: float, rng: RandomNumbe
 	for dx in range(-radius, radius + 1):
 		for dy in range(-radius, radius + 1):
 			var c: Cell = _cells.get(center + Vector2i(dx, dy))
-			if c and c.planted and c.watered and not c.is_ripe() and c.growth + 1 < Config.CROP_GROW_DAYS and rng.randf() < chance:
+			if c and c.planted and c.watered and not c.is_ripe() and c.growth + 1 < c.days() and rng.randf() < chance:
 				c.growth += 1
 				n += 1
 	return n
@@ -285,13 +300,15 @@ func _is_path(cell: Vector2i) -> bool:
 	return _path.has(cell)
 
 
-## 성장 단계 0 씨앗, 1 싹, 2 자람, 3 다 자람
+## 성장 단계 0 씨앗, 1 싹, 2 자람, 3 다 자람 (딴 뒤 다시 익는 고추는 2)
 static func crop_stage(c: Cell) -> int:
 	if c.is_ripe():
 		return 3
+	if c.picks > 0:
+		return 2
 	if c.growth == 0:
 		return 0
-	return mini(2, 1 + (c.growth - 1) * 2 / maxi(1, Config.CROP_GROW_DAYS - 1))
+	return mini(2, 1 + (c.growth - 1) * 2 / maxi(1, c.days() - 1))
 
 
 func _tile(cell: Vector2i, texture: Texture2D, col: int, row: int) -> void:
@@ -325,7 +342,7 @@ func _draw() -> void:
 			for k in 3:
 				draw_rect(Rect2(o + Vector2(3 + k * 8, Config.TILE - 4), Vector2(3, 2)), Color(0.36, 0.22, 0.13))
 		if c.planted:
-			_tile(cell, CROPS, crop_stage(c), 0)
+			_tile(cell, CROPS, crop_stage(c), int(Crops.info(c.kind).row))
 	# 울타리는 위 줄부터 그려 아래 칸 기둥이 위 칸 가로대를 덮게 한다
 	var fence_cells := _fence.keys()
 	fence_cells.sort_custom(func(a: Vector2i, b: Vector2i) -> bool: return a.y < b.y)

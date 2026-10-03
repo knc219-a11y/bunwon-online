@@ -7,7 +7,8 @@
     행 1: 갈아 둔 밭, 열 = 이웃 연결 비트 (위 1, 오른쪽 2, 아래 4, 왼쪽 8)
     행 2: 물 준 밭, 열 = 이웃 연결 비트
     행 3: 흙길 가장자리, 열 = 이웃 연결 비트
-  crops.png (96 x 24, 4열): 첫 작물 무의 성장 단계 0 씨앗, 1 싹, 2 자람, 3 다 자람
+  crops.png (96 x 96, 4열 x 4행): 성장 단계 0 씨앗, 1 싹, 2 자람, 3 다 자람.
+    행 = 작물 (Config.CROPS 의 row): 0 무, 1 감자, 2 고추, 3 배추 (2026-10-03 농사 다양화)
 
 밭과 흙길 칸은 가장자리가 투명하다. 게임은 풀을 먼저 깔고 그 위에 그린다.
 
@@ -57,6 +58,22 @@ RADISH_TOP = (178, 212, 134)
 RADISH_TOP_D = (140, 186, 112)
 RADISH_TOP_L = (200, 226, 160)
 SEED = (236, 214, 160)
+# 감자: 짙은 잎 덤불 + 흰 꽃, 다 자라면 흙 위로 드러난 갈색 감자
+POTATO = (196, 156, 104)
+POTATO_D = (160, 120, 80)
+POTATO_L = (222, 188, 136)
+POTATO_LEAF = (84, 150, 76)
+POTATO_FLOWER = (244, 240, 250)
+# 고추: 가는 줄기, 다 자라면 빨간 고추가 주렁주렁
+PEPPER = (214, 58, 48)
+PEPPER_D = (170, 40, 40)
+PEPPER_L = (240, 110, 90)
+PEPPER_G = (110, 170, 70)
+# 배추: 겹겹이 둥근 연두 잎, 속은 노르스름
+CABBAGE = (170, 214, 120)
+CABBAGE_D = (120, 176, 92)
+CABBAGE_L = (214, 236, 168)
+CABBAGE_IN = (236, 238, 190)
 
 
 class Tile:
@@ -256,6 +273,107 @@ def crop(stage):
     return t
 
 
+def sprout(t, cx, ground):
+    """작물 공통 1단계: 둥근 떡잎 두 장"""
+    for y in range(ground - 3, ground + 1):
+        t.px(cx, y, LEAF_D)
+    ellipse(t, cx - 2.5, ground - 4.5, 1.5, 1, LEAF)
+    ellipse(t, cx + 2.5, ground - 5, 1.5, 1, LEAF_L)
+
+
+def seed_mound(t, cx, ground, c=SEED):
+    for x in range(cx - 3, cx + 3):
+        t.px(x, ground, SOIL_L)
+    t.px(cx - 1, ground - 1, c)
+    t.px(cx + 1, ground - 1, c)
+
+
+def potato(stage):
+    """감자. 2 잎 덤불, 3 꽃 핀 덤불 + 흙 위로 드러난 감자 세 알."""
+    t = Tile()
+    cx, ground = 12, 18
+    if stage == 0:
+        seed_mound(t, cx, ground, POTATO_L)
+    elif stage == 1:
+        sprout(t, cx, ground)
+    else:
+        big = stage == 3
+        ellipse(t, cx, ground - (5 if big else 3), 5 if big else 4, 4 if big else 3, POTATO_LEAF)
+        ellipse(t, cx - 2, ground - (7 if big else 4), 2, 2, LEAF)
+        ellipse(t, cx + 2, ground - (6 if big else 4), 2, 1.5, LEAF_L)
+        if big:
+            for fx, fy in ((cx - 3, ground - 9), (cx + 2, ground - 10), (cx + 4, ground - 7)):
+                t.px(fx, fy, POTATO_FLOWER)
+                t.px(fx, fy - 1, (250, 220, 120))
+            for px_, py_ in ((cx - 5, ground), (cx + 1, ground + 1), (cx + 5, ground)):
+                ellipse(t, px_, py_, 2, 1.5, POTATO)
+                t.px(px_ + 1, py_ + 1, POTATO_D)
+                t.px(px_ - 1, py_ - 1, POTATO_L)
+    return t
+
+
+def pepper(stage):
+    """고추. 2 가는 줄기와 잎 + 흰 꽃, 3 빨간 고추가 주렁주렁 (따도 다시 열린다)."""
+    t = Tile()
+    cx, ground = 12, 19
+    if stage == 0:
+        seed_mound(t, cx, ground - 1, (240, 220, 150))
+    elif stage == 1:
+        sprout(t, cx, ground - 1)
+    else:
+        h = 13 if stage == 3 else 10
+        for y in range(ground - h, ground + 1):
+            t.px(cx, y, LEAF_D)
+        for i, (dx, dy) in enumerate(((-3, 3), (3, 5), (-3, 7), (3, 9), (-2, 11), (2, 12))):
+            if dy > h:
+                continue
+            ellipse(t, cx + dx, ground - dy, 1.5, 1, LEAF if i % 2 else LEAF_L)
+        if stage == 2:
+            t.px(cx - 2, ground - 9, (250, 250, 240))
+            t.px(cx + 2, ground - 6, (250, 250, 240))
+        else:
+            # 잎 사이로 늘어진 빨간 고추 (잎보다 나중에 그려 가리지 않게)
+            for dx, dy in ((-5, 6), (5, 8), (-5, 10), (4, 12), (1, 5)):
+                x, y = cx + dx, ground - dy
+                t.px(x, y - 1, PEPPER_G)
+                t.px(x, y, PEPPER_L)
+                t.px(x, y + 1, PEPPER)
+                t.px(x + (1 if dx < 0 else -1), y + 1, PEPPER)
+                t.px(x, y + 2, PEPPER_D)
+    return t
+
+
+def cabbage(stage):
+    """배추. 2 벌어진 잎, 3 겹겹이 오므린 큰 배추."""
+    t = Tile()
+    cx, ground = 12, 18
+    if stage == 0:
+        seed_mound(t, cx, ground, (180, 140, 100))
+    elif stage == 1:
+        sprout(t, cx, ground)
+    elif stage == 2:
+        ellipse(t, cx - 3, ground - 3, 3, 2, CABBAGE_D)
+        ellipse(t, cx + 3, ground - 3, 3, 2, CABBAGE)
+        ellipse(t, cx, ground - 5, 2.5, 3, CABBAGE_L)
+    else:
+        ellipse(t, cx, ground - 4, 7, 5, CABBAGE_D)
+        ellipse(t, cx, ground - 6, 5, 5, CABBAGE)
+        ellipse(t, cx - 1, ground - 8, 3, 3, CABBAGE_L)
+        ellipse(t, cx, ground - 10, 2, 1.5, CABBAGE_IN)
+        for y in range(ground - 8, ground):
+            t.px(cx + 3, y, CABBAGE_D)
+        t.px(cx - 4, ground - 3, CABBAGE_L)
+        t.px(cx + 5, ground - 2, CABBAGE_L)
+        # 잎맥
+        for y in range(ground - 6, ground - 1):
+            t.px(cx - 3, y, CABBAGE_L)
+            t.px(cx + 1, y + 1, CABBAGE_IN)
+    return t
+
+
+CROP_ROWS = [crop, potato, pepper, cabbage]
+
+
 def tileset():
     img = Image.new("RGBA", (T * 16, T * 4), (0, 0, 0, 0))
     for v in range(4):
@@ -271,9 +389,10 @@ def tileset():
 
 
 def crops():
-    img = Image.new("RGBA", (T * 4, T), (0, 0, 0, 0))
-    for s in range(4):
-        img.paste(crop(s).img, (s * T, 0))
+    img = Image.new("RGBA", (T * 4, T * len(CROP_ROWS)), (0, 0, 0, 0))
+    for row, draw in enumerate(CROP_ROWS):
+        for s in range(4):
+            img.paste(draw(s).img, (s * T, row * T))
     outline(img, T)
     grade_p1(img)
     return img
