@@ -26,7 +26,7 @@ const STARTS: Array[Dictionary] = [
 		waypoints = [0, 1], weapons = [&"hunting_bow"], shop = [&"rain_boots"],
 	},
 	{
-		id = &"forge_ready", name = "대장간 고치기 직전", note = "12일 · 복구 재료 다 모음",
+		id = &"forge_ready", name = "대장간 고치기 직전", note = "12일 · 재료 다 모음 (공사 시작 전)",
 		day = 12, money = 2400, seeds = 10, crops = 40, material = 12, plots = 4, planted = true,
 		creatures = [
 			[&"slime", &"farm", &"water", 0, 0], [&"slime", &"farm", &"", 0, 0], [&"slime", &"farm", &"", 0, 0], [&"slime", &"farm", &"", 0, 0],
@@ -309,10 +309,8 @@ static func apply(main: Node2D, id: StringName) -> bool:
 			GameState.bosses_beaten.append(Config.FORGE_ZONE)
 		main.show_forge_site()
 	if forge_state >= 2:
-		# 복구비만큼 잠깐 채워서 실제 복구 흐름으로 고친다
-		GameState.money += Config.FORGE_COST_MONEY
-		GameState.crops += Config.FORGE_COST_CROPS
-		GameState.material += Config.FORGE_COST_MATERIAL
+		# 공사까지 다 끝난 것으로 치고 실제 문 열기 흐름으로 고친다
+		SiteWork.fill(&"forge")
 		main.restore_forge()
 	GameState.scrap = s.get("scrap", 0)
 	var yak_state: int = s.get("yak", 0)
@@ -322,9 +320,8 @@ static func apply(main: Node2D, id: StringName) -> bool:
 			GameState.bosses_beaten.append(Config.YAK_ZONE)
 		main.show_yak_site()
 	if yak_state >= 2:
-		GameState.money += Config.YAK_COST_MONEY
-		GameState.roots += Config.YAK_COST_ROOTS
-		GameState.material2 += Config.YAK_COST_MATERIAL
+		# 공사까지 다 끝난 것으로 치고 실제 문 열기 흐름으로 고친다
+		SiteWork.fill(&"yak")
 		main.restore_yak()
 	var barn_state: int = s.get("barn", 0)
 	if barn_state >= 1:
@@ -333,9 +330,8 @@ static func apply(main: Node2D, id: StringName) -> bool:
 			GameState.bosses_beaten.append(Config.BARN_ZONE)
 		main.show_barn_site()
 	if barn_state >= 2:
-		GameState.money += Config.BARN_COST_MONEY
-		GameState.crops += Config.BARN_COST_CROPS
-		GameState.material3 += Config.BARN_COST_MATERIAL
+		# 공사까지 다 끝난 것으로 치고 실제 문 열기 흐름으로 고친다
+		SiteWork.fill(&"barn")
 		main.restore_barn()
 		GameState.hens = s.get("hens", Config.START_HENS)
 	var naru_state: int = s.get("naru", 0)
@@ -345,9 +341,8 @@ static func apply(main: Node2D, id: StringName) -> bool:
 			GameState.bosses_beaten.append(Config.NARU_ZONE)
 		main.show_naru_site()
 	if naru_state >= 2:
-		GameState.money += Config.NARU_COST_MONEY
-		GameState.crops += Config.NARU_COST_CROPS
-		GameState.material4 += Config.NARU_COST_MATERIAL
+		# 공사까지 다 끝난 것으로 치고 실제 문 열기 흐름으로 고친다
+		SiteWork.fill(&"naru")
 		main.restore_naru()
 	# 마을회관 (2026-10-03 시설 5): 마지막 대장 (소내섬 용) 을 잡은 것으로 치고 터 → 복구 (복구하면 잔치상이 놓인다)
 	var hall_state: int = s.get("hall", 0)
@@ -357,9 +352,8 @@ static func apply(main: Node2D, id: StringName) -> bool:
 			GameState.bosses_beaten.append(Config.HALL_ZONE)
 		VillageHall.show_site(main)
 	if hall_state >= 2:
-		GameState.money += Config.HALL_COST_MONEY
-		GameState.crops += Config.HALL_COST_CROPS
-		GameState.material5 += Config.HALL_COST_MATERIAL
+		# 공사까지 다 끝난 것으로 치고 실제 문 열기 흐름으로 고친다
+		SiteWork.fill(&"hall")
 		VillageHall.restore(main)
 	GameState.herbs = s.get("herbs", 0)
 	GameState.hen_eggs = s.get("hen_eggs", 0)

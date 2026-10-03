@@ -1239,6 +1239,20 @@ func _on_wear_changed() -> void:
 	GameState.touch()
 
 
+## 공사가 다 된 시설의 문을 연다 (아침 · 테스트). 연 시설이면 true.
+func open_site(fac: StringName) -> bool:
+	match fac:
+		&"forge":
+			return restore_forge()
+		&"yak":
+			return restore_yak()
+		&"barn":
+			return restore_barn()
+		&"naru":
+			return restore_naru()
+	return VillageHall.restore(self)
+
+
 # --- 대장간 복구 · 대장장이 (2026-09-29 사용자 선택 A: 한 번에 복구 + 사람 장비 제작) ---
 
 ## 아침에 대장간 쪽에서 생긴 일 (아침 카드 한 줄, 없으면 ""). 1막 대장을 처음 잡은 다음 날 터가 드러나고,
@@ -1246,7 +1260,7 @@ func _on_wear_changed() -> void:
 func _forge_morning() -> String:
 	if GameState.forge_state == 0 and GameState.forge_boss_down:
 		show_forge_site()
-		return "금사리 대장이 쓰러진 뒤, 마을 아랫길 왼쪽 풀밭에 무너진 대장간 터가 드러났다. 터에서 F."
+		return "금사리 대장이 쓰러진 뒤, 마을 아랫길 왼쪽 풀밭에 무너진 대장간 터가 드러났다. 터에서 F. 이제 금사리 몬스터도 사금 덩이를 가끔 떨어뜨린다."
 	if GameState.forge_state >= 2:
 		GameState.scrap_pile = Config.SCRAP_PER_DAY
 	return ""
@@ -1266,20 +1280,16 @@ func forge_costs() -> Array:
 	return [
 		["돈", GameState.money, Config.FORGE_COST_MONEY],
 		["무 (수확해서 들고 있는 것)", GameState.crops, Config.FORGE_COST_CROPS],
-		[Config.BOSS_MATERIAL_NAME + " (금사리 금두꺼비)", GameState.material, Config.FORGE_COST_MATERIAL],
+		[Config.BOSS_MATERIAL_NAME + " (금사리 대장 · 몬스터)", GameState.material, Config.FORGE_COST_MATERIAL],
 	]
 
 
 func can_restore_forge() -> bool:
-	return GameState.forge_state == 1 and forge_costs().all(func(c: Array) -> bool: return c[1] >= c[2])
+	return GameState.forge_state == 1 and not SiteWork.building(&"forge") and forge_costs().all(func(c: Array) -> bool: return c[1] >= c[2])
 
 
 func forge_cost_lines() -> Array[String]:
-	var out: Array[String] = []
-	for c: Array in forge_costs():
-		out.append("  %s  %d / %d %s" % [c[0], mini(c[1], c[2]), c[2], "✔" if c[1] >= c[2] else ""])
-	out.append("다 모으면 한 번에 고친다 → 대장장이 (Tab)")
-	return out
+	return SiteWork.lines(&"forge", forge_costs(), "대장장이 (Tab)")
 
 
 func forge_options() -> Array[StringName]:
@@ -1295,7 +1305,7 @@ func craft_options() -> Array[StringName]:
 func forge_option_text(id: StringName) -> String:
 	match id:
 		&"restore":
-			return "고치기" if can_restore_forge() else "고치기 (아직 모자람)"
+			return SiteWork.option_text(&"forge", can_restore_forge())
 		&"close":
 			return "닫기"
 	var it: Dictionary = Wearables.ITEMS[id]
@@ -1319,16 +1329,26 @@ func _forge_interact() -> void:
 func restore_forge() -> bool:
 	if GameState.forge_state != 1:
 		return false
-	if not can_restore_forge():
-		var short: Array[String] = []
-		for c: Array in forge_costs():
-			if c[1] < c[2]:
-				short.append("%s %d" % [String(c[0]).split(" ")[0], c[2] - c[1]])
-		GameState.notify("아직 모자라다: %s." % ", ".join(short))
+	# 공사 중 (2026-10-03): 공사가 다 됐으면 문을 연다 (아침에 저절로도 연다)
+	if SiteWork.building(&"forge"):
+		if not SiteWork.ready(&"forge"):
+			GameState.notify("%s 공사 중이다. 크리처에게 R 로 터 공사를 맡기자 (남은 %d일)." % [SiteWork.NAMES[&"forge"], SiteWork.days_left(&"forge")])
+			return false
+		SiteWork.finish(&"forge")
+	else:
+		if not can_restore_forge():
+			var short: Array[String] = []
+			for c: Array in forge_costs():
+				if c[1] < c[2]:
+					short.append("%s %d" % [String(c[0]).split(" ")[0], c[2] - c[1]])
+			GameState.notify("아직 모자라다: %s." % ", ".join(short))
+			return false
+		GameState.money -= Config.FORGE_COST_MONEY
+		GameState.crops -= Config.FORGE_COST_CROPS
+		GameState.material -= Config.FORGE_COST_MATERIAL
+		SiteWork.start(&"forge")
+		GameState.notify(SiteWork.start_text(&"forge"))
 		return false
-	GameState.money -= Config.FORGE_COST_MONEY
-	GameState.crops -= Config.FORGE_COST_CROPS
-	GameState.material -= Config.FORGE_COST_MATERIAL
 	GameState.forge_state = 2
 	GameState.scrap_pile = Config.SCRAP_PER_DAY
 	show_forge_restored()
@@ -1394,7 +1414,7 @@ func craft(base: StringName) -> StringName:
 func _yak_morning() -> String:
 	if GameState.yak_state == 0 and GameState.yak_boss_down:
 		show_yak_site()
-		return "장승이 쓰러진 뒤, 아랫길 가운데 풀밭에 무너진 약방 터가 드러났다. 터에서 F. 이제 캔 도라지는 팔지 않고 약방에 모은다."
+		return "장승이 쓰러진 뒤, 아랫길 가운데 풀밭에 무너진 약방 터가 드러났다. 터에서 F. 광동리 · 도마리 몬스터도 장승 조각을 가끔 떨어뜨린다. 이제 캔 도라지는 팔지 않고 약방에 모은다."
 	if GameState.yak_state >= 2:
 		GameState.herb_bed = Config.HERB_BED_PER_DAY
 	return ""
@@ -1415,20 +1435,16 @@ func yak_costs() -> Array:
 	return [
 		["돈", GameState.money, Config.YAK_COST_MONEY],
 		[Config.ROOT_NAME + " (땅 크리처 채집)", GameState.roots, Config.YAK_COST_ROOTS],
-		[Config.BOSS_MATERIAL2_NAME + " (도마리 장승)", GameState.material2, Config.YAK_COST_MATERIAL],
+		[Config.BOSS_MATERIAL2_NAME + " (도마리 장승 · 몬스터)", GameState.material2, Config.YAK_COST_MATERIAL],
 	]
 
 
 func can_restore_yak() -> bool:
-	return GameState.yak_state == 1 and yak_costs().all(func(c: Array) -> bool: return c[1] >= c[2])
+	return GameState.yak_state == 1 and not SiteWork.building(&"yak") and yak_costs().all(func(c: Array) -> bool: return c[1] >= c[2])
 
 
 func yak_cost_lines() -> Array[String]:
-	var out: Array[String] = []
-	for c: Array in yak_costs():
-		out.append("  %s  %d / %d %s" % [c[0], mini(c[1], c[2]), c[2], "✔" if c[1] >= c[2] else ""])
-	out.append("다 모으면 한 번에 고친다 → 연금술사 (Tab) · 호롱")
-	return out
+	return SiteWork.lines(&"yak", yak_costs(), "연금술사 (Tab) · 호롱")
 
 
 func yak_options() -> Array[StringName]:
@@ -1450,7 +1466,7 @@ const BREW_COST_NAMES := {herbs = "나물", roots = Config.ROOT_NAME, junk = "�
 func brew_option_text(id: StringName) -> String:
 	match id:
 		&"restore":
-			return "고치기" if can_restore_yak() else "고치기 (아직 모자람)"
+			return SiteWork.option_text(&"yak", can_restore_yak())
 		&"close":
 			return "닫기"
 		&"feed_tonic":
@@ -1476,16 +1492,26 @@ func _yak_interact() -> void:
 func restore_yak() -> bool:
 	if GameState.yak_state != 1:
 		return false
-	if not can_restore_yak():
-		var short: Array[String] = []
-		for c: Array in yak_costs():
-			if c[1] < c[2]:
-				short.append("%s %d" % [String(c[0]).split(" ")[0], c[2] - c[1]])
-		GameState.notify("아직 모자라다: %s." % ", ".join(short))
+	# 공사 중 (2026-10-03): 공사가 다 됐으면 문을 연다 (아침에 저절로도 연다)
+	if SiteWork.building(&"yak"):
+		if not SiteWork.ready(&"yak"):
+			GameState.notify("%s 공사 중이다. 크리처에게 R 로 터 공사를 맡기자 (남은 %d일)." % [SiteWork.NAMES[&"yak"], SiteWork.days_left(&"yak")])
+			return false
+		SiteWork.finish(&"yak")
+	else:
+		if not can_restore_yak():
+			var short: Array[String] = []
+			for c: Array in yak_costs():
+				if c[1] < c[2]:
+					short.append("%s %d" % [String(c[0]).split(" ")[0], c[2] - c[1]])
+			GameState.notify("아직 모자라다: %s." % ", ".join(short))
+			return false
+		GameState.money -= Config.YAK_COST_MONEY
+		GameState.roots -= Config.YAK_COST_ROOTS
+		GameState.material2 -= Config.YAK_COST_MATERIAL
+		SiteWork.start(&"yak")
+		GameState.notify(SiteWork.start_text(&"yak"))
 		return false
-	GameState.money -= Config.YAK_COST_MONEY
-	GameState.roots -= Config.YAK_COST_ROOTS
-	GameState.material2 -= Config.YAK_COST_MATERIAL
 	GameState.yak_state = 2
 	GameState.herb_bed = Config.HERB_BED_PER_DAY
 	show_yak_restored()
@@ -1556,7 +1582,7 @@ func feed_tonic() -> bool:
 func _barn_morning() -> String:
 	if GameState.barn_state == 0 and GameState.barn_boss_down:
 		show_barn_site()
-		return "%s 대장이 쓰러진 뒤, 부화기 오른쪽 큰길 위 풀밭에 무너진 축사 터가 드러났다. 터에서 F." % Config.HUNT_ZONES[Config.BARN_ZONE].name
+		return "%s 대장이 쓰러진 뒤, 부화기 오른쪽 큰길 위 풀밭에 무너진 축사 터가 드러났다. 터에서 F. 번천 · 밀목 몬스터도 산군 발톱을 가끔 떨어뜨린다." % Config.HUNT_ZONES[Config.BARN_ZONE].name
 	if GameState.barn_state < 2:
 		return ""
 	var guarded := creatures.any(func(c: Creature) -> bool: return c.data.species.guards_coop and c.job == CreatureJobs.FEED)
@@ -1661,20 +1687,16 @@ func barn_costs() -> Array:
 	return [
 		["돈", GameState.money, Config.BARN_COST_MONEY],
 		["무 (수확해서 들고 있는 것)", GameState.crops, Config.BARN_COST_CROPS],
-		[Config.BOSS_MATERIAL3_NAME + " (%s 대장)" % Config.HUNT_ZONES[Config.BARN_ZONE].name, GameState.material3, Config.BARN_COST_MATERIAL],
+		[Config.BOSS_MATERIAL3_NAME + " (%s 대장 · 몬스터)" % Config.HUNT_ZONES[Config.BARN_ZONE].name, GameState.material3, Config.BARN_COST_MATERIAL],
 	]
 
 
 func can_restore_barn() -> bool:
-	return GameState.barn_state == 1 and barn_costs().all(func(c: Array) -> bool: return c[1] >= c[2])
+	return GameState.barn_state == 1 and not SiteWork.building(&"barn") and barn_costs().all(func(c: Array) -> bool: return c[1] >= c[2])
 
 
 func barn_cost_lines() -> Array[String]:
-	var out: Array[String] = []
-	for c: Array in barn_costs():
-		out.append("  %s  %d / %d %s" % [c[0], mini(c[1], c[2]), c[2], "✔" if c[1] >= c[2] else ""])
-	out.append("다 모으면 한 번에 고친다 → 목축인 (Tab) · 닭 한 쌍")
-	return out
+	return SiteWork.lines(&"barn", barn_costs(), "목축인 (Tab) · 닭 한 쌍")
 
 
 ## 축사 터 · 축사에서 F. 터면 복구 창, 고친 축사면 닭장 창 (농부 · 목축인, 도시락은 목축인만).
@@ -1686,16 +1708,26 @@ func _barn_interact() -> void:
 func restore_barn() -> bool:
 	if GameState.barn_state != 1:
 		return false
-	if not can_restore_barn():
-		var short: Array[String] = []
-		for c: Array in barn_costs():
-			if c[1] < c[2]:
-				short.append("%s %d" % [String(c[0]).split(" ")[0], c[2] - c[1]])
-		GameState.notify("아직 모자라다: %s." % ", ".join(short))
+	# 공사 중 (2026-10-03): 공사가 다 됐으면 문을 연다 (아침에 저절로도 연다)
+	if SiteWork.building(&"barn"):
+		if not SiteWork.ready(&"barn"):
+			GameState.notify("%s 공사 중이다. 크리처에게 R 로 터 공사를 맡기자 (남은 %d일)." % [SiteWork.NAMES[&"barn"], SiteWork.days_left(&"barn")])
+			return false
+		SiteWork.finish(&"barn")
+	else:
+		if not can_restore_barn():
+			var short: Array[String] = []
+			for c: Array in barn_costs():
+				if c[1] < c[2]:
+					short.append("%s %d" % [String(c[0]).split(" ")[0], c[2] - c[1]])
+			GameState.notify("아직 모자라다: %s." % ", ".join(short))
+			return false
+		GameState.money -= Config.BARN_COST_MONEY
+		GameState.crops -= Config.BARN_COST_CROPS
+		GameState.material3 -= Config.BARN_COST_MATERIAL
+		SiteWork.start(&"barn")
+		GameState.notify(SiteWork.start_text(&"barn"))
 		return false
-	GameState.money -= Config.BARN_COST_MONEY
-	GameState.crops -= Config.BARN_COST_CROPS
-	GameState.material3 -= Config.BARN_COST_MATERIAL
 	GameState.barn_state = 2
 	GameState.hens = Config.START_HENS
 	show_barn_restored()
@@ -1734,7 +1766,7 @@ func coop_options() -> Array[StringName]:
 func coop_option_text(id: StringName) -> String:
 	match id:
 		&"restore":
-			return "고치기" if can_restore_barn() else "고치기 (아직 모자람)"
+			return SiteWork.option_text(&"barn", can_restore_barn())
 		&"take_nest":
 			return "둥지 달걀 꺼내기 (%d개)" % GameState.nest
 		&"feed":
@@ -1818,7 +1850,7 @@ func _draw_lake() -> void:
 func _naru_morning() -> String:
 	if GameState.naru_state == 0 and GameState.naru_boss_down:
 		show_naru_site()
-		return "%s 대장이 쓰러진 뒤, 마을 오른쪽 아래 팔당호 물가에 무너진 나루터 터가 드러났다. 터에서 F." % Config.HUNT_ZONES[Config.NARU_ZONE].name
+		return "%s 대장이 쓰러진 뒤, 마을 오른쪽 아래 팔당호 물가에 무너진 나루터 터가 드러났다. 터에서 F. 역동 · 곤지암 몬스터도 마왕 뿔을 가끔 떨어뜨린다." % Config.HUNT_ZONES[Config.NARU_ZONE].name
 	if GameState.naru_state < 2:
 		return ""
 	var r := traps_night(_rng)
@@ -1873,12 +1905,12 @@ func naru_costs() -> Array:
 	return [
 		["돈", GameState.money, Config.NARU_COST_MONEY],
 		["무 (수확해서 들고 있는 것)", GameState.crops, Config.NARU_COST_CROPS],
-		[Config.BOSS_MATERIAL4_NAME + " (%s 대장)" % Config.HUNT_ZONES[Config.NARU_ZONE].name, GameState.material4, Config.NARU_COST_MATERIAL],
+		[Config.BOSS_MATERIAL4_NAME + " (%s 대장 · 몬스터)" % Config.HUNT_ZONES[Config.NARU_ZONE].name, GameState.material4, Config.NARU_COST_MATERIAL],
 	]
 
 
 func can_restore_naru() -> bool:
-	return GameState.naru_state == 1 and naru_costs().all(func(c: Array) -> bool: return c[1] >= c[2])
+	return GameState.naru_state == 1 and not SiteWork.building(&"naru") and naru_costs().all(func(c: Array) -> bool: return c[1] >= c[2])
 
 
 ## 나루터 창 아래 나룻배 줄 (5막 섬 뱃길)
@@ -1892,27 +1924,33 @@ func ferry_line() -> String:
 
 
 func naru_cost_lines() -> Array[String]:
-	var out: Array[String] = []
-	for c: Array in naru_costs():
-		out.append("  %s  %d / %d %s" % [c[0], mini(c[1], c[2]), c[2], "✔" if c[1] >= c[2] else ""])
-	out.append("다 모으면 한 번에 고친다 → 뱃사공 (Tab) · 통발 · 나룻배")
-	return out
+	return SiteWork.lines(&"naru", naru_costs(), "뱃사공 (Tab) · 통발 · 나룻배")
 
 
 ## 한 번에 고친다 (선택창과 테스트가 함께 쓴다). 모자라면 무엇이 모자란지 알린다.
 func restore_naru() -> bool:
 	if GameState.naru_state != 1:
 		return false
-	if not can_restore_naru():
-		var short: Array[String] = []
-		for c: Array in naru_costs():
-			if c[1] < c[2]:
-				short.append("%s %d" % [String(c[0]).split(" ")[0], c[2] - c[1]])
-		GameState.notify("아직 모자라다: %s." % ", ".join(short))
+	# 공사 중 (2026-10-03): 공사가 다 됐으면 문을 연다 (아침에 저절로도 연다)
+	if SiteWork.building(&"naru"):
+		if not SiteWork.ready(&"naru"):
+			GameState.notify("%s 공사 중이다. 크리처에게 R 로 터 공사를 맡기자 (남은 %d일)." % [SiteWork.NAMES[&"naru"], SiteWork.days_left(&"naru")])
+			return false
+		SiteWork.finish(&"naru")
+	else:
+		if not can_restore_naru():
+			var short: Array[String] = []
+			for c: Array in naru_costs():
+				if c[1] < c[2]:
+					short.append("%s %d" % [String(c[0]).split(" ")[0], c[2] - c[1]])
+			GameState.notify("아직 모자라다: %s." % ", ".join(short))
+			return false
+		GameState.money -= Config.NARU_COST_MONEY
+		GameState.crops -= Config.NARU_COST_CROPS
+		GameState.material4 -= Config.NARU_COST_MATERIAL
+		SiteWork.start(&"naru")
+		GameState.notify(SiteWork.start_text(&"naru"))
 		return false
-	GameState.money -= Config.NARU_COST_MONEY
-	GameState.crops -= Config.NARU_COST_CROPS
-	GameState.material4 -= Config.NARU_COST_MATERIAL
 	GameState.naru_state = 2
 	show_naru_restored()
 	GameState.notify("나루터를 고쳤다! 뱃사공이 왔다 (Tab). 통발에 미끼(무)를 넣어 놓으면 아침에 물고기가 든다. 크리처에게 물고기 몰기(R)도 맡길 수 있다.")
@@ -1940,7 +1978,7 @@ func dock_options() -> Array[StringName]:
 func dock_option_text(id: StringName) -> String:
 	match id:
 		&"restore":
-			return "고치기" if can_restore_naru() else "고치기 (아직 모자람)"
+			return SiteWork.option_text(&"naru", can_restore_naru())
 		&"set_traps":
 			var n := Config.TRAP_MAX - GameState.traps
 			return "통발 놓기 (%d개, 미끼 무 %d씩)" % [n, Config.TRAP_BAIT]
@@ -2598,6 +2636,8 @@ func night_work() -> int:
 func next_day() -> Array[String]:
 	GameState.day += 1
 	GameState.minutes = float(Config.DAY_START_MINUTE)
+	var built_yesterday := GameState.build_today
+	GameState.build_today = 0
 	_update_dusk()
 	var lines: Array[String] = []
 	var sold := 0
@@ -2649,6 +2689,15 @@ func next_day() -> Array[String]:
 	var hall_line := VillageHall.morning(self, _rng)
 	if hall_line != "":
 		lines.append(hall_line)
+	# 시설 공사 (2026-10-03 백로그 4번): 다 된 공사는 아침에 문을 연다, 덜 된 공사는 진척 한 줄
+	for fac in SiteWork.ORDER:
+		if not SiteWork.building(fac):
+			continue
+		if SiteWork.ready(fac):
+			if open_site(fac):
+				lines.append("%s 공사가 끝나 문을 열었다! %s이(가) 왔다 (Tab)." % [SiteWork.NAMES[fac], SiteWork.MASTERS[fac]])
+		else:
+			lines.append("%s 공사 %d/%d일%s" % [SiteWork.NAMES[fac], SiteWork.work(fac) / Config.BUILD_CAP, SiteWork.task(fac).days, " · 어제는 공사한 크리처가 없었다 (R 터 공사)" if built_yesterday == 0 else ""])
 	forage.sprout(_rng)
 	var herb_line := "밭 밖 풀밭에 들나물 %d포기가 돋았다." % forage.herbs.size()
 	if forage.bonus_today > 0:
@@ -2837,19 +2886,19 @@ func _refresh_props() -> void:
 	var away := Expedition.away_count(self)
 	hunt_gate.set_badge("원정 %d마리" % away if away > 0 else "")
 	if forge:
-		forge.set_badge("%s %d/%d" % [Config.BOSS_MATERIAL_NAME, GameState.material, Config.FORGE_COST_MATERIAL] if GameState.forge_state == 1 else ("고철 %d" % GameState.scrap))
+		forge.set_badge(SiteWork.badge(&"forge") if GameState.forge_state == 1 else ("고철 %d" % GameState.scrap))
 	if scrap_heap:
 		scrap_heap.set_badge("고철 %d" % GameState.scrap_pile if GameState.scrap_pile > 0 else "비었음")
 	if yak:
 		# 고친 뒤엔 도라지밭 남은 수도 여기 함께 (도라지밭 배지가 약방 옆 배지와 겹쳐서, 2026-10-01)
-		yak.set_badge("%s %d/%d" % [Config.BOSS_MATERIAL2_NAME, GameState.material2, Config.YAK_COST_MATERIAL] if GameState.yak_state == 1 else ("%s %d · 밭 %d" % [Config.ROOT_NAME, GameState.roots, GameState.herb_bed]))
+		yak.set_badge(SiteWork.badge(&"yak") if GameState.yak_state == 1 else ("%s %d · 밭 %d" % [Config.ROOT_NAME, GameState.roots, GameState.herb_bed]))
 	if herb_bed:
 		herb_bed.set_badge("")
 	if barn:
-		barn.set_badge("%s %d/%d" % [Config.BOSS_MATERIAL3_NAME, GameState.material3, Config.BARN_COST_MATERIAL] if GameState.barn_state == 1 else ("둥지 달걀 %d" % GameState.nest if GameState.nest > 0 else ""))
+		barn.set_badge(SiteWork.badge(&"barn") if GameState.barn_state == 1 else ("둥지 달걀 %d" % GameState.nest if GameState.nest > 0 else ""))
 		_flock.queue_redraw()
 	if naru:
-		naru.set_badge("%s %d/%d" % [Config.BOSS_MATERIAL4_NAME, GameState.material4, Config.NARU_COST_MATERIAL] if GameState.naru_state == 1 else ("물고기 %d" % GameState.basket if GameState.basket > 0 else ""))
+		naru.set_badge(SiteWork.badge(&"naru") if GameState.naru_state == 1 else ("물고기 %d" % GameState.basket if GameState.basket > 0 else ""))
 	if _lake:
 		_lake.queue_redraw()
 	if hall:
@@ -2987,22 +3036,22 @@ func _refresh_hud() -> void:
 	# 윗줄이 넘치지 않게 대장간 단계에 필요한 것만
 	if GameState.forge_state >= 2:
 		_status.text += " | 고철 %d" % GameState.scrap
-	elif GameState.material > 0:
-		_status.text += " | %s %d/%d" % [Config.BOSS_MATERIAL_NAME, GameState.material, Config.FORGE_COST_MATERIAL]
+	elif GameState.forge_state == 1:
+		_status.text += " | " + SiteWork.status_text(&"forge")
 	if GameState.yak_state >= 1:
 		_status.text += " | %s %d" % [Config.ROOT_NAME, GameState.roots]
 	if GameState.yak_state == 1:
-		_status.text += " · %s %d/%d" % [Config.BOSS_MATERIAL2_NAME, GameState.material2, Config.YAK_COST_MATERIAL]
-	if GameState.barn_state == 1 or (GameState.barn_state == 0 and GameState.material3 > 0):
-		_status.text += " | %s %d/%d" % [Config.BOSS_MATERIAL3_NAME, GameState.material3, Config.BARN_COST_MATERIAL]
+		_status.text += " · " + SiteWork.status_text(&"yak")
+	if GameState.barn_state == 1:
+		_status.text += " | " + SiteWork.status_text(&"barn")
 	elif GameState.barn_state >= 2:
 		_status.text += " | 달걀 %d" % GameState.hen_eggs
-	if GameState.naru_state == 1 or (GameState.naru_state == 0 and GameState.material4 > 0):
-		_status.text += " | %s %d/%d" % [Config.BOSS_MATERIAL4_NAME, GameState.material4, Config.NARU_COST_MATERIAL]
+	if GameState.naru_state == 1:
+		_status.text += " | " + SiteWork.status_text(&"naru")
 	elif GameState.naru_state >= 2:
 		_status.text += " | 물고기 %d" % GameState.fish
-	if GameState.hall_state == 1 or (GameState.hall_state == 0 and GameState.material5 > 0):
-		_status.text += " | %s %d/%d" % [Config.BOSS_MATERIAL5_NAME, GameState.material5, Config.HALL_COST_MATERIAL]
+	if GameState.hall_state == 1:
+		_status.text += " | " + SiteWork.status_text(&"hall")
 	elif GameState.feast_state == 1:
 		_status.text += " | 잔치상 %d/%d" % [GameState.feast_dishes.size(), Config.FEAST_DISHES.size()]
 	# 대장간 · 약방 · 축사 단계에 붙은 것은 잡템 알약 하나로 모은다

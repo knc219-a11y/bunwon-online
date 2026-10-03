@@ -33,7 +33,7 @@ const STUFF_NAMES := {crops = "무", herbs = "나물", junk = "잡템", scrap = 
 static func morning(main: Node2D, rng: RandomNumberGenerator) -> String:
 	if GameState.hall_state == 0 and GameState.final_boss_down:
 		show_site(main)
-		return "용이 물러간 뒤, 아랫길 아래 풀밭에 무너진 마을회관 터가 드러났다. 터에서 F."
+		return "용이 물러간 뒤, 아랫길 아래 풀밭에 무너진 마을회관 터가 드러났다. 터에서 F. 귀여리 · 소내섬 몬스터도 용 비늘을 가끔 떨어뜨린다."
 	if GameState.hall_state < 2:
 		return ""
 	GameState.errands = 0
@@ -68,36 +68,42 @@ static func costs() -> Array:
 	return [
 		["돈", GameState.money, Config.HALL_COST_MONEY],
 		["무 (수확해서 들고 있는 것)", GameState.crops, Config.HALL_COST_CROPS],
-		[Config.BOSS_MATERIAL5_NAME + " (%s 대장)" % Config.HUNT_ZONES[Config.HALL_ZONE].name, GameState.material5, Config.HALL_COST_MATERIAL],
+		[Config.BOSS_MATERIAL5_NAME + " (%s 대장 · 몬스터)" % Config.HUNT_ZONES[Config.HALL_ZONE].name, GameState.material5, Config.HALL_COST_MATERIAL],
 	]
 
 
 static func can_restore() -> bool:
-	return GameState.hall_state == 1 and costs().all(func(c: Array) -> bool: return c[1] >= c[2])
+	return GameState.hall_state == 1 and not SiteWork.building(&"hall") and costs().all(func(c: Array) -> bool: return c[1] >= c[2])
 
 
 static func cost_lines() -> Array[String]:
-	var out: Array[String] = []
-	for c: Array in costs():
-		out.append("  %s  %d / %d %s" % [c[0], mini(c[1], c[2]), c[2], "✔" if c[1] >= c[2] else ""])
-	out.append("다 모으면 한 번에 고친다 → 이장 (Tab) · 게시판 · 그리고 잔치")
-	return out
+	return SiteWork.lines(&"hall", costs(), "이장 (Tab) · 게시판 · 그리고 잔치")
 
 
 ## 한 번에 고친다 (선택창 · 테스트 · 봇이 함께 쓴다). 고치면 이장이 바로 잔치를 알린다.
 static func restore(main: Node2D) -> bool:
 	if GameState.hall_state != 1:
 		return false
-	if not can_restore():
-		var short: Array[String] = []
-		for c: Array in costs():
-			if c[1] < c[2]:
-				short.append("%s %d" % [String(c[0]).split(" ")[0], c[2] - c[1]])
-		GameState.notify("아직 모자라다: %s." % ", ".join(short))
+	# 공사 중 (2026-10-03): 공사가 다 됐으면 문을 연다 (아침에 저절로도 연다)
+	if SiteWork.building(&"hall"):
+		if not SiteWork.ready(&"hall"):
+			GameState.notify("마을회관 공사 중이다. 크리처에게 R 로 터 공사를 맡기자 (남은 %d일)." % SiteWork.days_left(&"hall"))
+			return false
+		SiteWork.finish(&"hall")
+	else:
+		if not can_restore():
+			var short: Array[String] = []
+			for c: Array in costs():
+				if c[1] < c[2]:
+					short.append("%s %d" % [String(c[0]).split(" ")[0], c[2] - c[1]])
+			GameState.notify("아직 모자라다: %s." % ", ".join(short))
+			return false
+		GameState.money -= Config.HALL_COST_MONEY
+		GameState.crops -= Config.HALL_COST_CROPS
+		GameState.material5 -= Config.HALL_COST_MATERIAL
+		SiteWork.start(&"hall")
+		GameState.notify(SiteWork.start_text(&"hall"))
 		return false
-	GameState.money -= Config.HALL_COST_MONEY
-	GameState.crops -= Config.HALL_COST_CROPS
-	GameState.material5 -= Config.HALL_COST_MATERIAL
 	GameState.hall_state = 2
 	show_restored(main)
 	new_request(main._rng)
@@ -213,7 +219,7 @@ static func options(main: Node2D, kind: StringName) -> Array[StringName]:
 static func option_text(main: Node2D, id: StringName) -> String:
 	match id:
 		&"restore":
-			return "고치기" if can_restore() else "고치기 (아직 모자람)"
+			return SiteWork.option_text(&"hall", can_restore())
 		&"turn_in":
 			return "부탁 들어주기 (%s, 더 낼 것 %d)" % [request_text(), still_needed()]
 		&"reroll":
@@ -372,7 +378,7 @@ static func draw_feast(main: Node2D, n: Node2D) -> void:
 static func badge_text(kind: StringName) -> String:
 	if kind == &"hall":
 		if GameState.hall_state == 1:
-			return "%s %d/%d" % [Config.BOSS_MATERIAL5_NAME, GameState.material5, Config.HALL_COST_MATERIAL]
+			return SiteWork.badge(&"hall")
 		return "부탁 %s" % (Config.HALL_REQUESTS[GameState.hall_request.id][0] if not GameState.hall_request.is_empty() else "끝")
 	if GameState.feast_state >= 2:
 		return ""
