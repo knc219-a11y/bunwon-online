@@ -106,6 +106,10 @@ var final_boss_down := false
 var hall_state := 0
 ## 5막 대장 재료 (용 비늘)
 var material5 := 0
+## 시설 공사 (2026-10-03 백로그 4번, SiteWork): 시설 id → 크리처가 한 공사 수 (키가 있으면 공사 중, 시설이 서면 지움).
+## build_today = 오늘 크리처가 한 공사 수 (아침마다 0, 하루 Config.BUILD_CAP).
+var site_work := {}
+var build_today := 0
 ## 게시판 오늘 부탁: {id = Config.HALL_REQUESTS 키, count = 개수} (없으면 {}), 오늘 크리처 심부름으로 모인 수, 이장이 오늘 부탁을 바꿨는지
 var hall_request := {}
 var errands := 0
@@ -241,6 +245,8 @@ func reset() -> void:
 	hall_state = 0
 	material5 = 0
 	hall_request = {}
+	site_work = {}
+	build_today = 0
 	errands = 0
 	hall_rerolled = false
 	requests_done = 0

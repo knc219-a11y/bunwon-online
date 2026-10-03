@@ -1078,7 +1078,24 @@ const CHIEF_CELL := Vector2i(15, 22)
 ## 대장 재료 반복 사냥은 다음 주제에서 새로 정함. 그 전까지 회관만이라도 대장 반복을 짧게)
 const HALL_COST_MONEY := 15000
 const HALL_COST_CROPS := 100
-const HALL_COST_MATERIAL := 5
+## 용 비늘: 대장만 주던 때는 5, 일반 와이번도 주게 되어 12 (2026-10-03 시설 복구 바꿈)
+const HALL_COST_MATERIAL := 12
+## 시설 복구: 재료 모으기 → 크리처 공사 (2026-10-03 백로그 4번 "의미 없이 보스를 10번 잡아야 다음 시설로 넘어가는 게 재미없음").
+## 사용자 (2026-10-03): "자재를 얻는 수단이 보스뿐 아니고 일반몹한테도 나오게 하고 모든 재료를 모으면 크리쳐보고 고치도록 일을 시켜서
+## 특정일자가 지나도록 하는거 어떨까" → SiteWork.
+##  - 막 대장을 처음 잡으면 다음 날 터 (예전 그대로). 대장 재료는 대장 처치마다 1개 + 터가 있는 동안 그 막 두 구역 일반 몬스터가 drop 확률로 1개.
+##  - 재료 · 돈 · 무 (약방은 도라지) 를 다 모으면 터에서 F → 공사 시작 (그때 낸다).
+##  - 공사는 R 로 "터 공사" 를 맡긴 크리처가 한다. 하루 BUILD_CAP 번까지라 days 일이 걸린다 (맡긴 크리처가 없으면 안 늚). 땅속성이 빠르다.
+##  - 공사가 다 된 다음 날 아침 시설이 서고 주인이 온다. 값은 전부 임시 (봇 기준 예전과 비슷한 날수).
+const BUILD_CAP := 5
+const SITE_TASKS := {
+	&"forge": {zones = [0, 1], material = "material", need = FORGE_COST_MATERIAL, drop = 0.04, days = 7},
+	&"yak": {zones = [2, 3], material = "material2", need = YAK_COST_MATERIAL, drop = 0.025, days = 10},
+	&"barn": {zones = [4, 5], material = "material3", need = BARN_COST_MATERIAL, drop = 0.03, days = 10},
+	&"naru": {zones = [6, 7], material = "material4", need = NARU_COST_MATERIAL, drop = 0.025, days = 14},
+	&"hall": {zones = [8, 9], material = "material5", need = HALL_COST_MATERIAL, drop = 0.03, days = 7},
+}
+
 ## 게시판 부탁: id → [이름, 개수, 한 개 값 (보상 계산), 필요한 시설 (&"" = 처음부터)]. 보상 = 개수 x 값 x HALL_REWARD_MULT
 const HALL_REQUESTS := {
 	&"crops": ["무", 20, CROP_PRICE, &""],
@@ -1138,7 +1155,7 @@ const EXPEDITION_ZONES: Array[Dictionary] = [
 ]
 ## 원정대 하나가 하룻밤에 가져오는 잡템 (그 구역 잡템, 공급함에서 사냥꾼 잡템처럼 판다)
 const EXPEDITION_JUNK := [1, 2]
-## 대장 재료 (사금 덩이 · 장승 조각 · 산군 발톱을 주는 구역만) · 장비 (그 구역 등급 무게, 공용 창고로) 확률, 팀 힘을 곱한다
+## 대장 재료 (막 대장 구역만) · 장비 (그 구역 등급 무게, 공용 창고로) 확률, 팀 힘을 곱한다
 const EXPEDITION_MATERIAL_CHANCE := 0.1
 const EXPEDITION_GEAR_CHANCE := 0.06
 ## 입양: 시설을 고친 주민마다 받아 주는 수 · 보답 (한 번) · 지내는 칸

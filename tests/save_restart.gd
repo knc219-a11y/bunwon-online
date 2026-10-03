@@ -20,6 +20,9 @@ func _ready() -> void:
 		GameState.minutes = 15 * 60
 		GameState.hunter_eggs.append(load(TestStarts.SPECIES[&"tiger"]))
 		main.incubating_days = 1
+		# 시설 공사 중 (2026-10-03): 공사 수 · 오늘 공사 수도 담기는지
+		GameState.site_work[&"naru"] = 7
+		GameState.build_today = 3
 		main.incubating_species = load(TestStarts.SPECIES[&"slime"])
 		main.save_slot = 1
 		ok = main.autosave()

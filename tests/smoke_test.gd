@@ -1673,6 +1673,11 @@ func _ready() -> void:
 	GameState.crops = 0
 	GameState.material = 0
 	_check(not main.restore_forge() and GameState.forge_state == 1, "모자라면 못 고침")
+	# 터가 있으면 금사리 · 분원농협 일반 몬스터도 사금 덩이를 가끔 (2026-10-03 백로그 4번)
+	_check(SiteWork.mob_drop(Config.FORGE_ZONE, 0.0) != "" and GameState.material == 1, "터가 있으면 일반 몬스터도 %s" % Config.BOSS_MATERIAL_NAME)
+	_check(SiteWork.mob_drop(Config.FORGE_ZONE, 0.99) == "" and SiteWork.mob_drop(4, 0.0) == "" and GameState.material == 1, "확률 밖 · 다른 막 구역은 안 줌")
+	GameState.material = Config.FORGE_COST_MATERIAL
+	_check(SiteWork.mob_drop(Config.FORGE_ZONE, 0.0) == "", "다 모았으면 더 안 줌")
 	GameState.money = Config.FORGE_COST_MONEY + 1000
 	GameState.crops = Config.FORGE_COST_CROPS + 10
 	GameState.material = Config.FORGE_COST_MATERIAL
@@ -1680,8 +1685,31 @@ func _ready() -> void:
 	main.interact()
 	_check(main.menu_open and main.menu_kind == &"forge", "대장간 터에서 F → 복구 창")
 	main.menu_confirm()
-	_check(GameState.forge_state == 2 and not main.menu_open, "다 모았으면 한 번에 고침")
-	_check(GameState.money == 1000 and GameState.crops == 10 and GameState.material == 0, "돈 · 무 · %s을 냄" % Config.BOSS_MATERIAL_NAME)
+	_check(GameState.forge_state == 1 and SiteWork.building(&"forge") and main.menu_open, "다 모았으면 공사 시작 (아직 문은 안 엶)")
+	_check(GameState.money == 1000 and GameState.crops == 10 and GameState.material == 0, "공사 시작에 돈 · 무 · %s을 냄" % Config.BOSS_MATERIAL_NAME)
+	main.close_menu()
+	# 공사 (2026-10-03 백로그 4번): 크리처가 하루 BUILD_CAP 번씩 days 일
+	_check(CreatureJobs.BUILD in CreatureJobs.jobs() and SiteWork.build_site() == &"forge", "공사 중이면 R 일 목록에 터 공사")
+	var bc: Creature = main._hatch(CreatureCatalog.SLIME, Config.FORAGE_CELLS[3])
+	bc.auto_work = false
+	bc.job = CreatureJobs.BUILD
+	_check(bc.work_once(), "터 공사 크리처가 터로 감")
+	GameState.build_today = 0
+	var built := 0
+	for i in Config.BUILD_CAP + 3:
+		built += int(SiteWork.build_once())
+	_check(built == Config.BUILD_CAP and not SiteWork.build_open(), "터 공사는 하루 %d번까지" % Config.BUILD_CAP)
+	_check(not main.restore_forge() and GameState.forge_state == 1, "공사가 덜 되면 문을 못 엶")
+	var fl: Array[String] = main.next_day()
+	_check(GameState.build_today == 0 and SiteWork.build_open() and fl.any(func(l: String) -> bool: return l.contains("대장간 공사 1/")), "아침: 공사 진척 줄, 다시 공사")
+	GameState.site_work[&"forge"] = SiteWork.work_need(&"forge") - 1
+	SiteWork.build_once()
+	_check(SiteWork.ready(&"forge") and SiteWork.build_site() == &"", "마지막 공사 → 내일 아침 문 엶")
+	fl = main.next_day()
+	_check(GameState.forge_state == 2 and fl.any(func(l: String) -> bool: return l.contains("대장간 공사가 끝나")), "공사가 다 된 다음 날 아침 대장간이 섬")
+	_check(not GameState.site_work.has(&"forge") and not CreatureJobs.BUILD in CreatureJobs.jobs(), "문을 열면 공사 기록 · 터 공사 일이 사라짐")
+	main.creatures.erase(bc)
+	bc.queue_free()
 	_check(main.smith.visible and main.scrap_heap != null and GameState.scrap_pile == Config.SCRAP_PER_DAY, "대장장이와 고물 더미가 생김")
 	_check(CreatureJobs.SCRAP in CreatureJobs.jobs(), "R 일 목록에 고철 줍기")
 	main.switch_character()
@@ -2256,6 +2284,8 @@ func _ready() -> void:
 	GameState.money = Config.YAK_COST_MONEY + 7
 	GameState.roots = Config.YAK_COST_ROOTS
 	GameState.material2 = Config.YAK_COST_MATERIAL
+	main.restore_yak()
+	SiteWork.fill(&"yak")
 	_check(main.restore_yak() and GameState.yak_state == 2 and main.alchemist.visible and main.herb_bed != null and GameState.money == 7 and GameState.roots == 0 and GameState.material2 == 0,
 		"약방 복구 (돈 %d · 도라지 %d · 장승 조각 %d) → 연금술사" % [Config.YAK_COST_MONEY, Config.YAK_COST_ROOTS, Config.YAK_COST_MATERIAL])
 	_check(CreatureJobs.jobs().has(CreatureJobs.HERB) and GameState.herb_bed == Config.HERB_BED_PER_DAY, "도라지밭 일이 생김 (하루 %d)" % Config.HERB_BED_PER_DAY)
@@ -2424,6 +2454,8 @@ func _ready() -> void:
 	GameState.money = Config.BARN_COST_MONEY + 3
 	GameState.crops = Config.BARN_COST_CROPS + 4
 	GameState.material3 = Config.BARN_COST_MATERIAL
+	main.restore_barn()
+	SiteWork.fill(&"barn")
 	_check(main.restore_barn() and GameState.barn_state == 2 and main.rancher.visible and GameState.hens == Config.START_HENS and GameState.money == 3 and GameState.crops == 4 and GameState.material3 == 0,
 		"축사 복구 (돈 %d · 무 %d · 산군 발톱 %d) → 목축인 · 암탉 %d" % [Config.BARN_COST_MONEY, Config.BARN_COST_CROPS, Config.BARN_COST_MATERIAL, Config.START_HENS])
 	_check(CreatureJobs.jobs().has(CreatureJobs.FEED), "모이 주기 일이 생김")
@@ -2507,7 +2539,7 @@ func _ready() -> void:
 			"시작 지점 %s: %d일 · 돈 %d · 크리처 %d (농사 %d) · 웨이포인트 %s · 대장간 %d · 무기 %s · 장비 %d/%d" % [
 				sid, GameState.day, GameState.money, ts.creatures.size(), farmers, GameState.waypoints, GameState.forge_state, ts_w.name, gear_n, want_gear])
 		if sid == &"forge_ready":
-			_check(ts.restore_forge() and ts.smith.visible, "대장간 고치기 직전: 바로 고칠 수 있음")
+			_check(not ts.restore_forge() and SiteWork.building(&"forge") and not ts.smith.visible, "대장간 고치기 직전: 바로 공사를 시작할 수 있음")
 		if sid == &"barn":
 			_check(GameState.barn_state == 2 and ts.rancher.visible and GameState.hens == spec.hens and GameState.lunches == 1, "축사 복구 뒤: 목축인 · 암탉 %d · 도시락" % GameState.hens)
 		if sid != &"fresh":
@@ -3542,6 +3574,8 @@ func _naru_checks() -> void:
 	GameState.money += Config.NARU_COST_MONEY
 	GameState.crops += Config.NARU_COST_CROPS + 10
 	GameState.material4 += Config.NARU_COST_MATERIAL
+	m.restore_naru()
+	SiteWork.fill(&"naru")
 	_check(m.restore_naru() and GameState.naru_state == 2 and m.ferryman.visible and GameState.material4 == 0, "돈 · 무 · 마왕 뿔로 한 번에 고침 → 뱃사공")
 	_check(CreatureJobs.FISH in CreatureJobs.jobs(), "고치면 크리처 일에 물고기 몰기")
 	GameState.hunter_unlocked = true
@@ -3932,6 +3966,8 @@ func _hall_checks() -> void:
 	GameState.money += Config.HALL_COST_MONEY
 	GameState.crops += Config.HALL_COST_CROPS
 	GameState.material5 += Config.HALL_COST_MATERIAL
+	VillageHall.restore(m)
+	SiteWork.fill(&"hall")
 	_check(VillageHall.restore(m) and GameState.hall_state == 2 and m.chief.visible and GameState.feast_state == 1 and m.feast_table != null, "돈 · 무 · 용 비늘로 고침 → 이장 · 잔치상")
 	_check(not GameState.hall_request.is_empty() and VillageHall.request_pool().has(&"fish"), "게시판 부탁이 붙음 (나루터를 고쳤으니 물고기 부탁도)")
 	m._set_active(m.farmer)

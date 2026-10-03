@@ -1219,6 +1219,11 @@ func _defeat(s: WildSlime) -> void:
 		s.queue_free()
 		GameState.touch()
 		return
+	# 시설 터 재료 (2026-10-03 백로그 4번): 터가 있는 동안 그 막 두 구역 일반 몬스터도 대장 재료를 가끔 떨어뜨린다
+	if not s.boss:
+		var mat := SiteWork.mob_drop(zone, _egg_roll())
+		if mat != "":
+			GameState.notify("%s이(가) %s을(를) 떨어뜨렸다!" % [s.title, mat])
 	# 사냥꾼 경험치 (2026-10-02 레벨 · 스킬): 동행이 잡아도 같게. 대장을 처음 잡으면 크게, 막 대장이면 스킬 포인트 +1
 	var first_boss := last_boss and not zone in GameState.bosses_beaten
 	_give_xp(HunterSkills.kill_xp(zone, s.boss, first_boss))

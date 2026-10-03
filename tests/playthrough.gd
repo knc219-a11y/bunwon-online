@@ -125,6 +125,9 @@ var hall_site_day := -1
 var hall_restore_day := -1
 var final_day := -1
 var errand_creature: Creature = null
+## 시설 공사 (2026-10-03 백로그 4번): 터 공사를 맡긴 크리처 · 시설마다 공사를 시작한 날
+var build_creature: Creature = null
+var build_start := {}
 var feast_hidden := {}
 ## 1일째부터 센 사람 어림 시간 (초) · 잔치를 연 날까지의 그 값
 var total_human_sec := 0.0
@@ -254,6 +257,7 @@ func _ready() -> void:
 	for d in [2, 5, 10, 15, 20, 25, 30, 40, 50, 60, 70, 80, 90, 100, 110]:
 		if level_by_day.has(d):
 			lv.append("%d일 Lv%d" % [d, level_by_day[d]])
+	_log("\n시설 공사 시작한 날 (재료 다 모은 날): %s · 문 연 날: 대장간 %d · 약방 %d · 축사 %d · 나루터 %d · 회관 %d" % [build_start, restore_day, yak_restore_day, barn_restore_day, naru_restore_day, hall_restore_day])
 	_log("\n사냥꾼 레벨 (%s): %s · 끝 Lv %d (남은 포인트 %d) · 찍은 스킬 %s" % ["스킬 찍음" if skills_on else "스킬 안 찍음", " · ".join(lv), GameState.hunter_level, GameState.skill_points, GameState.skills])
 	_log("직업 %s · 스탯 %s (남은 %d)" % [HunterClass.class_name_of(GameState.hunter_class), GameState.stats, GameState.stat_points])
 	_log("무기 (봇이 즐겨 듦: %s): 처음 든 날 %s · 쏜 화살 · 구슬 %d" % [weapon_pref, "%d일" % weapon_day if weapon_day > 0 else "없음", shots_fired])
@@ -524,6 +528,22 @@ func place_new_creatures() -> void:
 			while pick.job != CreatureJobs.ERRAND:
 				pick.next_job()
 			_log("크리처 배치: %s → 심부름 (칸 %s)" % [pick.describe(), pick.home])
+	# 공사 중인 터가 있으면 채집 전담 하나 (땅속성 먼저) 에게 터 공사, 공사가 없으면 채집으로 돌린다 (2026-10-03)
+	if SiteWork.build_site() != &"" and build_creature == null:
+		var pick: Creature = null
+		for s: Creature in main.creatures:
+			if s.home == main.HATCH_CELL or s in [scrap_creature, herb_creature, feed_creature, fish_creature, errand_creature] or s.job != CreatureJobs.FORAGE or s.expedition_zone >= 0:
+				continue
+			if pick == null or (s.has_element(&"earth") and not pick.has_element(&"earth")):
+				pick = s
+		if pick != null:
+			build_creature = pick
+			while pick.job != CreatureJobs.BUILD:
+				pick.next_job()
+			_log("크리처 배치: %s → 터 공사 (%s)" % [pick.describe(), SiteWork.NAMES[SiteWork.build_site()]])
+	elif SiteWork.build_site() == &"" and build_creature != null:
+		_assign(build_creature, CreatureJobs.FORAGE, 0)
+		build_creature = null
 	if farmers >= Config.FIELD_PLOTS.size() and full_day < 0:
 		full_day = GameState.day
 
@@ -641,55 +661,69 @@ func farm_by_hand() -> Dictionary:
 	return counts
 
 
+## 문이 열린 날 (공사가 끝난 다음 날 아침 저절로 열림)
+func _record_restores() -> void:
+	if restore_day < 0 and GameState.forge_state >= 2:
+		restore_day = GameState.day
+	if yak_restore_day < 0 and GameState.yak_state >= 2:
+		yak_restore_day = GameState.day
+	if barn_restore_day < 0 and GameState.barn_state >= 2:
+		barn_restore_day = GameState.day
+	if naru_restore_day < 0 and GameState.naru_state >= 2:
+		naru_restore_day = GameState.day
+	if hall_restore_day < 0 and GameState.hall_state >= 2:
+		hall_restore_day = GameState.day
+
+
 ## 공급함: 알 받기 · 무 진열 · 살 수 있는 것 사기 (밭 넓히기 → 물뿌리개 → 괭이 → 부족한 씨앗 → 사냥칼 → 크리처 훈련)
 func shop() -> Array[String]:
 	var did: Array[String] = []
 	if not GameState.village_eggs.is_empty():
 		main.supply_action(&"take_eggs")
 		did.append("알 받기")
-	# 대장간 (2026-09-29 선택 A): 사금 덩이가 다 모이면 무 · 돈을 남겨 두고 고친다 (사람이라면 그럴 것)
-	var saving := GameState.forge_state == 1 and GameState.material >= Config.FORGE_COST_MATERIAL
+	# 시설 공사 (2026-10-03 백로그 4번): 재료가 다 모이면 돈 · 무를 남겨 두고 공사를 시작한다. 문은 공사가 끝난 다음 날 아침 저절로 열린다.
+	_record_restores()
+	var saving := GameState.forge_state == 1 and not SiteWork.building(&"forge") and GameState.material >= Config.FORGE_COST_MATERIAL
 	if saving and GameState.crops >= Config.FORGE_COST_CROPS and GameState.money >= Config.FORGE_COST_MONEY:
 		main.farmer.position = Farm.center_of(Config.FORGE_RECT.position + Vector2i(1, Config.FORGE_RECT.size.y))
-		if main.restore_forge():
-			restore_day = GameState.day
-			did.append("대장간 복구(%d원 · 무 %d · %s %d)" % [Config.FORGE_COST_MONEY, Config.FORGE_COST_CROPS, Config.BOSS_MATERIAL_NAME, Config.FORGE_COST_MATERIAL])
+		main.restore_forge()
+		if SiteWork.building(&"forge"):
+			build_start[&"forge"] = GameState.day
+			did.append("대장간 공사 시작(%d원 · 무 %d · %s %d)" % [Config.FORGE_COST_MONEY, Config.FORGE_COST_CROPS, Config.BOSS_MATERIAL_NAME, Config.FORGE_COST_MATERIAL])
 			saving = false
 	var keep_crops := mini(GameState.crops, Config.FORGE_COST_CROPS) if saving else 0
 	var reserve := Config.FORGE_COST_MONEY if saving else 0
-	# 약방 (2026-09-29): 장승 조각이 다 모이면 돈을 남겨 두고, 도라지까지 모이면 고친다
-	if GameState.yak_state == 1 and GameState.material2 >= Config.YAK_COST_MATERIAL:
-		if main.can_restore_yak() and main.restore_yak():
-			yak_restore_day = GameState.day
-			did.append("약방 복구(%d원 · %s %d · %s %d)" % [Config.YAK_COST_MONEY, Config.ROOT_NAME, Config.YAK_COST_ROOTS, Config.BOSS_MATERIAL2_NAME, Config.YAK_COST_MATERIAL])
+	if GameState.yak_state == 1 and not SiteWork.building(&"yak") and GameState.material2 >= Config.YAK_COST_MATERIAL:
+		if main.can_restore_yak():
+			main.restore_yak()
+			build_start[&"yak"] = GameState.day
+			did.append("약방 공사 시작(%d원 · %s %d · %s %d)" % [Config.YAK_COST_MONEY, Config.ROOT_NAME, Config.YAK_COST_ROOTS, Config.BOSS_MATERIAL2_NAME, Config.YAK_COST_MATERIAL])
 		else:
 			reserve = maxi(reserve, Config.YAK_COST_MONEY)
-	# 축사 (2026-09-30 선택 A 닭장): 산군 발톱이 다 모이면 무 · 돈을 남겨 두고 고친다
-	# 마을회관 (2026-10-03): 용 비늘이 다 모이면 무 · 돈을 남겨 두고 고친다
-	if GameState.hall_state == 1 and GameState.material5 >= Config.HALL_COST_MATERIAL:
-		_feast_unhide()
-		if VillageHall.restore(main):
-			hall_restore_day = GameState.day
-			did.append("마을회관 복구(%d원 · 무 %d · %s %d)" % [Config.HALL_COST_MONEY, Config.HALL_COST_CROPS, Config.BOSS_MATERIAL5_NAME, Config.HALL_COST_MATERIAL])
+	if GameState.hall_state == 1 and not SiteWork.building(&"hall") and GameState.material5 >= Config.HALL_COST_MATERIAL:
+		if VillageHall.can_restore():
+			VillageHall.restore(main)
+			build_start[&"hall"] = GameState.day
+			did.append("마을회관 공사 시작(%d원 · 무 %d · %s %d)" % [Config.HALL_COST_MONEY, Config.HALL_COST_CROPS, Config.BOSS_MATERIAL5_NAME, Config.HALL_COST_MATERIAL])
 		else:
 			reserve = maxi(reserve, Config.HALL_COST_MONEY)
 			keep_crops = maxi(keep_crops, mini(GameState.crops, Config.HALL_COST_CROPS))
 	hall_day(did)
-	var barn_saving := GameState.barn_state == 1 and GameState.material3 >= Config.BARN_COST_MATERIAL
-	if barn_saving:
-		if main.can_restore_barn() and main.restore_barn():
-			barn_restore_day = GameState.day
-			did.append("축사 복구(%d원 · 무 %d · %s %d)" % [Config.BARN_COST_MONEY, Config.BARN_COST_CROPS, Config.BOSS_MATERIAL3_NAME, Config.BARN_COST_MATERIAL])
+	if GameState.barn_state == 1 and not SiteWork.building(&"barn") and GameState.material3 >= Config.BARN_COST_MATERIAL:
+		if main.can_restore_barn():
+			main.restore_barn()
+			build_start[&"barn"] = GameState.day
+			did.append("축사 공사 시작(%d원 · 무 %d · %s %d)" % [Config.BARN_COST_MONEY, Config.BARN_COST_CROPS, Config.BOSS_MATERIAL3_NAME, Config.BARN_COST_MATERIAL])
 		else:
 			reserve = maxi(reserve, Config.BARN_COST_MONEY)
 			keep_crops = maxi(keep_crops, mini(GameState.crops, Config.BARN_COST_CROPS))
 	if GameState.barn_state >= 2:
 		coop_day(did)
-	# 나루터 (2026-10-02 통발): 마왕 뿔이 다 모이면 무 · 돈을 남겨 두고 고친다
-	if GameState.naru_state == 1 and GameState.material4 >= Config.NARU_COST_MATERIAL:
-		if main.can_restore_naru() and main.restore_naru():
-			naru_restore_day = GameState.day
-			did.append("나루터 복구(%d원 · 무 %d · %s %d)" % [Config.NARU_COST_MONEY, Config.NARU_COST_CROPS, Config.BOSS_MATERIAL4_NAME, Config.NARU_COST_MATERIAL])
+	if GameState.naru_state == 1 and not SiteWork.building(&"naru") and GameState.material4 >= Config.NARU_COST_MATERIAL:
+		if main.can_restore_naru():
+			main.restore_naru()
+			build_start[&"naru"] = GameState.day
+			did.append("나루터 공사 시작(%d원 · 무 %d · %s %d)" % [Config.NARU_COST_MONEY, Config.NARU_COST_CROPS, Config.BOSS_MATERIAL4_NAME, Config.NARU_COST_MATERIAL])
 		else:
 			reserve = maxi(reserve, Config.NARU_COST_MONEY)
 			keep_crops = maxi(keep_crops, mini(GameState.crops, Config.NARU_COST_CROPS))
@@ -906,7 +940,7 @@ func craft_day(did: Array[String]) -> void:
 		if GameState.scrap < cost[0] or GameState.money < cost[1]:
 			break
 		# 마을회관 복구비를 모으는 중이면 그만큼은 남긴다
-		if GameState.hall_state == 1 and GameState.material5 >= Config.HALL_COST_MATERIAL and GameState.money - cost[1] < Config.HALL_COST_MONEY:
+		if GameState.hall_state == 1 and not SiteWork.building(&"hall") and GameState.material5 >= Config.HALL_COST_MATERIAL and GameState.money - cost[1] < Config.HALL_COST_MONEY:
 			break
 		var id: StringName = main.craft(base)
 		if id == &"":

@@ -35,6 +35,9 @@ const FISH := &"fish"
 ## 심부름 (2026-10-03 시설 5 마을회관): 회관을 고치면 생기는 일. 회관 게시판까지 오가며 오늘 부탁 물건을 하나씩 대신 모아 온다
 ## (GameState.errands, 하루 Config.ERRAND_CAP 번, 부탁 개수까지). 날거나 빠른 크리처가 유리하다 (재능 배율 없음).
 const ERRAND := &"errand"
+## 터 공사 (2026-10-03 시설 복구 세 갈래 부탁, SiteWork): 무너진 시설 터가 있으면 생기는 일. 터를 오가며 공사를 한 번씩 한다
+## (GameState.site_work, 하루 Config.BUILD_CAP 번). 땅속성이 빠르다 (earth.tres job_aptitude).
+const BUILD := &"build"
 
 const NAMES := {
 	REST: "쉬는 중",
@@ -50,6 +53,7 @@ const NAMES := {
 	NIGHT: "밤일",
 	FISH: "물고기 몰기",
 	ERRAND: "심부름",
+	BUILD: "터 공사",
 	&"expedition": "원정",
 }
 
@@ -83,6 +87,8 @@ static func jobs() -> Array[StringName]:
 		out.append(FISH)
 	if GameState.hall_state >= 2:
 		out.append(ERRAND)
+	if SiteWork.build_site() != &"":
+		out.append(BUILD)
 	return out
 
 

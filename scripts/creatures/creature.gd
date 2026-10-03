@@ -117,7 +117,24 @@ func work_once() -> bool:
 		return _fish_once()
 	if job == CreatureJobs.ERRAND:
 		return _errand_once()
+	if job == CreatureJobs.BUILD:
+		return _build_once()
 	return false
+
+
+## 터 공사 한 번 (2026-10-03 시설 복구 세 갈래 부탁): 무너진 터 옆까지 건너가 공사를 한 번 한다 (SiteWork.build_once).
+## 남은 터가 없거나 오늘 BUILD_CAP 번을 다 했으면 제자리로 돌아가 쉰다. 아침마다 새로 센다.
+func _build_once() -> bool:
+	if not SiteWork.build_open():
+		if position.distance_to(Farm.center_of(home)) > 1.0:
+			_hop_to(Farm.center_of(home), func() -> void: pass)
+			return true
+		return false
+	var at := Farm.center_of(SiteWork.build_spot()) + Vector2(0, (scraps % 3 - 1) * 5)
+	_hop_to(at, func() -> void:
+		if SiteWork.build_once():
+			scraps += 1)
+	return true
 
 
 ## 오늘 심부름을 더 할 수 있는지 (회관 · 부탁이 있고, 하루 ERRAND_CAP 번 · 부탁 개수까지)
@@ -285,6 +302,8 @@ func night_work() -> int:
 				if errand_open():
 					GameState.errands += 1
 					did = true
+			CreatureJobs.BUILD:
+				did = SiteWork.build_once()
 		if not did:
 			break
 		done += 1
@@ -464,7 +483,7 @@ func _draw() -> void:
 		label += " ★%d" % data.train_total()
 	UiSkin.draw_tag(self, Vector2(-30, -26), label, 60, Color(0.85, 1.0, 0.95))
 	# 채집은 범위 없이 마을 풀밭 전체를 돌므로 범위 네모를 그리지 않는다
-	if carried_by == null and job != CreatureJobs.FORAGE and job != CreatureJobs.SCRAP and job != CreatureJobs.HERB and job != CreatureJobs.FEED and job != CreatureJobs.FISH and job != CreatureJobs.ERRAND:
+	if carried_by == null and job != CreatureJobs.FORAGE and job != CreatureJobs.SCRAP and job != CreatureJobs.HERB and job != CreatureJobs.FEED and job != CreatureJobs.FISH and job != CreatureJobs.ERRAND and job != CreatureJobs.BUILD:
 		# 작업 범위 표시
 		var radius := data.work_radius()
 		var r := Rect2(Vector2((home - Vector2i(radius, radius)) * Config.TILE), Vector2.ONE * (radius * 2 + 1) * Config.TILE)
