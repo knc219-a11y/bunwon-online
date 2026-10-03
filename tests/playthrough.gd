@@ -28,6 +28,8 @@ var cleared_day := {}
 const HAND_SEC := 1.0
 const HERB_SEC := 4.0
 const WALK_SEC := 30.0
+## 주인공 하나 (2026-10-03): 밭 ↔ 사냥터 입구 걸어서 왕복 (20칸쯤 x 2, 걷기 82px/초). 예전엔 Tab 으로 바로 바꿨다.
+const GATE_WALK_SEC := 12.0
 ## 사람은 봇보다 느리게 움직인다고 보고 두 배로도 적어 둔다
 const HUMAN_MULT := 2.0
 var hand_sec := 0.0
@@ -261,7 +263,7 @@ func _ready() -> void:
 	_log("\n사냥꾼 레벨 (%s): %s · 끝 Lv %d (남은 포인트 %d) · 찍은 스킬 %s" % ["스킬 찍음" if skills_on else "스킬 안 찍음", " · ".join(lv), GameState.hunter_level, GameState.skill_points, GameState.skills])
 	_log("직업 %s · 스탯 %s (남은 %d)" % [HunterClass.class_name_of(GameState.hunter_class), GameState.stats, GameState.stat_points])
 	_log("무기 (봇이 즐겨 듦: %s): 처음 든 날 %s · 쏜 화살 · 구슬 %d" % [weapon_pref, "%d일" % weapon_day if weapon_day > 0 else "없음", shots_fired])
-	_log("입은 장비: 농부 %s · 사냥꾼 %s" % [_worn_text(&"farmer"), _worn_text(&"hunter")])
+	_log("입은 장비: 밭 옷 %s · 사냥 옷 %s" % [_worn_text(&"farmer"), _worn_text(&"hunter")])
 	_log("\n최종: %d일째, 돈 %d원, 씨앗 %d, 크리처 %d (훈련 단계 합 %d), 밭 구역 %d, 웨이포인트 %s" % [GameState.day, GameState.money, GameState.seeds, main.creatures.size(), trained, GameState.open_plots, GameState.waypoints])
 	var out := OS.get_environment("OUT")
 	if out != "":
@@ -306,7 +308,6 @@ func play_day() -> void:
 	if GameState.hall_state >= 1 and hall_site_day < 0:
 		hall_site_day = GameState.day
 	_log("\n## %d일째 (시작 돈 %d, 씨앗 %d, 작물 %d)" % [GameState.day, GameState.money, GameState.seeds, GameState.crops])
-	main._set_active(main.farmer)
 	await place_new_creatures()
 	if expedition_on:
 		manage_expeditions()
@@ -326,7 +327,7 @@ func play_day() -> void:
 		farm_counts[k] = farm_counts.get(k, 0) + more[k]
 	await let_creatures_work()
 	incubate()
-	_log("농부: 손으로 한 도구질 %d번 %s · 공급함: %s" % [manual_actions, farm_counts, bought])
+	_log("손일: 손으로 한 도구질 %d번 %s · 공급함: %s" % [manual_actions, farm_counts, bought])
 	var creature_herbs := GameState.displayed_herbs - herbs0 - herbs
 	if creature_herbs > 0 or GameState.displayed_roots > 0:
 		_log("크리처 채집: 들나물 %d포기 · %s %d뿌리 진열 (내일 물 준 풀밭 %d칸)" % [creature_herbs, Config.ROOT_NAME, GameState.displayed_roots, main.forage.watered.size()])
@@ -394,7 +395,7 @@ func play_day() -> void:
 	total_water_bonus += main.forage.bonus_today
 	gross.append(GameState.money - money0 + spent_today)
 	money_by_day[GameState.day - 1] = GameState.money
-	_log("하루 수입 %+d원 · 부화 기다리는 알 %d개 (농부 %d · 공급함 %d)" % [GameState.money - money0, GameState.farmer_eggs.size() + GameState.village_eggs.size(), GameState.farmer_eggs.size(), GameState.village_eggs.size()])
+	_log("하루 수입 %+d원 · 부화 기다리는 알 %d개 (주인공 %d · 공급함 %d)" % [GameState.money - money0, GameState.farmer_eggs.size() + GameState.village_eggs.size(), GameState.farmer_eggs.size(), GameState.village_eggs.size()])
 
 
 ## 부화기 옆에 나온 새 크리처를 밭에 놓고 일을 정한다.
@@ -448,9 +449,9 @@ func place_new_creatures() -> void:
 		if pick == null:
 			pick = main.creatures[-1]
 		scrap_creature = pick
-		main.farmer.position = pick.position
+		main.player.position = pick.position
 		main.interact()
-		main.farmer.position = Farm.center_of(Creature.scrap_spot() + Vector2i(0, -1))
+		main.player.position = Farm.center_of(Creature.scrap_spot() + Vector2i(0, -1))
 		main.interact()
 		while pick.job != CreatureJobs.SCRAP:
 			pick.next_job()
@@ -468,9 +469,9 @@ func place_new_creatures() -> void:
 			if herb_creature != null:
 				_assign(herb_creature, CreatureJobs.FORAGE, 0)
 			herb_creature = pick
-			main.farmer.position = pick.position
+			main.player.position = pick.position
 			main.interact()
-			main.farmer.position = Farm.center_of(Creature.herb_spot() + Vector2i(1, 0))
+			main.player.position = Farm.center_of(Creature.herb_spot() + Vector2i(1, 0))
 			main.interact()
 			while pick.job != CreatureJobs.HERB:
 				pick.next_job()
@@ -487,9 +488,9 @@ func place_new_creatures() -> void:
 			if feed_creature != null:
 				_assign(feed_creature, CreatureJobs.FORAGE, 0)
 			feed_creature = pick
-			main.farmer.position = pick.position
+			main.player.position = pick.position
 			main.interact()
-			main.farmer.position = Farm.center_of(Creature.feed_spot() + Vector2i(1, 0))
+			main.player.position = Farm.center_of(Creature.feed_spot() + Vector2i(1, 0))
 			main.interact()
 			while pick.job != CreatureJobs.FEED:
 				pick.next_job()
@@ -504,9 +505,9 @@ func place_new_creatures() -> void:
 				pick = s
 		if pick != null:
 			fish_creature = pick
-			main.farmer.position = pick.position
+			main.player.position = pick.position
 			main.interact()
-			main.farmer.position = Farm.center_of(Creature.fish_spot() + Vector2i(-2, 0))
+			main.player.position = Farm.center_of(Creature.fish_spot() + Vector2i(-2, 0))
 			main.interact()
 			while pick.job != CreatureJobs.FISH:
 				pick.next_job()
@@ -521,9 +522,9 @@ func place_new_creatures() -> void:
 				pick = s
 		if pick != null:
 			errand_creature = pick
-			main.farmer.position = pick.position
+			main.player.position = pick.position
 			main.interact()
-			main.farmer.position = Farm.center_of(Creature.errand_spot() + Vector2i(0, 1))
+			main.player.position = Farm.center_of(Creature.errand_spot() + Vector2i(0, 1))
 			main.interact()
 			while pick.job != CreatureJobs.ERRAND:
 				pick.next_job()
@@ -582,9 +583,9 @@ func _assign(s: Creature, want: StringName, plot_i: int) -> void:
 	var at := plot.position + Vector2i(plot.size.x / 2, plot.size.y / 2)
 	if want == CreatureJobs.FORAGE:
 		at = FORAGE_HOME
-	main.farmer.position = s.position
+	main.player.position = s.position
 	main.interact()
-	main.farmer.position = Farm.center_of(at)
+	main.player.position = Farm.center_of(at)
 	main.interact()
 	while s.job != want:
 		s.next_job()
@@ -624,7 +625,7 @@ func let_creatures_work() -> void:
 func forage() -> int:
 	var n := 0
 	for cell: Vector2i in main.forage.herbs.keys():
-		main.farmer.position = Farm.center_of(cell) - Vector2(0, main.farmer.FEET_Y)
+		main.player.position = Farm.center_of(cell) - Vector2(0, main.player.FEET_Y)
 		# 크리처를 들지 않도록 들나물만 캔다
 		main.forage.pick(cell)
 		GameState.herbs += 1
@@ -685,7 +686,7 @@ func shop() -> Array[String]:
 	_record_restores()
 	var saving := GameState.forge_state == 1 and not SiteWork.building(&"forge") and GameState.material >= Config.FORGE_COST_MATERIAL
 	if saving and GameState.crops >= Config.FORGE_COST_CROPS and GameState.money >= Config.FORGE_COST_MONEY:
-		main.farmer.position = Farm.center_of(Config.FORGE_RECT.position + Vector2i(1, Config.FORGE_RECT.size.y))
+		main.player.position = Farm.center_of(Config.FORGE_RECT.position + Vector2i(1, Config.FORGE_RECT.size.y))
 		main.restore_forge()
 		if SiteWork.building(&"forge"):
 			build_start[&"forge"] = GameState.day
@@ -805,11 +806,8 @@ func hall_day(did: Array[String]) -> void:
 		for d: Array in Config.FEAST_DISHES:
 			if d[0] in GameState.feast_dishes or not VillageHall.person_open(d[1]):
 				continue
-			var who: Character = main.people().filter(func(c: Character) -> bool: return c.who == d[1])[0]
-			main._set_active(who)
 			if VillageHall.set_dish(main, d[0]):
 				did.append("잔치상 %s" % d[2])
-		main._set_active(main.farmer)
 		if VillageHall.feast_full():
 			main.feast_instant = true
 			if main.start_feast():
@@ -856,11 +854,9 @@ func dock_day(did: Array[String]) -> void:
 	var keep_fish := mini(GameState.fish, _feast_need("fish"))
 	GameState.fish -= keep_fish
 	if GameState.stews == 0 and GameState.fish >= Config.STEW_FISH:
-		main._set_active(main.ferryman)
 		if main.dock_action(&"stew"):
 			stews_made += 1
 			made.append("매운탕")
-		main._set_active(main.farmer)
 	if GameState.fish > 0:
 		fish_sold += GameState.fish
 		made.append("물고기 %d 진열" % GameState.fish)
@@ -883,10 +879,8 @@ func coop_day(did: Array[String]) -> void:
 		made.append("달걀 %d" % GameState.nest)
 		main.coop_action(&"take_nest")
 	if GameState.lunches == 0 and GameState.hen_eggs >= Config.LUNCH_EGGS:
-		main._set_active(main.rancher)
 		if main.coop_action(&"lunch"):
 			made.append("도시락")
-		main._set_active(main.farmer)
 	# 다음 도시락 몫은 남기고 나머지만 판다
 	var keep_eggs := Config.LUNCH_EGGS
 	if GameState.hen_eggs > keep_eggs:
@@ -966,15 +960,15 @@ func craft_day(did: Array[String]) -> void:
 		for j in range(b.size() - 1, -1, -1):
 			if Wearables.is_rolled(b[j]) and Wearables.rarity(b[j]) == &"crafted" and not _wanted_weapon(b[j]):
 				Wearables.sell(who, j)
-		main.farmer.refresh_wear()
-		main.hunter.refresh_wear()
+		main.player.refresh_wear()
+		main.player.refresh_wear()
 	if not made.is_empty():
 		did.append("제작 %s" % ", ".join(made))
 
 
 func _debug_msg(t: String) -> void:
 	if "하트" in t or "쓰러" in t:
-		_log("  . %s (사냥꾼 칸 %s)" % [t, Vector2i(main.hunter.feet() / Config.TILE)])
+		_log("  . %s (사냥꾼 칸 %s)" % [t, Vector2i(main.player.feet() / Config.TILE)])
 
 
 ## 즐겨 드는 종류 무기인지
@@ -1086,8 +1080,8 @@ func _score(id: StringName) -> float:
 
 func incubate() -> void:
 	if main.incubating_days < 0 and not GameState.farmer_eggs.is_empty():
-		main.farmer.position = main.incubator.position + Vector2(10, 40)
-		main.farmer.position = Farm.center_of(main.INCUBATOR_RECT.position + Vector2i(0, 2))
+		main.player.position = main.incubator.position + Vector2(10, 40)
+		main.player.position = Farm.center_of(main.INCUBATOR_RECT.position + Vector2i(0, 2))
 		main.interact()
 		_log("부화기: %s" % GameState.message if false else "부화기에 알 넣음 (%d일)" % main.incubating_days)
 
@@ -1101,7 +1095,6 @@ func _cleared(zone: int) -> void:
 
 
 func hunt_day() -> void:
-	main._set_active(main.hunter)
 	var pick: Creature = null
 	var pool: Array[Creature] = main.companion_candidates()
 	for s: Creature in pool:
@@ -1230,17 +1223,17 @@ func hunt_day() -> void:
 		if h.knocked:
 			if OS.get_environment("DEBUG_KO") != "":
 				for s: WildSlime in h.slimes:
-					_log("  ! 쓰러질 때 남은 %s%s 체력 %d · 거리 %.0f" % [s.title, " (대장)" if s.boss else "", s.hp, s.position.distance_to(main.hunter.feet())])
+					_log("  ! 쓰러질 때 남은 %s%s 체력 %d · 거리 %.0f" % [s.title, " (대장)" if s.boss else "", s.hp, s.position.distance_to(main.player.feet())])
 			break
 		if t + 2 * DT >= 900.0 and t < 900.0 - DT:
 			for d in h.drops + h.loot:
 				_log("  ! 줍지 못한 것 칸 %s" % Vector2i(d.at / Config.TILE))
 			for s: WildSlime in h.slimes:
 				var c := Vector2i(s.position / Config.TILE)
-				_log("  ! 남은 %s%s 칸 %s '%s' · 사냥꾼 칸 %s" % [s.title, " (대장)" if s.boss else "", c, h.map.at(c) if h.map else "", Vector2i(main.hunter.feet() / Config.TILE)])
+				_log("  ! 남은 %s%s 칸 %s '%s' · 사냥꾼 칸 %s" % [s.title, " (대장)" if s.boss else "", c, h.map.at(c) if h.map else "", Vector2i(main.player.feet() / Config.TILE)])
 			# 2026-10-03 소내섬: 드물게 막히는 원인을 찾으려고 사냥꾼 상태도 남긴다
-			_log("  ! 사냥꾼 발 %s · 느려짐 %.2f · 구르기 %.2f · 막힌 시간 %.1f · 무시한 몬스터 %d · 정전 %.1f" % [main.hunter.feet(), main.hunter.slow_mult, h.dash_t, stuck_t, ignored.size(), h.blackout_t])
-		var hunter: Character = main.hunter
+			_log("  ! 사냥꾼 발 %s · 느려짐 %.2f · 구르기 %.2f · 막힌 시간 %.1f · 무시한 몬스터 %d · 정전 %.1f" % [main.player.feet(), main.player.slow_mult, h.dash_t, stuck_t, ignored.size(), h.blackout_t])
+		var hunter: Character = main.player
 		var feet := hunter.feet()
 		# 물약: 하트 2 이하면 마신다
 		if h.life * 4 <= h.max_life() and GameState.potions > 0:
@@ -1431,7 +1424,7 @@ func hunt_day() -> void:
 		t += DT
 		zone_t += DT
 	zone_times.append("%s %.0f초" % [Config.HUNT_ZONES[h.zone].name, zone_t])
-	hunt_sec = t
+	hunt_sec = t + GATE_WALK_SEC
 	var life_left := h.life
 	var knocked := h.knocked
 	hunt_days += 1
@@ -1470,10 +1463,11 @@ func hunt_day() -> void:
 		act5[h.zone] = a
 	var comp := h.companion.display_name() if h.companion else "혼자"
 	var picked := h.picked.size()
+	var eggs0 := GameState.farmer_eggs.size()
 	if main.hunt:
 		main.leave_hunt()
 	var eggs: Array[String] = []
-	for sp in GameState.hunter_eggs:
+	for sp in GameState.farmer_eggs.slice(eggs0):
 		eggs.append(sp.display_name)
 		if sp == CreatureCatalog.TIGER or sp == CreatureCatalog.WHITE_TIGER:
 			tigers_got[sp.display_name] = tigers_got.get(sp.display_name, 0) + 1
@@ -1487,12 +1481,10 @@ func hunt_day() -> void:
 	level_by_day[GameState.day] = GameState.hunter_level
 	if t >= 900.0:
 		_log("  ! 사냥 봇이 15분 안에 끝내지 못함 (막힘?)")
-	# 알 넣기 · 젤리 팔기
-	main.hunter.position = Farm.center_of(main.SUPPLY_RECT.position + Vector2i(1, 1))
-	main._hunter_interact()
+	# 젤리 팔기 (주운 알은 주인공이 들고 와 바로 부화기에 넣는다)
+	main.player.position = Farm.center_of(main.SUPPLY_RECT.position + Vector2i(1, 1))
+	main._supply_interact()
 	main.close_menu()
-	main._set_active(main.farmer)
-	# 같은 날 농부가 알을 받아 부화기에 넣는다 (부화기가 비어 있으면)
 	if not GameState.village_eggs.is_empty():
 		main.supply_action(&"take_eggs")
 	incubate()

@@ -20,10 +20,8 @@ var displayed_roots := 0
 ## 열린 밭 구역 수 (Config.FIELD_PLOTS 앞에서부터)
 var open_plots := Config.START_FIELD_PLOTS
 ## 알은 종 정보만 가진다. 능력치와 Trait은 부화할 때 정해진다.
-## 농부가 들고 있는 알
+## 주인공이 들고 있는 알 (사냥터에서 주워 오거나 공급함에서 받은 것. 이름은 옛 저장과 맞추려고 그대로)
 var farmer_eggs: Array[CreatureSpecies] = []
-## 사냥꾼이 들고 있는 알 (마을 공급함에 넣기 전)
-var hunter_eggs: Array[CreatureSpecies] = []
 ## 마을 공급함에 있는 알
 var village_eggs: Array[CreatureSpecies] = []
 var hunts_today := 0
@@ -193,7 +191,6 @@ func reset() -> void:
 	displayed_roots = 0
 	open_plots = Config.START_FIELD_PLOTS
 	farmer_eggs = []
-	hunter_eggs = []
 	village_eggs = []
 	for i in Config.START_VILLAGE_EGGS:
 		village_eggs.append(CreatureCatalog.STARTER_EGG)
@@ -285,7 +282,8 @@ func _register_inputs() -> void:
 		"tool_prev": [KEY_Q],
 		"tool_next": [KEY_E],
 		"creature_job": [KEY_R],
-		"switch_character": [KEY_TAB],
+		## 가방 창에서 밭 옷 ↔ 사냥 옷 (2026-10-03 주인공 하나, 옛 Tab 캐릭터 전환 자리)
+		"outfit_swap": [KEY_TAB],
 		"next_day": [KEY_N],
 		"menu_close": [KEY_ESCAPE],
 		"use_potion": [KEY_1],

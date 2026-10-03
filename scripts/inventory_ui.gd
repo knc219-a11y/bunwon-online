@@ -3,7 +3,8 @@ extends Control
 ## 디아블로식 가방 창 (2026-09-28 사용자 요청: "인벤토리도 디아블로식으로 그냥 따로", "창고 기능").
 ## I 키로 어디서나 연다 (사냥터 포함, 여는 동안 사냥터는 멈춘다). 마을 창고 궤짝에서 F를 누르면 창고 칸이 옆에 붙는다.
 ## 마우스: 왼쪽 클릭 = 가방 칸 입기 / 입은 칸 벗기 (창고가 열려 있으면 가방 ↔ 창고 옮기기), 오른쪽 클릭 = 입기.
-## 키보드: WASD 칸 고르기, F = 왼쪽 클릭, R = 오른쪽 클릭, I 또는 Esc 닫기.
+## 키보드: WASD 칸 고르기, F = 왼쪽 클릭, R = 오른쪽 클릭, Tab = 밭 옷 ↔ 사냥 옷, I 또는 Esc 닫기.
+## 주인공 하나 (2026-10-03): 장비는 밭 옷 · 사냥 옷 두 벌 (Wearables.OUTFIT_NAMES). 열면 지금 입은 벌부터 보인다.
 ## 장비 등급 (2026-09-28 사용자 선택 A): 칸 테두리와 설명 줄이 등급색 (일반 · 마법 파랑 · 레어 노랑 · 세트 초록).
 ## 공급함 "가방에서 장비 팔기"로 열면 가방 칸 클릭 = 팔기 (사냥터에서 굴린 장비만).
 
@@ -31,6 +32,8 @@ const STASH_AT := Vector2(274, 28)
 const BOTTOM_Y := 146.0
 
 var character: Character
+## 지금 보고 있는 옷 벌 (&"farmer" 밭 옷 / &"hunter" 사냥 옷)
+var outfit: StringName = &"farmer"
 ## 창고 칸이 같이 열려 있는지
 var with_stash := false
 ## 공급함에서 장비 팔기로 열었는지
@@ -44,8 +47,9 @@ func _init() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
 
 
-func open(c: Character, stash := false, sell := false) -> void:
+func open(c: Character, stash := false, sell := false, which := &"") -> void:
 	character = c
+	outfit = which if which != &"" else (c.outfit if c.outfit != &"" else &"farmer")
 	with_stash = stash
 	sell_mode = sell and not stash
 	cursor = {kind = &"bag", index = 0}
@@ -57,6 +61,13 @@ func open(c: Character, stash := false, sell := false) -> void:
 
 func close() -> void:
 	visible = false
+
+
+## 밭 옷 ↔ 사냥 옷 (Tab)
+func swap_outfit() -> void:
+	outfit = &"hunter" if outfit == &"farmer" else &"farmer"
+	cursor = {kind = &"bag", index = 0}
+	queue_redraw()
 
 
 # --- 칸 배치 ---------------------------------------------------------------
@@ -77,7 +88,7 @@ func cell_rect(kind: StringName, i: int) -> Rect2:
 
 func _cells() -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
-	for i in Wearables.slots_for(character.who).size():
+	for i in Wearables.slots_for(outfit).size():
 		out.append({kind = &"equip", index = i})
 	for i in Config.BAG_SIZE:
 		out.append({kind = &"bag", index = i})
@@ -96,7 +107,7 @@ func _cell_at(p: Vector2) -> Dictionary:
 
 ## 칸에 든 장비 id (없으면 &"")
 func item_in(kind: StringName, i: int) -> StringName:
-	var who := character.who
+	var who := outfit
 	match kind:
 		&"equip":
 			return GameState.worn[who].get(Wearables.SLOTS[i], &"")
@@ -111,7 +122,7 @@ func item_in(kind: StringName, i: int) -> StringName:
 
 ## 왼쪽 클릭 (F): 가방 → 입기 (창고가 열려 있으면 창고로), 입은 칸 → 벗기, 창고 → 가방
 func primary(kind: StringName, i: int) -> bool:
-	var who := character.who
+	var who := outfit
 	var ok := false
 	match kind:
 		&"equip":
@@ -137,7 +148,7 @@ func primary(kind: StringName, i: int) -> bool:
 		_:
 			ok = Wearables.stash_to_bag(who, i)
 			if not ok and item_in(kind, i) != &"":
-				GameState.notify("%s 가방이 가득 찼다." % character.display_name)
+				GameState.notify("%s 가방이 가득 찼다." % Wearables.OUTFIT_NAMES[who])
 	_after(ok)
 	return ok
 
@@ -156,11 +167,10 @@ func _wear(i: int) -> bool:
 	if id == &"":
 		return false
 	var it := Wearables.item(id)
-	if it.who != character.who:
-		var owner := "농부" if it.who == &"farmer" else "사냥꾼"
-		GameState.notify("%s은(는) %s 장비다. 창고에 넣어 두면 %s이(가) 꺼내 입을 수 있다." % [it.name, owner, owner])
+	if it.who != outfit:
+		GameState.notify("%s은(는) %s 장비다. 창고에 넣었다가 Tab 으로 %s 가방을 열고 꺼내 입자." % [it.name, Wearables.OUTFIT_NAMES[it.who], Wearables.OUTFIT_NAMES[it.who]])
 		return false
-	return Wearables.wear_from_bag(character.who, i)
+	return Wearables.wear_from_bag(outfit, i)
 
 
 func _after(ok: bool) -> void:
@@ -203,6 +213,8 @@ func handle_key(event: InputEvent) -> void:
 		primary(cursor.kind, cursor.index)
 	elif event.is_action_pressed("creature_job"):
 		secondary(cursor.kind, cursor.index)
+	elif event.is_action_pressed("outfit_swap"):
+		swap_outfit()
 
 
 ## 그 방향에서 가장 가까운 칸으로
@@ -267,10 +279,10 @@ func _weapon_icon(w: Dictionary, r: Rect2) -> void:
 func _draw() -> void:
 	if character == null:
 		return
-	var who := character.who
+	var who := outfit
 	draw_rect(Rect2(Vector2.ZERO, size), PAPER)
 	draw_rect(Rect2(Vector2.ZERO, size), EDGE, false, 1.0)
-	_text(Vector2(10, 16), "%s 가방%s" % [character.display_name, " · 장비 팔기" if sell_mode else ""], 10)
+	_text(Vector2(10, 16), "%s%s" % [Wearables.OUTFIT_NAMES[who], " · 장비 팔기" if sell_mode else " (Tab 바꾸기)"], 10)
 	_text(Vector2(BAG_AT.x, 16), "가방 %d/%d" % [(GameState.bag[who] as Array).size(), Config.BAG_SIZE], 8, SUB)
 	if with_stash:
 		_text(Vector2(STASH_AT.x, 16), "공용 창고 %d/%d" % [GameState.stash.size(), Config.STASH_SIZE], 8, SUB)
@@ -295,7 +307,7 @@ func _draw() -> void:
 		if id != &"":
 			_icon(id, r)
 			if Wearables.item(id).who != who and c.kind != &"stash":
-				# 다른 캐릭터 장비는 흐리게 (들 수만 있고 입지 못함)
+				# 다른 벌 장비는 흐리게 (들 수만 있고 이 벌에는 못 입음)
 				draw_rect(r, Color(0.9, 0.85, 0.75, 0.55))
 		elif c.kind == &"equip":
 			_text(r.position + Vector2(3, 17), Wearables.SLOT_NAMES[Wearables.SLOTS[c.index]], 8, SUB)

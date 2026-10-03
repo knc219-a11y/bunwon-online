@@ -21,7 +21,7 @@ func _ready() -> void:
 	TestStarts.apply(main, start)
 	await get_tree().process_frame
 	var farm: Farm = main.farm
-	var who: Character = main.farmer
+	var who: Character = main.player
 	var door_cell: Vector2i = main.get_script().get_script_constant_map()["DOOR_CELL"]
 	var cols := Config.MAP_SIZE.x * Config.TILE / G
 	var rows := Config.MAP_SIZE.y * Config.TILE / G

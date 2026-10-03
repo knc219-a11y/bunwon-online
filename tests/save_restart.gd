@@ -18,7 +18,7 @@ func _ready() -> void:
 	if phase == "save":
 		TestStarts.apply(main, &"barn")
 		GameState.minutes = 15 * 60
-		GameState.hunter_eggs.append(load(TestStarts.SPECIES[&"tiger"]))
+		GameState.farmer_eggs.append(load(TestStarts.SPECIES[&"tiger"]))
 		main.incubating_days = 1
 		# 시설 공사 중 (2026-10-03): 공사 수 · 오늘 공사 수도 담기는지
 		GameState.site_work[&"naru"] = 7

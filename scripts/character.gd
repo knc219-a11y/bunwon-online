@@ -1,6 +1,7 @@
 class_name Character
 extends Node2D
-## 조작 가능한 캐릭터 (농부, 사냥꾼).
+## 마을 사람. 조작하는 주인공 하나 (2026-10-03 사용자 선택: 주인공 하나가 밭일 · 사냥을 다 함)와
+## 말 거는 마을 사람 NPC (농부 · 사냥꾼 · 대장장이 · 연금술사 · 목축인 · 뱃사공 · 이장).
 ## 그래픽은 스프라이트 시트 (assets/characters, 규격은 docs/sprites.md).
 
 ## 시트 규격: 칸 48x48, 열 0-1 대기 · 2-5 걷기, 행 0 아래 · 1 위 · 2 옆(오른쪽). 왼쪽은 좌우 반전.
@@ -15,8 +16,11 @@ const FEET_Y := 10
 const FEET_BOX := Vector2(12, 6)
 
 @export var display_name := ""
-## 입는 장비 주인 구분 (&"farmer" / &"hunter"). Wearables 참고.
+## 누구인지 (&"player" 주인공, NPC 는 &"farmer" · &"hunter" · &"smith" ...). 저장 · 잔치가 쓴다.
 @export var who: StringName = &""
+## 지금 입은 옷 벌 (Wearables 의 주인 키). 주인공은 마을에서 &"farmer" (밭 옷), 사냥터에서 &"hunter" (사냥 옷).
+## NPC 는 &"" (장비를 안 입음).
+@export var outfit: StringName = &""
 @export var sheet: Texture2D
 
 var active := false:
@@ -24,6 +28,13 @@ var active := false:
 		active = v
 		_update_sprite()
 		queue_redraw()
+## 말 거는 마을 사람 (조작하지 않음). 흐리게 그리지 않고, 주인공이 가까이 오면 이름표를 띄운다 (show_tag).
+var npc := false
+var show_tag := false:
+	set(v):
+		if show_tag != v:
+			show_tag = v
+			queue_redraw()
 ## 막는 범위를 알려 주는 농장. null 이면 어디든 지나간다.
 var farm: Farm
 ## 비어 있지 않으면 이 영역 안에서만 걷는다 (사냥터).
@@ -63,7 +74,10 @@ func refresh_wear() -> void:
 	for w in _wear:
 		w.queue_free()
 	_wear.clear()
-	for id in Wearables.worn_by(who):
+	if outfit == &"":
+		_update_sprite()
+		return
+	for id in Wearables.worn_by(outfit):
 		if not Wearables.item(id).has("sheet"):
 			continue
 		var w := Sprite2D.new()
@@ -129,7 +143,7 @@ func _process(delta: float) -> void:
 	else:
 		facing = Vector2i(0, int(signf(dir.y)))
 	var ground_mult := terrain.speed_at(feet()) if terrain else 1.0
-	step(dir * Config.CHARACTER_SPEED * Wearables.speed_mult(who) * ground_mult * slow_mult * delta)
+	step(dir * Config.CHARACTER_SPEED * Wearables.speed_mult(outfit) * ground_mult * slow_mult * delta)
 	queue_redraw()
 
 
@@ -153,11 +167,11 @@ func _update_sprite() -> void:
 	for sp: Sprite2D in [_sprite] + _wear:
 		sp.frame_coords = Vector2i(f.x, f.y)
 		sp.flip_h = f.z == 1
-		sp.modulate.a = 1.0 if active else 0.55
+		sp.modulate.a = 1.0 if active or npc else 0.55
 
 
 func _draw() -> void:
-	var alpha := 1.0 if active else 0.55
+	var alpha := 1.0 if active or npc else 0.55
 	# 발밑 그림자 (시트에는 그림자를 넣지 않는다)
 	draw_set_transform(Vector2(0, FEET_Y - 1), 0.0, Vector2(1.0, 0.4))
 	draw_circle(Vector2.ZERO, 11.0, Color(0.27, 0.16, 0.33, 0.25 * alpha))
@@ -170,5 +184,5 @@ func _draw() -> void:
 			var sx := 1.0 if corner.x == r.position.x else -1.0
 			var sy := 1.0 if corner.y == r.position.y else -1.0
 			draw_polyline(PackedVector2Array([corner + Vector2(0, sy * 5), corner, corner + Vector2(sx * 5, 0)]), Color(1, 1, 1, 0.85), 2.0)
-	if active:
+	if active or (npc and show_tag):
 		UiSkin.draw_tag(self, Vector2(-30, -42), display_name, 60)

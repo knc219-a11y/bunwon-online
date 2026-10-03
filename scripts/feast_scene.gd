@@ -26,8 +26,8 @@ func begin(m: Node2D) -> void:
 	main = m
 	var table: Prop = main.feast_table
 	center = table.position + Vector2(0, -20)
-	# 사람: 잔치상 뒤 한 줄 (보이는 사람만), 다 앞을 본다
-	var people: Array = main.people().filter(func(c: Character) -> bool: return c.visible)
+	# 사람: 잔치상 뒤 한 줄 (주인공 + 보이는 마을 사람), 다 앞을 본다
+	var people: Array = ([main.player] + main.people()).filter(func(c: Character) -> bool: return c.visible)
 	for i in people.size():
 		var c: Character = people[i]
 		_people_was[c] = c.position

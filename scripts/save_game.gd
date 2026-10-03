@@ -8,7 +8,8 @@ extends RefCounted
 ## 알 · 크리처의 종 · 속성 · Trait 같은 리소스는 파일 경로로 담는다.
 
 ## 2 = 마을 넓히기 (2026-10-01). 1 은 옛 26x15칸 마을 좌표라 읽을 때 새 배치로 옮긴다 (_migrate_v1).
-const VERSION := 2
+## 3 = 주인공 하나 (2026-10-03). 2 까지는 조작 캐릭터가 일곱이라 읽을 때 주인공 하나로 옮긴다 (_migrate_v2).
+const VERSION := 3
 const SLOTS := 3
 
 ## 옛 마을 (VERSION 1, 26x15칸) 좌표. 옛 저장 파일의 칸을 새 배치로 옮길 때만 쓴다.
@@ -109,12 +110,11 @@ static func snapshot(main: Node2D) -> Dictionary:
 			home = home,
 			expedition = s.expedition_zone,
 		})
-	var people := {}
-	for c: Character in main.people():
-		people[c.who] = [c.position, c.facing]
-	# 사냥터 안이면 사냥꾼은 사냥터 입구 앞에 선 것으로 (돌아온 채로 저장)
+	# 마을 사람 NPC 는 늘 제자리라 담지 않는다. 사냥터 안이면 주인공은 사냥터 입구 앞에 선 것으로 (돌아온 채로 저장)
+	var player: Character = main.player
+	var at := [player.position, player.facing]
 	if main.hunt:
-		people[&"hunter"] = [Farm.center_of(main.HUNT_GATE_RECT.position + Vector2i(1, main.HUNT_GATE_RECT.size.y)), Vector2i.DOWN]
+		at = [Farm.center_of(main.HUNT_GATE_RECT.position + Vector2i(1, main.HUNT_GATE_RECT.size.y)), Vector2i.DOWN]
 	return {
 		version = VERSION,
 		gs = gs,
@@ -123,8 +123,7 @@ static func snapshot(main: Node2D) -> Dictionary:
 		creatures = creatures,
 		incubating_days = main.incubating_days,
 		incubating_species = main.incubating_species.resource_path if main.incubating_species else "",
-		people = people,
-		active = main.active.who if main.hunt == null else &"hunter",
+		player = at,
 		tool_index = main.tool_index,
 	}
 
@@ -166,10 +165,16 @@ static func _unpack_into(name: String, v: Variant) -> void:
 static func apply(main: Node2D, d: Dictionary) -> void:
 	if d.get("version", 1) < 2:
 		d = _migrate_v1(d)
+	if d.get("version", 1) < 3:
+		d = _migrate_v2(d)
 	var gs: Dictionary = d.get("gs", {})
 	for name in _state_vars():
 		if gs.has(name):
 			_unpack_into(name, gs[name])
+	# 옛 저장 (VERSION 2): 사냥꾼이 들고 있던 알은 이제 주인공 손에 (공급함을 거치지 않음)
+	for x: Variant in gs.get("hunter_eggs", []):
+		if x is Dictionary and x.has("res"):
+			GameState.farmer_eggs.append(load(x.res))
 
 	var farm: Farm = main.farm
 	farm.sync_plots()
@@ -245,16 +250,12 @@ static func apply(main: Node2D, d: Dictionary) -> void:
 	var inc: String = d.get("incubating_species", "")
 	main.incubating_species = load(inc) if inc != "" else null
 
-	var people: Dictionary = d.get("people", {})
-	for c: Character in main.people():
-		if people.has(c.who):
-			c.position = people[c.who][0]
-			c.facing = people[c.who][1]
-		c.refresh_wear()
-	var who: StringName = d.get("active", &"farmer")
-	for c: Character in main.people():
-		if c.who == who and c.visible:
-			main._set_active(c)
+	var player: Character = main.player
+	var at: Array = d.get("player", [])
+	if not at.is_empty():
+		player.position = at[0]
+		player.facing = at[1]
+	player.refresh_wear()
 	main.tool_index = d.get("tool_index", 0)
 	main._update_dusk()
 	main._refresh_props()
@@ -305,6 +306,25 @@ static func _migrate_v1(d: Dictionary) -> Dictionary:
 			spare += 1
 		cd.home = moved
 	out.people = {}
+	out.version = 2
+	return out
+
+
+# --- 옛 저장 파일 (VERSION 2, 2026-10-03 주인공 하나 전) -----------------------
+
+## 조작 캐릭터 일곱 → 주인공 하나. 주인공은 저장할 때 조작하던 사람 자리에 선다 (사람 자리가 없으면 새 게임 자리).
+## 사냥꾼 레벨 · 직업 · 스탯 · 장비 (worn · bag 의 &"hunter" 벌)는 GameState 그대로 주인공의 사냥 옷이 되고,
+## 농부 장비 (&"farmer" 벌)는 밭 옷이 된다. 사냥꾼이 들고 있던 알은 apply 가 주인공 손으로 옮긴다.
+static func _migrate_v2(d: Dictionary) -> Dictionary:
+	var out := d.duplicate(true)
+	var people: Dictionary = d.get("people", {})
+	var who: StringName = d.get("active", &"farmer")
+	if people.has(who):
+		out.player = people[who]
+	elif people.has(&"farmer"):
+		out.player = people[&"farmer"]
+	out.erase("people")
+	out.erase("active")
 	out.version = VERSION
 	return out
 

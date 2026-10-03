@@ -32,8 +32,7 @@ func _ready() -> void:
 	var wid := OS.get_environment("WEAPON")
 	GameState.worn[&"hunter"][&"weapon"] = StringName(wid) if wid != "" else &"long_sword"
 	HuntGround.bow_style = StringName(OS.get_environment("BOW"))
-	main._set_active(main.hunter)
-	main.hunter.refresh_wear()
+	main.player.refresh_wear()
 	# ZONE · SEED (2026-10-02 활 몰아잡기 겨루기): 들어갈 구역 번호와 난수
 	var zone := int(OS.get_environment("ZONE")) if OS.get_environment("ZONE") != "" else 0
 	var sd := int(OS.get_environment("SEED")) if OS.get_environment("SEED") != "" else 7
@@ -53,7 +52,7 @@ func _ready() -> void:
 		ring_node.z_index = 3000
 		ring_node.draw.connect(_draw_ring)
 		h.add_child(ring_node)
-	main.hunter.position = h.map.spot("S") + Vector2(0, -60)
+	main.player.position = h.map.spot("S") + Vector2(0, -60)
 	hunt = h
 	spawned = h.slimes.size()
 	ready_done = true
@@ -78,8 +77,8 @@ func _process(delta: float) -> void:
 		print("MODE %s kills %d in %.0fs engaged %.1f hurt %d knocked true" % [mode, kills, t, engaged, Config.HUNTER_HP])
 		get_tree().quit()
 		return
-	var near: WildSlime = hunt._nearest_slime(main.hunter.feet())
-	if near != null and near.position.distance_to(main.hunter.feet()) <= ENGAGE:
+	var near: WildSlime = hunt._nearest_slime(main.player.feet())
+	if near != null and near.position.distance_to(main.player.feet()) <= ENGAGE:
 		engaged += delta
 	_bot(hunt)
 	if mode == "C":
@@ -98,7 +97,7 @@ func _process(delta: float) -> void:
 
 ## C 목업: 사냥꾼이 공터 가운데쯤 오면 울타리가 서고 둘레에서 떼가 두 물결로 솟는다
 func _tick_ring(h: HuntGround) -> void:
-	var feet: Vector2 = main.hunter.feet()
+	var feet: Vector2 = main.player.feet()
 	if ring_r == 0.0 and h.map.spot("S").distance_to(feet) > 90.0:
 		ring_at = feet + Vector2(0, -20)
 		ring_r = 110.0
@@ -106,7 +105,7 @@ func _tick_ring(h: HuntGround) -> void:
 	if ring_r > 0.0:
 		var d := feet - ring_at
 		if d.length() > ring_r - 10.0:
-			main.hunter.position -= d.normalized() * (d.length() - (ring_r - 10.0))
+			main.player.position -= d.normalized() * (d.length() - (ring_r - 10.0))
 		if h.slimes.is_empty() and waves > 0:
 			waves -= 1
 			for i in 7:
@@ -145,7 +144,7 @@ func _draw_ring() -> void:
 
 ## 간단한 봇: 예고를 보면 비키거나 구르고, 가까운 몬스터에게 다가가 벤다
 func _bot(h: HuntGround) -> void:
-	var hunter: Character = main.hunter
+	var hunter: Character = main.player
 	var feet := hunter.feet()
 	var escape := Vector2.ZERO
 	for s: WildSlime in h.slimes:
