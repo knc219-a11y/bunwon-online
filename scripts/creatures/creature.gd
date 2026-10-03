@@ -39,8 +39,10 @@ var _busy := false
 var task: StringName = &""
 ## 지금까지 풀밭에서 캔 나물·뿌리 수 (자동 플레이 봇이 농사 크리처의 한가한 채집을 셀 때 쓴다)
 var picks := 0
-## 지금까지 고물 더미에서 주운 고철 수 (봇이 센다)
+## 지금까지 시설 일을 한 수 (고철 · 도라지 · 모이 등, 봇이 센다)
 var scraps := 0
+## 오늘 캔 고철 수 (고물 캐기, 아침마다 0). 하루 dig_cap() 개까지.
+var dug_today := 0
 var _bob := 0.0
 var _anim := Anim.IDLE
 var _anim_time := 0.0
@@ -239,24 +241,29 @@ static func herb_spot() -> Vector2i:
 	return Config.HERB_BED_RECT.position + Vector2i.RIGHT
 
 
-## 고철 줍기 한 번 (2026-09-29 대장간 복구 A): 고물 더미까지 건너가 고철 하나를 주워 대장간에 둔다 (GameState.scrap).
-## 더미가 비면 제자리로 돌아가 쉰다. 아침마다 더미가 다시 쌓인다.
+## 고물 캐기 한 번 (2026-10-03 백로그 3, 예전 고철 줍기): 고물 더미까지 건너가 고철 하나를 캐 대장간에 둔다 (GameState.scrap).
+## 더미는 저절로 차지 않는다. 한 마리가 하루 dig_cap() 개까지 캐고, 다 캤으면 제자리로 돌아가 쉰다. 아침마다 새로 센다.
 func _scrap_once() -> bool:
 	if GameState.forge_state < 2:
 		return false
-	if GameState.scrap_pile <= 0:
+	if dug_today >= dig_cap():
 		if position.distance_to(Farm.center_of(home)) > 1.0:
 			_hop_to(Farm.center_of(home), func() -> void: pass)
 			return true
 		return false
 	var at := Farm.center_of(scrap_spot()) + Vector2((scraps % 3 - 1) * 5, 0)
 	_hop_to(at, func() -> void:
-		if GameState.scrap_pile > 0:
-			GameState.scrap_pile -= 1
+		if dug_today < dig_cap():
+			dug_today += 1
 			GameState.scrap += 1
 			scraps += 1
 			GameState.touch())
 	return true
+
+
+## 이 크리처가 하루에 캐는 고철 수 = SCRAP_DIG_PER_DAY x 고물 캐기 재능 x 속도 훈련 (반올림, 최소 1)
+func dig_cap() -> int:
+	return maxi(1, roundi(Config.SCRAP_DIG_PER_DAY * data.aptitude(CreatureJobs.SCRAP) * data.train_speed_mult()))
 
 
 ## 고물 더미 오른쪽 한 칸 띄운 자리 (크리처가 서서 줍는 자리. 2026-10-01 마을 넓히기: 더미 배지와 일 이름표가 안 겹치게)
@@ -281,8 +288,8 @@ func night_work() -> int:
 						did = true
 						break
 			CreatureJobs.SCRAP:
-				if GameState.forge_state >= 2 and GameState.scrap_pile > 0:
-					GameState.scrap_pile -= 1
+				if GameState.forge_state >= 2 and dug_today < dig_cap():
+					dug_today += 1
 					GameState.scrap += 1
 					did = true
 			CreatureJobs.HERB:
@@ -477,6 +484,9 @@ func _draw() -> void:
 	if job == CreatureJobs.REST:
 		return
 	if job != CreatureJobs.FARM and carried_by == null and position.distance_to(focus) > Config.CREATURE_TAG_DISTANCE:
+		return
+	# 시설 멍석 위 일꾼은 이름표를 안 단다 (세 마리가 붙어 앉아 겹침, 시설 배지에 "일꾼 n/3", 2026-10-03)
+	if carried_by == null and FacilityWorkers.facility_at(home) != &"" and FacilityWorkers.is_facility_job(job):
 		return
 	var label := CreatureJobs.display_name(job)
 	if data.train_total() > 0:

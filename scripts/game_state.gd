@@ -58,11 +58,12 @@ var first_egg_done := false
 var forge_state := 0
 ## 1막 대장(금두꺼비)을 쓰러뜨린 적이 있는지. 다음 날 아침 대장간 터가 드러난다.
 var forge_boss_down := false
-## 1막 대장 재료 (사금 덩이), 대장장이 제작 재료 (고철), 고물 더미에 남은 고철
+## 1막 대장 재료 (사금 덩이), 대장장이 제작 재료 (고철). 고철은 크리처 고물 캐기 · 장비 갈기 · 원정으로 (2026-10-03)
 var material := 0
 var scrap := 0
-var scrap_pile := 0
 ## 약방 (2026-09-29): 0 = 없음, 1 = 무너진 터, 2 = 고침 (연금술사 열림 · 번천 길 호롱)
+## 약방 일꾼이 아침마다 달일 약 (Config.BREWS id, &"" = 안 달임). 연금술사 창에서 고른다 (2026-10-03 크리처 시설 배치)
+var yak_brew: StringName = &""
 var yak_state := 0
 ## 2막 대장(도마리 장승 한 쌍)을 쓰러뜨린 적이 있는지. 다음 날 아침 약방 터가 드러난다.
 var yak_boss_down := false
@@ -214,8 +215,8 @@ func reset() -> void:
 	forge_boss_down = false
 	material = 0
 	scrap = 0
-	scrap_pile = 0
 	yak_state = 0
+	yak_brew = &""
 	yak_boss_down = false
 	material2 = 0
 	roots = 0

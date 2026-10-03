@@ -1690,40 +1690,85 @@ func _ready() -> void:
 	_check(not GameState.site_work.has(&"forge") and not CreatureJobs.BUILD in CreatureJobs.jobs(), "문을 열면 공사 기록 · 터 공사 일이 사라짐")
 	main.creatures.erase(bc)
 	bc.queue_free()
-	_check(main.smith.visible and main.scrap_heap != null and GameState.scrap_pile == Config.SCRAP_PER_DAY, "대장장이와 고물 더미가 생김")
-	_check(CreatureJobs.SCRAP in CreatureJobs.jobs(), "R 일 목록에 고철 줍기")
+	_check(main.smith.visible and main.scrap_heap != null and true, "대장장이와 고물 더미가 생김")
+	_check(not CreatureJobs.SCRAP in CreatureJobs.jobs() and FacilityWorkers.is_open(&"forge"), "고물 캐기는 R 이 아니라 대장간 일꾼 자리 (멍석)")
 	_check(main.smith.npc and main.player.active and not main.smith.active, "대장장이는 말 거는 마을 사람 (조작 안 함)")
 	main.player.position = Farm.center_of(Config.SMITH_CELL) + Vector2(0, 10)
 	_check(main.nearby_villager() == main.smith, "대장장이 옆에 서면 말 걸 사람")
 	main.interact()
 	_check(main.menu_open and main.menu_kind == &"craft", "대장장이에게 F → 제작 창")
 	main.close_menu()
-	# 크리처 고철 줍기: 땅속성이 빠르다
+	# 크리처 고물 캐기 (2026-10-03 백로그 3): 더미는 저절로 안 차고, 한 마리가 하루 dig_cap() 개. 땅속성이 빠르다
 	var fs: Creature = main._hatch(CreatureCatalog.SLIME, Config.FORAGE_CELLS[2])
 	fs.data.set_element(load("res://data/creatures/elements/earth.tres"))
 	fs.auto_work = false
-	while fs.job != CreatureJobs.SCRAP:
-		fs.next_job()
-	_check(is_equal_approx(fs.data.work_speed(CreatureJobs.SCRAP), fs.data.work_speed(CreatureJobs.WATER) * 1.5), "땅속성은 고철 줍기 1.5배")
+	# 크리처 시설 배치 (2026-10-03): 들고 멍석 근처에서 F → 대장간 일꾼
+	main.player.position = fs.position
+	main.interact()
+	_check(fs.carried_by == main.player, "크리처를 듦")
+	main.player.position = Farm.center_of(Config.WORKER_SLOTS[&"forge"][1] + Vector2i(0, 1))
+	main.interact()
+	_check(fs.carried_by == null and fs.job == CreatureJobs.SCRAP and fs.home in Config.WORKER_SLOTS[&"forge"] and FacilityWorkers.workers(main, &"forge") == [fs], "멍석 근처에 내려놓으면 대장간 일꾼 (고물 캐기)")
+	var r_job := fs.job
+	main.player.position = fs.position + Vector2(0, 8)
+	main.change_creature_job()
+	_check(fs.job == r_job, "일꾼에게 R 은 일을 안 바꿈 (들어서 옮김)")
+	# 멍석이 다 차면 더 못 앉힘
+	var fill_a: Creature = main._hatch(CreatureCatalog.SLIME, Config.FORAGE_CELLS[3])
+	var fill_b: Creature = main._hatch(CreatureCatalog.SLIME, Config.FORAGE_CELLS[4])
+	var fill_c: Creature = main._hatch(CreatureCatalog.SLIME, Config.FORAGE_CELLS[5])
+	_check(FacilityWorkers.assign(main, fill_a, &"forge") and FacilityWorkers.assign(main, fill_b, &"forge") and not FacilityWorkers.assign(main, fill_c, &"forge"), "대장간 멍석은 %d자리" % Config.WORKER_SLOTS[&"forge"].size())
+	# 일꾼을 들어 밭 쪽에 내려놓으면 시설 일을 그만두고 쉼
+	main.player.position = fill_b.position + Vector2(0, 6)
+	main.interact()
+	_check(fill_b.carried_by == main.player, "멍석 위 일꾼을 들 수 있음 (대장간 창보다 먼저)")
+	main.player.position = Farm.center_of(Config.FORAGE_CELLS[6])
+	main.interact()
+	_check(fill_b.job == CreatureJobs.REST and FacilityWorkers.workers(main, &"forge").size() == 2, "밭 쪽에 내려놓으면 쉼 (일꾼 2)")
+	for x: Creature in [fill_a, fill_b, fill_c]:
+		main.creatures.erase(x)
+		x.queue_free()
+	_check(is_equal_approx(fs.data.work_speed(CreatureJobs.SCRAP), fs.data.work_speed(CreatureJobs.WATER) * 1.5), "땅속성은 고물 캐기 1.5배")
 	GameState.scrap = 0
-	_check(fs.work_once(), "고철 줍기 크리처가 고물 더미로")
+	var fs_cap0 := fs.dig_cap()
+	fs.data.speed_level = 3
+	_check(fs_cap0 == maxi(1, roundi(Config.SCRAP_DIG_PER_DAY * 1.5)) and fs.dig_cap() > fs_cap0, "땅속성 하루 캐는 수 %d개, 속도 훈련하면 %d개" % [fs_cap0, fs.dig_cap()])
+	fs.data.speed_level = 0
+	_check(fs.work_once(), "고물 캐기 크리처가 고물 더미로")
 	Engine.time_scale = 20.0
 	while fs._busy:
 		await get_tree().process_frame
 	Engine.time_scale = 1.0
-	_check(GameState.scrap == 1 and GameState.scrap_pile == Config.SCRAP_PER_DAY - 1, "고철 하나를 주워 옴")
-	GameState.scrap_pile = 0
-	_check(fs.work_once() and fs._busy, "더미가 비면 제자리로 돌아감")
+	_check(GameState.scrap == 1 and fs.dug_today == 1, "고철 하나를 캐 옴")
+	fs.dug_today = fs.dig_cap()
+	_check(fs.work_once() and fs._busy, "오늘 몫을 다 캐면 제자리로 돌아감")
 	Engine.time_scale = 20.0
 	while fs._busy:
 		await get_tree().process_frame
 	Engine.time_scale = 1.0
 	_check(not fs.work_once(), "제자리에서 쉼")
 	main.next_day()
-	_check(GameState.scrap_pile == Config.SCRAP_PER_DAY, "아침마다 고물 더미가 다시 쌓임")
+	_check(fs.dug_today == 0, "아침마다 캔 수를 새로 셈")
 	main.player.position = Farm.center_of(Config.SCRAP_RECT.position + Vector2i(Config.SCRAP_RECT.size.x, 0))
 	main.interact()
-	_check(GameState.scrap == 2, "농부가 F로 고철을 손으로 주움")
+	_check(GameState.scrap == 1, "고물 더미는 손으로 못 팜 (크리처 몫)")
+	main.creatures.erase(fs)
+	fs.queue_free()
+	# 장비 갈기 (2026-10-03 백로그 8): 대장장이 창 → 가방에서 장비 클릭 = 고철
+	var sv_roll := Wearables.roll_gear(RandomNumberGenerator.new(), &"rare")
+	var sv_where := Wearables.gain_rolled(sv_roll)
+	var sv_who: StringName = Wearables.ITEMS[sv_roll.base].who
+	if sv_where == &"worn":
+		Wearables.take_off(sv_who, Wearables.ITEMS[sv_roll.base].slot)
+	_check(sv_where != &"" and (GameState.bag[sv_who] as Array).size() > 0, "갈 장비를 하나 얻어 가방에")
+	var sv_i := (GameState.bag[sv_who] as Array).size() - 1
+	_check(&"salvage" in main.craft_options(), "대장장이 창에 장비 갈기")
+	GameState.scrap = 0
+	main.open_inventory(false, false, true)
+	main.inventory.outfit = sv_who
+	_check(main.inventory.salvage_mode, "갈기 창으로 열림")
+	_check(main.inventory.primary(&"bag", sv_i) and GameState.scrap == Config.SALVAGE_SCRAP[&"rare"], "레어 장비를 갈면 고철 %d" % Config.SALVAGE_SCRAP[&"rare"])
+	main.close_inventory()
 	# 제작: 주인공이 대장간 모루에서 F → 대장장이 제작 창
 	GameState.scrap = 20
 	GameState.money = 1000
@@ -2263,7 +2308,7 @@ func _ready() -> void:
 	SiteWork.fill(&"yak")
 	_check(main.restore_yak() and GameState.yak_state == 2 and main.alchemist.visible and main.herb_bed != null and GameState.money == 7 and GameState.roots == 0 and GameState.material2 == 0,
 		"약방 복구 (돈 %d · 도라지 %d · 장승 조각 %d) → 연금술사" % [Config.YAK_COST_MONEY, Config.YAK_COST_ROOTS, Config.YAK_COST_MATERIAL])
-	_check(CreatureJobs.jobs().has(CreatureJobs.HERB) and GameState.herb_bed == Config.HERB_BED_PER_DAY, "도라지밭 일이 생김 (하루 %d)" % Config.HERB_BED_PER_DAY)
+	_check(FacilityWorkers.is_open(&"yak") and GameState.herb_bed == Config.HERB_BED_PER_DAY, "약방 일꾼 자리 (도라지밭, 하루 %d)" % Config.HERB_BED_PER_DAY)
 	_check(main.pick_herb_bed() and GameState.roots == 1 and GameState.herb_bed == Config.HERB_BED_PER_DAY - 1, "도라지밭에서 손으로 도라지 하나")
 	b_c.home = Config.FORAGE_CELLS[5]
 	b_c.job = CreatureJobs.HERB
@@ -2432,7 +2477,7 @@ func _ready() -> void:
 	SiteWork.fill(&"barn")
 	_check(main.restore_barn() and GameState.barn_state == 2 and main.rancher.visible and GameState.hens == Config.START_HENS and GameState.money == 3 and GameState.crops == 4 and GameState.material3 == 0,
 		"축사 복구 (돈 %d · 무 %d · 산군 발톱 %d) → 목축인 · 암탉 %d" % [Config.BARN_COST_MONEY, Config.BARN_COST_CROPS, Config.BARN_COST_MATERIAL, Config.START_HENS])
-	_check(CreatureJobs.jobs().has(CreatureJobs.FEED), "모이 주기 일이 생김")
+	_check(FacilityWorkers.is_open(&"barn"), "축사 일꾼 자리 (모이 주기)")
 	_check(main.coop_options().has(&"lunch") and main.coop_options().has(&"feed"), "닭장: 모이 주기 · 목축인에게 도시락 부탁")
 	_check(main.coop_action(&"feed") and GameState.fed == GameState.hens and GameState.crops == 3, "모이 주기 (무 %d)" % Config.FEED_CROP_COST)
 	var m_rng := RandomNumberGenerator.new()
@@ -3568,7 +3613,7 @@ func _naru_checks() -> void:
 	m.restore_naru()
 	SiteWork.fill(&"naru")
 	_check(m.restore_naru() and GameState.naru_state == 2 and m.ferryman.visible and GameState.material4 == 0, "돈 · 무 · 마왕 뿔로 한 번에 고침 → 뱃사공")
-	_check(CreatureJobs.FISH in CreatureJobs.jobs(), "고치면 크리처 일에 물고기 몰기")
+	_check(FacilityWorkers.is_open(&"naru"), "고치면 나루터 일꾼 자리 (물고기 몰기)")
 	GameState.hunter_unlocked = true
 	m.player.position = Farm.center_of(Config.FERRYMAN_CELL) + Vector2(10, 0)
 	m.interact()
@@ -3961,7 +4006,7 @@ func _hall_checks() -> void:
 	m.interact()
 	_check(m.menu_open and m.menu_kind == &"board" and VillageHall.options(m, &"board").has(&"reroll"), "이장에게 F → 게시판 (부탁 바꾸기도)")
 	m.close_menu()
-	_check(CreatureJobs.jobs().has(CreatureJobs.ERRAND), "크리처 일에 심부름")
+	_check(FacilityWorkers.is_open(&"hall"), "회관 일꾼 자리 (심부름)")
 	# 게시판: 무 부탁으로 고정해 보고 심부름 · 들어주기
 	GameState.hall_request = {id = &"crops", count = 20}
 	GameState.errands = 0
@@ -4028,5 +4073,26 @@ func _hall_checks() -> void:
 	GameState.reset()
 	TestStarts.apply(c2, &"feast")
 	_check(GameState.hall_state == 2 and GameState.feast_state == 1 and c2.chief.visible and c2.creatures.any(func(x: Creature) -> bool: return x.job == CreatureJobs.ERRAND), "시작 지점 잔치 준비: 이장 · 잔치상 · 심부름 크리처")
+	# 크리처 시설 배치 (2026-10-03): 시작 지점의 시설 일 크리처는 멍석 위 일꾼, 아침에 시설마다 일을 해 둠
+	var all_on_mats: bool = c2.creatures.all(func(x: Creature) -> bool: return not FacilityWorkers.is_facility_job(x.job) or x.home in Config.WORKER_SLOTS[FacilityWorkers.JOBS.find_key(x.job)])
+	_check(all_on_mats, "시설 일 크리처는 모두 그 시설 멍석 위")
+	for fac: StringName in [&"yak", &"barn", &"naru"]:
+		if FacilityWorkers.workers(c2, fac).is_empty():
+			var extra: Creature = c2._hatch(CreatureCatalog.SLIME, Config.FORAGE_CELLS[0])
+			FacilityWorkers.assign(c2, extra, fac)
+	GameState.yak_brew = &"lamp_oil"
+	GameState.roots = 100
+	GameState.lamp_oil = 0
+	GameState.nest = 3
+	GameState.hen_eggs = 0
+	GameState.traps = 0
+	GameState.crops = 50
+	var wl := FacilityWorkers.morning(c2)
+	_check(GameState.lamp_oil == FacilityWorkers.workers(c2, &"yak").size() and GameState.roots == 100 - 2 * GameState.lamp_oil, "약방 일꾼이 정해 둔 약 (호롱 기름) 을 한 마리에 한 번씩 달임")
+	_check(GameState.hen_eggs >= 2 and GameState.nest <= 1, "축사 일꾼이 둥지 달걀을 거둬 둠 (병아리용 하나만 남김)")
+	_check(GameState.traps == Config.TRAP_MAX and GameState.crops == 50 - Config.TRAP_MAX * Config.TRAP_BAIT, "나루터 일꾼이 무 미끼로 통발을 다시 놓음")
+	_check(wl.size() == 3, "아침 카드에 일꾼 줄 셋")
+	c2.cycle_yak_brew()
+	_check(GameState.yak_brew != &"lamp_oil", "연금술사 창에서 달일 약을 바꿈")
 	c2.queue_free()
 	await get_tree().process_frame

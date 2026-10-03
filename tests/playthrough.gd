@@ -58,6 +58,8 @@ var craft_spent := 0
 var gross: Array[int] = []
 var spent_today := 0
 var scrap_creature: Creature = null
+## 장비를 갈아 얻은 고철 (2026-10-03 백로그 8)
+var salvaged_scrap := 0
 ## 광동리 (2026-09-29 선택 B): 처음 도착한 날 · 광동리에서 사냥한 날 수 · 거기서 잃은 체력 · 쓰러진 횟수 · 날마다 끝 돈
 var gwang_day := -1
 var gwang_hunts := 0
@@ -197,8 +199,12 @@ func _ready() -> void:
 	for g in last:
 		avg += g
 	avg /= maxf(last.size(), 1)
-	var scrap_by_creature := scrap_creature.scraps if scrap_creature else 0
-	_log("\n대장간: 터 %s · 복구 %s · 복구비를 모으느라 안 산 날 %s · 장비 제작 %d번 (%d원) · 크리처가 주운 고철 %d · 마지막 7일 하루 벌이 평균 %.0f원 · 끝에 남은 돈 %d원 = 하루 벌이의 %.1f배" % [
+	var scrap_by_creature := 0
+	for c: Creature in main.creatures:
+		if c.job == CreatureJobs.SCRAP:
+			scrap_by_creature += c.scraps
+	_log("\n시설 일꾼 (멍석): %s · 장비를 갈아 얻은 고철 %d · 남은 고철 %d" % [" · ".join(FacilityWorkers.FACILITIES.map(func(f: StringName) -> String: return "%s %s" % [FacilityWorkers.NAMES[f], FacilityWorkers.count_text(main, f)])), salvaged_scrap, GameState.scrap])
+	_log("\n대장간: 터 %s · 복구 %s · 복구비를 모으느라 안 산 날 %s · 장비 제작 %d번 (%d원) · 크리처가 캔 고철 %d · 마지막 7일 하루 벌이 평균 %.0f원 · 끝에 남은 돈 %d원 = 하루 벌이의 %.1f배" % [
 		"%d일" % site_day if site_day > 0 else "없음", "%d일" % restore_day if restore_day > 0 else "없음", held_days, crafted, craft_spent, scrap_by_creature, avg, GameState.money, GameState.money / maxf(avg, 1.0)])
 	var money_at := []
 	for d in [30, 35, 40]:
@@ -438,102 +444,42 @@ func place_new_creatures() -> void:
 			farmers += 1
 		else:
 			_assign(s, CreatureJobs.FORAGE, 0)
-	# 대장간을 고쳤으면 크리처 하나에게 고철 줍기 (땅속성 채집 전담 먼저, 없으면 아무 채집 전담 · 가장 늦게 태어난 크리처)
-	if GameState.forge_state >= 2 and scrap_creature == null and not main.creatures.is_empty():
-		var pick: Creature = null
-		for s: Creature in main.creatures:
-			if s.home == main.HATCH_CELL or s.job != CreatureJobs.FORAGE or s.data.species == CreatureCatalog.SPARROW or s.expedition_zone >= 0:
-				continue
-			if pick == null or (s.has_element(&"earth") and not pick.has_element(&"earth")):
-				pick = s
-		if pick == null:
-			pick = main.creatures[-1]
-		scrap_creature = pick
-		main.player.position = pick.position
-		main.interact()
-		main.player.position = Farm.center_of(Creature.scrap_spot() + Vector2i(0, -1))
-		main.interact()
-		while pick.job != CreatureJobs.SCRAP:
-			pick.next_job()
-		_log("크리처 배치: %s → 고철 줍기" % pick.describe())
-	# 약방을 고쳤으면 크리처 하나에게 도라지밭 (아기 도깨비불 먼저, 없으면 땅속성 채집 전담 · 아무 채집 전담)
-	var want_herb: bool = GameState.yak_state >= 2 and (herb_creature == null or (herb_creature.data.species != CreatureCatalog.WILL_O and main.creatures.any(func(c: Creature) -> bool: return c.data.species == CreatureCatalog.WILL_O and c.home != main.HATCH_CELL and c.expedition_zone < 0)))
-	if want_herb:
-		var pick: Creature = null
-		for s: Creature in main.creatures:
-			if s.home == main.HATCH_CELL or s == scrap_creature or s.job == CreatureJobs.FARM or s.data.species == CreatureCatalog.SPARROW or s.expedition_zone >= 0:
-				continue
-			if pick == null or s.data.species == CreatureCatalog.WILL_O or (s.has_element(&"earth") and pick.data.species != CreatureCatalog.WILL_O and not pick.has_element(&"earth")):
-				pick = s
-		if pick != null and pick != herb_creature:
-			if herb_creature != null:
-				_assign(herb_creature, CreatureJobs.FORAGE, 0)
-			herb_creature = pick
-			main.player.position = pick.position
-			main.interact()
-			main.player.position = Farm.center_of(Creature.herb_spot() + Vector2i(1, 0))
-			main.interact()
-			while pick.job != CreatureJobs.HERB:
-				pick.next_job()
-			_log("크리처 배치: %s → 도라지밭 (칸 %s)" % [pick.describe(), pick.home])
-	# 축사를 고쳤으면 아기 호랑이(없으면 아무 채집 전담)에게 모이 주기 (호랑이는 족제비도 쫓는다)
-	if GameState.barn_state >= 2 and (feed_creature == null or not feed_creature.data.species.guards_coop):
-		var pick: Creature = null
-		for s: Creature in main.creatures:
-			if s.home == main.HATCH_CELL or s == scrap_creature or s == herb_creature or s.job == CreatureJobs.FARM or s.expedition_zone >= 0:
-				continue
-			if pick == null or (s.data.species.guards_coop and not pick.data.species.guards_coop):
-				pick = s
-		if pick != null and pick != feed_creature and (feed_creature == null or pick.data.species.guards_coop):
-			if feed_creature != null:
-				_assign(feed_creature, CreatureJobs.FORAGE, 0)
-			feed_creature = pick
-			main.player.position = pick.position
-			main.interact()
-			main.player.position = Farm.center_of(Creature.feed_spot() + Vector2i(1, 0))
-			main.interact()
-			while pick.job != CreatureJobs.FEED:
-				pick.next_job()
-			_log("크리처 배치: %s → 모이 주기 (칸 %s)" % [pick.describe(), pick.home])
-	# 나루터를 고쳤으면 물속성 채집 전담 하나 (없으면 아무 채집 전담) 에게 물고기 몰기
-	if GameState.naru_state >= 2 and fish_creature == null:
-		var pick: Creature = null
-		for s: Creature in main.creatures:
-			if s.home == main.HATCH_CELL or s == scrap_creature or s == herb_creature or s == feed_creature or s.job != CreatureJobs.FORAGE or s.expedition_zone >= 0:
-				continue
-			if pick == null or (s.has_element(&"water") and not pick.has_element(&"water")):
-				pick = s
-		if pick != null:
-			fish_creature = pick
-			main.player.position = pick.position
-			main.interact()
-			main.player.position = Farm.center_of(Creature.fish_spot() + Vector2i(-2, 0))
-			main.interact()
-			while pick.job != CreatureJobs.FISH:
-				pick.next_job()
-			_log("크리처 배치: %s → 물고기 몰기 (칸 %s)" % [pick.describe(), pick.home])
-	# 마을회관을 고쳤으면 채집 전담 하나 (날개 · 빠른 크리처 먼저) 에게 심부름
-	if GameState.hall_state >= 2 and errand_creature == null:
-		var pick: Creature = null
-		for s: Creature in main.creatures:
-			if s.home == main.HATCH_CELL or s in [scrap_creature, herb_creature, feed_creature, fish_creature] or s.job != CreatureJobs.FORAGE or s.expedition_zone >= 0:
-				continue
-			if pick == null or s.data.move_speed() > pick.data.move_speed():
-				pick = s
-		if pick != null:
-			errand_creature = pick
-			main.player.position = pick.position
-			main.interact()
-			main.player.position = Farm.center_of(Creature.errand_spot() + Vector2i(0, 1))
-			main.interact()
-			while pick.job != CreatureJobs.ERRAND:
-				pick.next_job()
-			_log("크리처 배치: %s → 심부름 (칸 %s)" % [pick.describe(), pick.home])
+	# 크리처 시설 배치 (2026-10-03): 고친 시설마다 멍석 (일꾼 자리) 을 채운다. 채집 전담 중 그 일에 잘 맞는 크리처부터,
+	# 마을에 채집 전담 MIN_FORAGERS 마리는 남긴다. 더 잘 맞는 크리처 (약방 아기 도깨비불 · 축사 지킴이) 가 생기면 바꿔 앉힌다.
+	for fac: StringName in FacilityWorkers.FACILITIES:
+		if not FacilityWorkers.is_open(fac):
+			continue
+		while FacilityWorkers.free_slot(main, fac).x >= 0:
+			var pick := _best_worker(fac)
+			if pick == null:
+				break
+			_to_mat(pick, fac)
+		var ws := FacilityWorkers.workers(main, fac)
+		if ws.is_empty() or ws.any(func(w: Creature) -> bool: return _preferred(fac, w)):
+			continue
+		var better := _best_worker(fac, true)
+		if better != null and _preferred(fac, better):
+			_assign(ws[0], CreatureJobs.FORAGE, 0)
+			_to_mat(better, fac)
+	var firsts := {}
+	for fac: StringName in FacilityWorkers.FACILITIES:
+		var ws := FacilityWorkers.workers(main, fac)
+		firsts[fac] = ws[0] if not ws.is_empty() else null
+	scrap_creature = firsts[&"forge"]
+	herb_creature = firsts[&"yak"]
+	feed_creature = firsts[&"barn"]
+	fish_creature = firsts[&"naru"]
+	errand_creature = firsts[&"hall"]
+	if FacilityWorkers.is_open(&"yak") and GameState.yak_brew == &"":
+		# 약방 일꾼에게 맡길 약: 힘 물약 (봇이 가장 많이 쓰는 약, 사람이라면 고를 것)
+		while GameState.yak_brew != &"strength":
+			main.cycle_yak_brew()
+		_log("약방 일꾼이 아침마다 달일 약: 힘 물약")
 	# 공사 중인 터가 있으면 채집 전담 하나 (땅속성 먼저) 에게 터 공사, 공사가 없으면 채집으로 돌린다 (2026-10-03)
 	if SiteWork.build_site() != &"" and build_creature == null:
 		var pick: Creature = null
 		for s: Creature in main.creatures:
-			if s.home == main.HATCH_CELL or s in [scrap_creature, herb_creature, feed_creature, fish_creature, errand_creature] or s.job != CreatureJobs.FORAGE or s.expedition_zone >= 0:
+			if s.home == main.HATCH_CELL or s.job != CreatureJobs.FORAGE or s.expedition_zone >= 0:
 				continue
 			if pick == null or (s.has_element(&"earth") and not pick.has_element(&"earth")):
 				pick = s
@@ -577,6 +523,58 @@ func manage_expeditions() -> void:
 		_log("입양: %s → %s" % [desc, who])
 
 
+## 마을에 남기는 채집 전담 수 (시설 멍석을 채울 때)
+const MIN_FORAGERS := 3
+
+
+## 시설에 더 잘 맞는 크리처 (약방 = 아기 도깨비불, 축사 = 족제비 지킴이)
+func _preferred(fac: StringName, c: Creature) -> bool:
+	match fac:
+		&"yak":
+			return c.data.species == CreatureCatalog.WILL_O
+		&"barn":
+			return c.data.species.guards_coop
+	return false
+
+
+## 그 시설 일꾼으로 고를 채집 전담 (잘 맞는 순). any_count 면 채집 전담 수를 안 따진다 (바꿔 앉힐 때).
+func _best_worker(fac: StringName, any_count := false) -> Creature:
+	var pool: Array[Creature] = []
+	for c: Creature in main.creatures:
+		if c.home == main.HATCH_CELL or c.job != CreatureJobs.FORAGE or c.expedition_zone >= 0 or c == build_creature or c.carried_by != null:
+			continue
+		pool.append(c)
+	if pool.size() <= MIN_FORAGERS and not any_count:
+		return null
+	if pool.is_empty():
+		return null
+	var job: StringName = FacilityWorkers.JOBS[fac]
+	var best: Creature = null
+	var best_score := -1.0
+	for c in pool:
+		var score := c.data.work_speed(job) * (c.data.move_speed() if fac == &"hall" else 1.0)
+		if _preferred(fac, c):
+			score += 100.0
+		# 아기 까마귀는 채집 재능이라 웬만하면 채집에 남긴다
+		if c.data.species == CreatureCatalog.SPARROW and fac != &"hall":
+			score *= 0.5
+		if score > best_score:
+			best_score = score
+			best = c
+	return best
+
+
+## 크리처를 들어 (F) 시설 멍석 근처에서 내려놓는다 (F). 플레이어가 할 법한 그대로.
+func _to_mat(c: Creature, fac: StringName) -> void:
+	# 풀밭 크리처는 몰려 있어서 F 로 들면 옆 크리처를 들 수 있다: 이 크리처를 바로 든다
+	main.player.position = c.position
+	c.pick_up(main.player)
+	var slot := FacilityWorkers.free_slot(main, fac)
+	main.player.position = Farm.center_of(slot + Vector2i(0, 1))
+	main.interact()
+	_log("크리처 배치: %s → %s 일꾼 (멍석 %s · %s)" % [c.describe(), FacilityWorkers.NAMES[fac], c.home, FacilityWorkers.count_text(main, fac)])
+
+
 ## 크리처를 들어 옮기고 (F 두 번) 일을 R로 바꾼다. 농사면 plot_i 구역 가운데, 채집이면 풀밭.
 func _assign(s: Creature, want: StringName, plot_i: int) -> void:
 	var plot := Config.FIELD_PLOTS[plot_i]
@@ -609,7 +607,7 @@ func let_creatures_work() -> void:
 				busy = true
 			elif s.job in [CreatureJobs.FARM, CreatureJobs.FORAGE] and main.forage.nearest_target(s.position, s.has_element(&"earth")) != null:
 				busy = true
-			elif s.job == CreatureJobs.SCRAP and (GameState.scrap_pile > 0 or s.position.distance_to(Farm.center_of(s.home)) > 1.0):
+			elif s.job == CreatureJobs.SCRAP and (s.dug_today < s.dig_cap() or s.position.distance_to(Farm.center_of(s.home)) > 1.0):
 				busy = true
 			elif s.job == CreatureJobs.HERB and (GameState.herb_bed > 0 or s.position.distance_to(Farm.center_of(s.home)) > 1.0):
 				busy = true
@@ -872,7 +870,7 @@ func dock_day(did: Array[String]) -> void:
 ## 목축인이 도시락 하나를 싸 두고 나머지는 공급함에 진열한다. 덜 찼으면 병아리가 되게 둥지에 둔다.
 func coop_day(did: Array[String]) -> void:
 	var made: Array[String] = []
-	if GameState.fed < GameState.hens and (feed_creature == null or feed_creature.job != CreatureJobs.FEED) and main.coop_action(&"feed"):
+	if GameState.fed < GameState.hens and FacilityWorkers.workers(main, &"barn").is_empty() and main.coop_action(&"feed"):
 		made.append("모이")
 	# 암탉이 넷이 될 때까지는 둥지 달걀을 병아리로 두고, 그 뒤로 꺼낸다 (사람이라면 먼저 닭을 늘릴 것)
 	if GameState.nest > 0 and GameState.hens + GameState.chicks.size() >= Config.HEN_CAP / 2:
@@ -930,8 +928,11 @@ func _price_of(id: StringName) -> int:
 func craft_day(did: Array[String]) -> void:
 	var bases := Wearables.craft_bases()
 	var made: Array[String] = []
-	# 사냥꾼 가방이 사냥터 일반 장비로 차 있으면 제작품이 창고로 가 버리니 먼저 판다 (사람이라면 그럴 것)
-	Wearables.sell_all_normal(&"hunter")
+	# 사냥꾼 가방의 사냥터 일반 장비는 대장장이에게 갈아 고철로 (2026-10-03 백로그 8, 팔면 5원 · 갈면 고철 1)
+	var hb: Array[StringName] = GameState.bag[&"hunter"]
+	for j in range(hb.size() - 1, -1, -1):
+		if Wearables.is_rolled(hb[j]) and Wearables.rarity(hb[j]) == &"normal":
+			salvaged_scrap += Wearables.salvage(&"hunter", j)
 	while true:
 		var base: StringName = bases[crafted % bases.size()]
 		var cost: Array = Config.CRAFT_COSTS[base]
@@ -956,10 +957,10 @@ func craft_day(did: Array[String]) -> void:
 			var worn: StringName = GameState.worn[who].get(it.slot, &"")
 			if worn == &"" or _score(id) > _score(worn):
 				Wearables.wear_from_bag(who, i)
-		# 가방의 제작품은 판다 (입지 않은 것. 즐겨 드는 종류 무기는 남김)
+		# 가방의 제작품은 갈아서 고철로 (입지 않은 것. 즐겨 드는 종류 무기는 남김)
 		for j in range(b.size() - 1, -1, -1):
 			if Wearables.is_rolled(b[j]) and Wearables.rarity(b[j]) == &"crafted" and not _wanted_weapon(b[j]):
-				Wearables.sell(who, j)
+				salvaged_scrap += Wearables.salvage(who, j)
 		main.player.refresh_wear()
 		main.player.refresh_wear()
 	if not made.is_empty():
