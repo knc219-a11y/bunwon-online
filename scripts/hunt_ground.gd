@@ -155,6 +155,11 @@ var quick := false
 var lunch := false
 ## 뱃사공 매운탕 (2026-10-02 나루터): 이 사냥 동안 최대 체력 +STEW_HP · 경험치 xSTEW_XP_MULT
 var stew := false
+## 사냥 음식 (2026-10-03 작물 등급 · 쓰임): 찐 감자 최대 체력 + · 고추장 주먹밥 피해 x(1+) · 김치 경험치 · 드롭 x(1+)
+var food_hp := 0
+var food_attack := 0.0
+## 김치 드롭 몫은 HuntLoot.loot_chance 가 읽어서 static (사냥에 들어갈 때마다 새로)
+static var food_luck := 0.0
 ## 산군 백호 포효에 굳은 남은 시간 (그동안 사냥꾼이 못 움직이고 못 휘두름)
 var frozen := 0.0
 ## 정전 남은 시간 (곤지암 마왕, 2026-10-02): 그동안 화면은 사냥꾼 둘레만 보이고, 뿔 악귀는 바라봐도 움직인다
@@ -414,6 +419,7 @@ func hittable(s: WildSlime) -> bool:
 ## start_zone 은 사냥터 입구에서 고른 웨이포인트 구역 (0 = 숲 공터부터).
 func start(h: Character, start_zone := 0) -> void:
 	hunter = h
+	food_luck = 0.0
 	if start_zone != zone:
 		zone = start_zone
 		_fill_zone()
@@ -509,7 +515,7 @@ func companions() -> Array[HuntCompanion]:
 ## 입은 장비와 세트 보너스까지 더한 하트 칸 수
 func max_life() -> int:
 	return Config.HUNTER_HP + Config.HP_PER_LEVEL * (GameState.hunter_level - 1) + Config.HP_PER_HEART * Wearables.bonus_hearts(&"hunter") \
-		+ (Config.LUNCH_HP if lunch else 0) + (Config.STEW_HP if stew else 0) + HunterClass.bonus_hp()
+		+ (Config.LUNCH_HP if lunch else 0) + (Config.STEW_HP if stew else 0) + HunterClass.bonus_hp() + food_hp
 
 
 ## 사냥 도시락을 먹는다: 하트 칸이 늘고 늘어난 만큼 찬다.
@@ -518,6 +524,20 @@ func eat_lunch() -> void:
 		return
 	lunch = true
 	life = mini(life + Config.LUNCH_HP, max_life())
+
+
+## 사냥 음식을 먹는다 (Config.FOODS, grade 1~3)
+func eat_food(id: StringName, grade: int) -> void:
+	var d: Dictionary = Config.FOODS[id]
+	var v = d.values[clampi(grade, 1, 3) - 1]
+	match d.effect:
+		&"hp":
+			food_hp += int(v)
+			life = mini(life + int(v), max_life())
+		&"attack":
+			food_attack += float(v)
+		&"luck":
+			food_luck += float(v)
 
 
 ## 매운탕을 먹는다: 하트 칸이 늘고 늘어난 만큼 찬다. 경험치는 _give_xp 에서 곱한다.
@@ -880,6 +900,8 @@ func _strike(s: WildSlime, from: Vector2, units: int, by_companion := false) -> 
 		Sound.sfx(&"hit", 0.0, 1.7)
 		return false
 	var amount := HunterClass.companion_damage(units) if by_companion else HunterClass.hunter_damage(units, Wearables.weapon().kind)
+	if not by_companion and food_attack > 0.0:
+		amount = roundi(amount * (1.0 + food_attack))
 	if feel:
 		_pops.append({at = s.position + Vector2(randf_range(-4, 4), -18 * s.scale.y), text = str(amount), t = 0.5, big = units > 1})
 	if s.hit(from, amount):
@@ -1346,7 +1368,7 @@ func _defeat(s: WildSlime) -> void:
 
 ## 경험치를 준다 (레벨 차 벌칙 적용). 레벨이 오르면 가운데 띠와 알림.
 func _give_xp(base: int) -> void:
-	var amount := maxi(1, roundi(base * HunterSkills.gap_mult(zone) * (Config.STEW_XP_MULT if stew else 1.0))) if base > 0 else 0
+	var amount := maxi(1, roundi(base * HunterSkills.gap_mult(zone) * (Config.STEW_XP_MULT if stew else 1.0) * (1.0 + food_luck))) if base > 0 else 0
 	if GameState.hunter_level >= Config.LEVEL_CAP:
 		return
 	var ups := HunterSkills.gain(amount)

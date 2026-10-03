@@ -284,7 +284,7 @@ func night_work() -> int:
 				for t in CreatureJobs.FARM_ORDER:
 					var work: Farm.Work = CreatureJobs.FARM_WORK[t]
 					var target: Variant = _farm.find_work(work, home, data.work_radius(), [], Farm.center_of(home))
-					if target != null and _farm.do_work(work, target):
+					if target != null and _farm.do_work(work, target, element_ids()):
 						did = true
 						break
 			CreatureJobs.SCRAP:
@@ -319,6 +319,14 @@ func night_work() -> int:
 	return done
 
 
+## 속성 id 들 (속성 맞는 작물을 돌보면 등급이 잘 오름, Config.CROP_ELEMENTS)
+func element_ids() -> Array[StringName]:
+	var out: Array[StringName] = []
+	for e in data.elements:
+		out.append(e.id)
+	return out
+
+
 ## 농사 한 번 (2026-09-29 사용자 선택 A+B): 범위 안 밭에서 수확 → 파종 → 급수 순으로 할 일을 찾는다.
 ## 밭에 할 일이 없으면 한가한 동안 풀밭으로 채집하러 간다 (속성 효과 그대로). 풀밭에서도 할 게 없으면 제자리로.
 func _farm_once() -> bool:
@@ -332,7 +340,7 @@ func _farm_once() -> bool:
 		task = t
 		# 풀밭에서 돌아오는 길이면 먼 만큼 오래 걸린다. 제 범위 안에서는 한 번 깡충.
 		var away := position.distance_to(home_pos) > (data.work_radius() + 1.5) * Config.TILE
-		_hop_to(Farm.center_of(target), func() -> void: _farm.do_work(work, target), away)
+		_hop_to(Farm.center_of(target), func() -> void: _farm.do_work(work, target, element_ids()), away)
 		return true
 	task = &""
 	return _forage_once()

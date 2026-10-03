@@ -995,7 +995,7 @@ const BREWS := {
 	&"lamp_oil": {name = "호롱 기름", count = 1, cost = {roots = 2}, effect = "밤 구역 호롱 불빛이 넓어짐 (들어갈 때 하나)"},
 	&"strength": {name = "힘 물약", count = 1, cost = {roots = 3, junk = 1}, effect = "다음 사냥 한 번 공격 피해 +1"},
 	&"speed": {name = "빠르기 물약", count = 1, cost = {herbs = 2, junk = 1}, effect = "다음 사냥 한 번 걸음 +25%"},
-	&"tonic": {name = "크리처 보약", count = 1, cost = {crops = 5, roots = 2}, effect = "먹인 날 모든 크리처 일 속도 x2"},
+	&"tonic": {name = "크리처 보약", count = 1, cost = {crops = 3, roots = 2}, effect = "먹인 날 모든 크리처 일 속도 x2"},
 }
 const SPEED_POTION_MULT := 1.25
 const TONIC_SPEED_MULT := 2.0
@@ -1064,7 +1064,8 @@ const FISH_PRICE := 45
 const FISH_DRIVE_CAP := 4
 ## 뱃사공 매운탕 (나루터에서 뱃사공 F): 다음 사냥 한 번 최대 체력 +STEW_HP · 경험치 xSTEW_XP_MULT (들어갈 때 먹음)
 const STEW_FISH := 2
-const STEW_CROPS := 1
+## 매운탕 양념 = 고추 (2026-10-03 농사 다양화: 고추는 도마리 대장 뒤 열림, 나루터보다 한참 먼저)
+const STEW_PEPPERS := 1
 const STEW_HP := 10
 const STEW_XP_MULT := 1.5
 
@@ -1111,6 +1112,9 @@ const HALL_REQUESTS := {
 	&"roots": [ROOT_NAME, 8, ROOT_PRICE, &"yak"],
 	&"hen_eggs": ["달걀", 6, HEN_EGG_PRICE, &"barn"],
 	&"fish": ["물고기", 4, FISH_PRICE, &"naru"],
+	&"potatoes": ["감자", 12, 15, &"forge"],
+	&"peppers": ["고추", 8, 40, &"yak"],
+	&"cabbages": ["배추", 4, 110, &"barn"],
 }
 const HALL_REWARD_MULT := 2.5
 ## 부탁을 들어주면 이 확률로 장비 하나 (소내섬 등급, 공용 창고)
@@ -1124,7 +1128,8 @@ const ERRAND_CAP := 4
 const FEAST_RECT := Rect2i(25, 17, 3, 1)
 const FEAST_DISHES: Array = [
 	## 농부 상은 무만 (2026-10-03 봇: 늦게는 채집 크리처가 들나물을 다 캐서 농부 손에 나물이 안 모인다)
-	[&"greens", &"farmer", "무생채 · 뭇국", {crops = 40}],
+	## 2026-10-03 농사 다양화: 무 하나 → 밭 작물 넷을 고루 (모두 3막 대장 뒤면 열려 있음)
+	[&"greens", &"farmer", "김치 · 감자전 · 뭇국", {crops = 20, potatoes = 10, peppers = 6, cabbages = 4}],
 	[&"skewer", &"hunter", "사냥꾼 꼬치", {junk = 15}],
 	[&"cauldron", &"smith", "가마솥", {scrap = 20}],
 	[&"wine", &"alchemist", "약주", {roots = 10}],
@@ -1192,3 +1197,44 @@ const WORKER_SLOTS := {
 
 ## 농사가 아닌 크리처 (채집 · 고철 · 도라지밭 · 모이) 의 일 이름표는 조작 중인 캐릭터가 이 거리 (px) 안일 때만 보인다
 const CREATURE_TAG_DISTANCE := 56.0
+
+## 밭 작물 (2026-10-03 백로그 5번 "농사가 무만이라 재미없음"). 값 · 날수는 전부 임시.
+## 막 대장을 처음 쓰러뜨리면 (GameState.bosses_beaten 에 zone) 다음 아침 그 땅에서 씨앗 CROP_UNLOCK_SEEDS 개를 얻고 열린다.
+## 밭 구역마다 심을 작물을 공급함 "밭 작물 · 씨앗" 에서 정한다 (농부 · 크리처 모두 그 구역 작물을 심는다).
+## 칸당 하루 벌이는 무 (50원 / 3일 ≈ 17원) 와 비슷하게: 다른 건 자라는 방식 · 일손 · 쓰임.
+##  - row: crops.png 줄 · held / seed_var: GameState 변수 (가진 수 · 씨앗) · days: 처음 익는 날수
+##  - picks: 한 번 심어 딸 수 있는 횟수 (고추 = 여러 번), regrow: 딴 뒤 다시 익는 날수 · amount: 한 번 딸 때 개수
+const CROP_UNLOCK_SEEDS := 10
+const CROPS := {
+	&"radish": {name = "무", row = 0, days = CROP_GROW_DAYS, picks = 1, regrow = 0, amount = 1, price = CROP_PRICE,
+		held = "crops", seed_var = "seeds", pack = SEED_PACK_SIZE, pack_price = SEED_PACK_PRICE, zone = -1, note = "3일 · 시설 복구 · 모이 · 미끼"},
+	&"potato": {name = "감자", row = 1, days = 2, picks = 1, regrow = 0, amount = 2, price = 15,
+		held = "potatoes", seed_var = "potato_seeds", pack = 5, pack_price = 50, zone = FORGE_ZONE, note = "2일 · 한 칸에 둘"},
+	&"pepper": {name = "고추", row = 2, days = 4, picks = 4, regrow = 2, amount = 1, price = 40,
+		held = "peppers", seed_var = "pepper_seeds", pack = 5, pack_price = 150, zone = YAK_ZONE, note = "4일 · 딴 뒤 2일마다 또 (4번) · 매운탕"},
+	&"cabbage": {name = "배추", row = 3, days = 6, picks = 1, regrow = 0, amount = 1, price = 110,
+		held = "cabbages", seed_var = "cabbage_seeds", pack = 5, pack_price = 200, zone = BARN_ZONE, note = "6일 · 비쌈 · 김치"},
+}
+
+## 작물 등급 ★1~3 (2026-10-03 사용자 선택: 돌봄 점수). 값은 모두 임시.
+## 등급 = 1 + (자라는 동안 물을 하루도 안 빠뜨림) + (퇴비 준 칸). 속성이 맞는 크리처가 돌본 칸은 거둘 때
+## CROP_MATCH_CHANCE 로 한 단계 더 (3 까지). 여러 번 따는 고추는 딸 때마다 물 빠짐을 새로 센다 (퇴비는 그대로).
+const CROP_MATCH_CHANCE := 0.3
+## 작물 → 돌보면 잘 크는 속성
+const CROP_ELEMENTS := {&"radish": &"spirit", &"potato": &"earth", &"pepper": &"fire", &"cabbage": &"water"}
+## 등급별 판매값 (★1 값의 %, ★1 · ★2 · ★3). 크리처가 돌보는 밭은 거의 ★2 라 웃돈은 작게 (돈 흐름이 크게 바뀌지 않게)
+const STAR_PRICE_PCT: Array[int] = [100, 130, 200]
+## 퇴비: 공급함 "밭 작물 · 씨앗 · 음식" 에서 들나물 (손에 든 것 → 진열해 둔 것) 또는 사냥 잡템 COMPOST_COST 개 → 1. 축사가 열리면 아침마다 암탉 COMPOST_PER_HENS 마리당 1.
+## 씨앗 주머니(심기 도구)를 이미 심은 칸에 쓰면 퇴비를 한 줌 준다. 크리처는 퇴비를 쓰지 않는다 (주인공 손일의 몫).
+const COMPOST_COST := 3
+const COMPOST_PER_HENS := 2
+
+## 사냥 음식 (2026-10-03 사용자 선택: 사냥 음식). 공급함에서 만들고, 사냥에 들어갈 때 종류마다 가장 좋은 것 하나씩 먹는다.
+## 음식 등급 = 주재료 (main) 중 가장 좋은 등급. 다른 재료는 낮은 등급부터 쓴다.
+## effect: hp 최대 체력 + (늘어난 만큼 참) · attack 사냥꾼 피해 x(1 + 값) · luck 경험치 · 드롭 확률 x(1 + 값). values = ★1 · ★2 · ★3.
+const FOODS := {
+	&"steamed_potato": {name = "찐 감자", main = &"potato", cost = {potato = 2}, effect = &"hp", values = [15, 25, 40]},
+	&"pepper_rice": {name = "고추장 주먹밥", main = &"pepper", cost = {pepper = 2}, effect = &"attack", values = [0.1, 0.2, 0.3]},
+	&"kimchi": {name = "김치", main = &"cabbage", cost = {cabbage = 1, pepper = 1}, effect = &"luck", values = [0.1, 0.2, 0.35]},
+}
+const FOOD_ORDER: Array[StringName] = [&"steamed_potato", &"pepper_rice", &"kimchi"]

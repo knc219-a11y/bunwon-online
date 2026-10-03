@@ -23,7 +23,7 @@ const PEOPLE := {
 	&"chief": ["이장", "마을회관"],
 }
 ## 잔치상 재료 이름 (Config.FEAST_DISHES 의 GameState 변수 → 화면 이름)
-const STUFF_NAMES := {crops = "무", herbs = "나물", junk = "잡템", scrap = "고철", roots = Config.ROOT_NAME, hen_eggs = "달걀", fish = "물고기", money = "원"}
+const STUFF_NAMES := {crops = "무", potatoes = "감자", peppers = "고추", cabbages = "배추", herbs = "나물", junk = "잡템", scrap = "고철", roots = Config.ROOT_NAME, hen_eggs = "달걀", fish = "물고기", money = "원"}
 
 
 # --- 마을회관 터 · 복구 ---------------------------------------------------------
