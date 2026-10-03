@@ -15,6 +15,20 @@ static func monster_level(zone: int) -> int:
 	return t[zone] if zone < t.size() else t[-1] + 3 * (zone - t.size() + 1)
 
 
+## 몬스터 체력: 구역 값 x (1 + MON_HP_PER_LV x (몬스터 Lv - MON_LV_BASE, 0 아래는 0)). 2026-10-02 사용자: "몬스터의 체력을 늘리는거어때"
+static func monster_hp(zone: int, base: int) -> int:
+	return maxi(1, roundi(base * (1.0 + Config.MON_HP_PER_LV * _over_base(zone))))
+
+
+## 몬스터 피해 (체력): 구역 damage (옛 하트 단위) x HP_PER_HEART x (1 + MON_DMG_PER_LV x (몬스터 Lv - MON_LV_BASE, 0 아래는 0))
+static func monster_damage(zone: int, base_hearts: int) -> int:
+	return maxi(1, roundi(base_hearts * Config.HP_PER_HEART * (1.0 + Config.MON_DMG_PER_LV * _over_base(zone))))
+
+
+static func _over_base(zone: int) -> int:
+	return maxi(0, monster_level(zone) - Config.MON_LV_BASE)
+
+
 ## 디아2식 레벨 차 벌칙 배율 (구역 몬스터보다 너무 높으면 경험치가 줄어든다)
 static func gap_mult(zone: int, level := -1) -> float:
 	if level < 0:

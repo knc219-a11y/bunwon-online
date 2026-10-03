@@ -123,7 +123,7 @@ static func take(d: Dictionary) -> String:
 			return "%d원을 주웠다." % d.amount
 		&"potion":
 			GameState.potions += 1
-			return "빨간 물약을 주웠다! 1 키로 마시면 하트 +%d. (가진 물약 %d)" % [Config.POTION_HEAL, GameState.potions]
+			return "빨간 물약을 주웠다! 1 키로 마시면 체력 +%d. (가진 물약 %d)" % [Config.POTION_HEAL, GameState.potions]
 		&"junk":
 			GameState.junk += 1
 			return "%s을(를) 주웠다. 마을 공급함에서 사냥꾼이 F로 팔 수 있다." % d.get("name", "슬라임 젤리")

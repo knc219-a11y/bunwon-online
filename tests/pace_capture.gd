@@ -75,7 +75,7 @@ func _process(delta: float) -> void:
 	if not is_instance_valid(hunt) or main.hunt != hunt:
 		# 쓰러져서 사냥터를 나왔다
 		ready_done = false
-		print("MODE %s kills %d in %.0fs engaged %.1f hurt %d knocked true" % [mode, kills, t, engaged, Config.HUNTER_HEARTS])
+		print("MODE %s kills %d in %.0fs engaged %.1f hurt %d knocked true" % [mode, kills, t, engaged, Config.HUNTER_HP])
 		get_tree().quit()
 		return
 	var near: WildSlime = hunt._nearest_slime(main.hunter.feet())
@@ -92,7 +92,7 @@ func _process(delta: float) -> void:
 		var f := FileAccess.open("%s/kills.txt" % S, FileAccess.WRITE)
 		f.store_string("\n".join(log_lines))
 		f.close()
-		print("MODE %s kills %d in %.0fs engaged %.1f hurt %d knocked %s" % [mode, kills, sec, engaged, Config.HUNTER_HEARTS - hunt.hearts, hunt.knocked])
+		print("MODE %s kills %d in %.0fs engaged %.1f hurt %d knocked %s" % [mode, kills, sec, engaged, hunt.max_life() - hunt.life, hunt.knocked])
 		get_tree().quit()
 
 

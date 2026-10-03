@@ -55,7 +55,7 @@ var hunter: Character
 var zone := 0
 ## 이번 구역 대장을 쓰러뜨려 위쪽 길이 열렸는지
 var path_open := false
-var hearts := Config.HUNTER_HEARTS
+var life := Config.HUNTER_HP
 var slimes: Array[WildSlime] = []
 ## 땅에 떨어진 알 (자리 → 종)
 var drops: Array[Dictionary] = []
@@ -99,6 +99,8 @@ var _level_banner := 0.0
 var right_cd := 0.0
 var order_cd := 0.0
 var guard_cd := 0.0
+## 크리처 방패가 대신 막은 횟수 (봇 기록용)
+var guard_blocks := 0
 ## 화살비: {at, radius, waves, t} · 대지 가르기 그림: {from, to, t} · 돌격 중인 동행: {c, target}
 var _rains: Array[Dictionary] = []
 var _splits: Array[Dictionary] = []
@@ -143,9 +145,9 @@ var _bus_light: PointLight2D
 var lamp_oil := false
 var strong := false
 var quick := false
-## 목축인 사냥 도시락을 먹고 들어왔는지 (2026-09-30 축사 닭장): 이번 사냥 동안 하트 칸 +Config.LUNCH_HEARTS
+## 목축인 사냥 도시락을 먹고 들어왔는지 (2026-09-30 축사 닭장): 이번 사냥 동안 하트 칸 +Config.LUNCH_HP
 var lunch := false
-## 뱃사공 매운탕 (2026-10-02 나루터): 이 사냥 동안 하트 +STEW_HEARTS · 경험치 xSTEW_XP_MULT
+## 뱃사공 매운탕 (2026-10-02 나루터): 이 사냥 동안 최대 체력 +STEW_HP · 경험치 xSTEW_XP_MULT
 var stew := false
 ## 산군 백호 포효에 굳은 남은 시간 (그동안 사냥꾼이 못 움직이고 못 휘두름)
 var frozen := 0.0
@@ -410,7 +412,7 @@ func start(h: Character, start_zone := 0) -> void:
 		zone = start_zone
 		_fill_zone()
 	loot_rng.randomize()
-	hearts = max_hearts()
+	life = max_life()
 	dash_t = -1.0
 	hunter.dashing = false
 	hunter.show_facing_cell = false
@@ -499,8 +501,9 @@ func companions() -> Array[HuntCompanion]:
 
 
 ## 입은 장비와 세트 보너스까지 더한 하트 칸 수
-func max_hearts() -> int:
-	return Config.HUNTER_HEARTS + Wearables.bonus_hearts(&"hunter") + (Config.LUNCH_HEARTS if lunch else 0) + (Config.STEW_HEARTS if stew else 0)
+func max_life() -> int:
+	return Config.HUNTER_HP + Config.HP_PER_LEVEL * (GameState.hunter_level - 1) + Config.HP_PER_HEART * Wearables.bonus_hearts(&"hunter") \
+		+ (Config.LUNCH_HP if lunch else 0) + (Config.STEW_HP if stew else 0)
 
 
 ## 사냥 도시락을 먹는다: 하트 칸이 늘고 늘어난 만큼 찬다.
@@ -508,7 +511,7 @@ func eat_lunch() -> void:
 	if lunch:
 		return
 	lunch = true
-	hearts = mini(hearts + Config.LUNCH_HEARTS, max_hearts())
+	life = mini(life + Config.LUNCH_HP, max_life())
 
 
 ## 매운탕을 먹는다: 하트 칸이 늘고 늘어난 만큼 찬다. 경험치는 _give_xp 에서 곱한다.
@@ -516,7 +519,7 @@ func eat_stew() -> void:
 	if stew:
 		return
 	stew = true
-	hearts = mini(hearts + Config.STEW_HEARTS, max_hearts())
+	life = mini(life + Config.STEW_HP, max_life())
 
 
 ## 빨간 물약을 마신다 (1 키). 하트가 가득이면 아끼고 마시지 않는다.
@@ -526,12 +529,12 @@ func drink_potion() -> bool:
 	if GameState.potions <= 0:
 		GameState.notify("빨간 물약이 없다.")
 		return false
-	if hearts >= max_hearts():
-		GameState.notify("하트가 가득하다. 물약은 아껴 두자.")
+	if life >= max_life():
+		GameState.notify("체력이 가득하다. 물약은 아껴 두자.")
 		return false
 	GameState.potions -= 1
-	hearts = mini(hearts + Config.POTION_HEAL, max_hearts())
-	GameState.notify("빨간 물약을 마셨다. 하트 %d/%d (남은 물약 %d)" % [hearts, max_hearts(), GameState.potions])
+	life = mini(life + Config.POTION_HEAL, max_life())
+	GameState.notify("빨간 물약을 마셨다. 체력 %d/%d (남은 물약 %d)" % [life, max_life(), GameState.potions])
 	return true
 
 
@@ -604,7 +607,7 @@ func advance() -> bool:
 	for c in companions():
 		c.position = hunter.feet() + Vector2(0, Config.COMPANION_FOLLOW_DISTANCE)
 	var z: Dictionary = Config.HUNT_ZONES[zone]
-	var text := "%d구역 %s에 들어왔다. %s이(가) 더 단단하고 빠르다!" % [zone + 1, z.name, z.monster]
+	var text := "%d구역 %s에 들어왔다. %s (Lv %d) 이(가) 더 단단하고 빠르다!" % [zone + 1, z.name, z.monster, HunterSkills.monster_level(zone)]
 	if z.has("advice"):
 		text += " (%s)" % z.advice
 	if boss_spawned:
@@ -675,7 +678,7 @@ func tick(delta: float) -> void:
 	for s: WildSlime in slimes.duplicate():
 		var was_buried := s.buried
 		var was_attacking := s.attacking()
-		s.may_attack = not swarm or s.boss or was_attacking or attackers < Config.MAX_ATTACKERS
+		s.may_attack = not swarm or s.boss or was_attacking or attackers < Config.HUNT_ZONES[zone].get("max_attackers", Config.MAX_ATTACKERS)
 		s.lit = in_light(s.position)
 		if s.demon:
 			s.watched = gazes(s.position)
@@ -787,8 +790,9 @@ func swing(dir := Vector2.ZERO) -> int:
 				shots.append({kind = &"arrow", at = hand, dir = _swing_dir, left = w.range, pierce = Config.BOW_PIERCE + r - 1, hit = []})
 			&"spread":
 				var n := 3 + extra
+				# 가운데 한 발은 늘 (짝수 발이면 가운데가 비어 바로 앞 몬스터를 못 맞히던 것 고침): 0, +d, -d, +2d, ...
 				for k in n:
-					var a := (k - (n - 1) / 2.0) * Config.BOW_SPREAD_DEG
+					var a := ceili(k / 2.0) * Config.BOW_SPREAD_DEG * (1.0 if k % 2 == 1 else -1.0)
 					shots.append({kind = &"arrow", at = hand, dir = _swing_dir.rotated(deg_to_rad(a)), left = w.range})
 				_cooldown *= Config.BOW_SPREAD_COOLDOWN - Config.SKILL_COOLDOWN_STEP * (r - 1)
 			&"volley":
@@ -1581,7 +1585,7 @@ func _tick_dust(delta: float) -> void:
 ## 드롭을 줍는다. 장비면 바로 입거나 가방에 넣고, 늘어난 하트 칸만큼 하트도 채운다.
 ## 가방과 창고가 다 차서 못 주우면 false (땅에 남기고, 그 자리에 서 있는 동안 한 번만 알린다).
 func _take(d: Dictionary) -> bool:
-	var before := max_hearts()
+	var before := max_life()
 	var text := HuntLoot.take(d)
 	if text == "":
 		if not d.has("full"):
@@ -1590,7 +1594,7 @@ func _take(d: Dictionary) -> bool:
 		return false
 	GameState.notify(text)
 	if d.kind == &"gear":
-		hearts += max_hearts() - before
+		life += max_life() - before
 		hunter.refresh_wear()
 	return true
 
@@ -1601,25 +1605,26 @@ func _hurt(from: Vector2, damage := 1, who := "야생 슬라임", what := "") ->
 	var guard := HunterSkills.rank(&"creature_guard")
 	if guard > 0 and guard_cd <= 0.0 and companion != null:
 		guard_cd = Config.GUARD_COOLDOWN - Config.GUARD_COOLDOWN_STEP * (guard - 1)
+		guard_blocks += 1
 		_invulnerable = Config.HURT_INVULNERABLE_TIME
 		companion.play_attack(hunter.feet())
 		_pops.append({at = companion.position + Vector2(0, -18), text = "막음!", t = 0.5, big = true})
 		GameState.notify("%s이(가) 대신 막아 주었다! (크리처 방패)" % companion.display_name())
 		return
-	hearts -= damage
+	life -= damage
 	_invulnerable = Config.HURT_INVULNERABLE_TIME
 	Sound.sfx(&"hurt")
 	var away := (hunter.feet() - from).normalized()
 	if away == Vector2.ZERO:
 		away = Vector2.DOWN
 	hunter.step(away * 16.0)
-	if hearts <= 0:
+	if life <= 0:
 		knocked = true
 		hunter.dashing = false
 		GameState.notify("사냥꾼이 쓰러졌다... 마을 입구로 돌아왔다. 주운 것은 그대로 있다.")
 		knocked_out.emit()
 	else:
-		GameState.notify("%s 하트 -%d, 남은 하트 %d." % [what if what != "" else "%s에게 부딪혔다!" % who, damage, hearts])
+		GameState.notify("%s 체력 -%d, 남은 체력 %d." % [what if what != "" else "%s에게 부딪혔다!" % who, damage, life])
 
 
 ## 떠날 때 아직 줍지 않은 알도 챙긴다 (알 보장이 헛되지 않게). 가져갈 알 목록을 돌려준다.
@@ -1936,12 +1941,16 @@ func _draw_waypoint(n: Node2D) -> void:
 func _draw_hud() -> void:
 	# 하트 · 빨간 물약 · 지금 구역 (그래픽 시범 2026-09-30: 아이콘 + 한지 알약)
 	var font := ThemeDB.fallback_font
-	var hw := max_hearts() * 13.0 + 6
+	# 체력 막대 (2026-10-02 하트 → 체력 숫자): 하트 아이콘 + 붉은 막대 + 숫자
+	var hw := 132.0
 	_hud.draw_style_box(UiSkin.chip_box(), Rect2(4, 30, hw, 17))
-	for i in max_hearts():
-		UiSkin.draw_icon(_hud, UiSkin.Icon.HEART if i < hearts else UiSkin.Icon.HEART_EMPTY, Vector2(7 + i * 13, 32))
+	UiSkin.draw_icon(_hud, UiSkin.Icon.HEART if life > 0 else UiSkin.Icon.HEART_EMPTY, Vector2(7, 32))
+	var frac := clampf(float(life) / maxf(max_life(), 1), 0.0, 1.0)
+	_hud.draw_rect(Rect2(22, 34, 64, 9), Color(0.35, 0.22, 0.2))
+	_hud.draw_rect(Rect2(23, 35, 62 * frac, 7), Color(0.86, 0.26, 0.24) if frac > 0.3 else Color(1.0, 0.45, 0.2))
+	_hud.draw_string(font, Vector2(90, 43), "%d/%d" % [life, max_life()], HORIZONTAL_ALIGNMENT_LEFT, -1, 10, UiSkin.INK)
 	UiSkin.draw_chip(_hud, Vector2(7 + hw, 30), UiSkin.Icon.POTION, "x%d (1)" % GameState.potions, 17)
-	var zt := "%d구역 %s" % [zone + 1, Config.HUNT_ZONES[zone].name]
+	var zt := "%d구역 %s · Lv %d" % [zone + 1, Config.HUNT_ZONES[zone].name, HunterSkills.monster_level(zone)]
 	var zw := font.get_string_size(zt, HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x + 22
 	UiSkin.draw_chip(_hud, Vector2(636 - zw, 30), UiSkin.Icon.FLAG, zt, 17)
 	# 사냥꾼 레벨 · 경험치 막대 (하트 아래)
