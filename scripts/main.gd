@@ -294,6 +294,13 @@ func _process(delta: float) -> void:
 		follow_camera()
 		update_fading()
 		Creature.focus = player.position
+		# 넓은 도구 (도구 손보기 · 큰 물뿌리개 · 큰 괭이) 가 함께 닿는 칸
+		var reach: Array[Vector2i] = tool_cells(TOOLS[tool_index]).filter(func(c: Vector2i) -> bool: return farm.get_cell(c) != null)
+		if reach.size() <= 1:
+			reach = []
+		if reach != player.reach_cells:
+			player.reach_cells = reach
+			player.queue_redraw()
 		var near := nearby_villager()
 		for c in people():
 			c.show_tag = c == near
@@ -449,7 +456,7 @@ func use_tool() -> void:
 	var fert := 0
 	var grades: Array[int] = []
 	for cell in tool_cells(work):
-		if farm.do_work(work, cell):
+		if farm.do_work(work, cell, [], true):
 			done += 1
 			if work == Farm.Work.HARVEST:
 				grades.append(farm.last_grade)
@@ -482,6 +489,7 @@ func use_tool() -> void:
 
 
 ## 도구가 닿는 칸. 강화한 도구는 바라보는 방향으로 앞 3칸 일자.
+## 큰 물뿌리개 · 큰 괭이 (농사 기술, 2026-10-03): 옆으로 줄을 더하고 앞으로 더 닿는다 (FarmSkills.wide).
 func tool_cells(work: Farm.Work) -> Array[Vector2i]:
 	var first := player.facing_cell()
 	var reach := Config.TOOL_UPGRADE_REACH if GameState.tool_level(work) > 0 else 1
@@ -490,9 +498,14 @@ func tool_cells(work: Farm.Work) -> Array[Vector2i]:
 	elif work == Farm.Work.TILL or work == Farm.Work.WATER:
 		# 대장간 제작품 옵션 "괭이 · 물뿌리개 칸 +" (2026-09-29)
 		reach += Wearables.stat_sum(&"farmer", "reach_add")
+	var wide := FarmSkills.wide(work)
+	var side := Vector2i(player.facing.y, player.facing.x)
 	var cells: Array[Vector2i] = []
-	for i in reach:
+	for i in reach + wide.y:
 		cells.append(first + player.facing * i)
+		for j in range(1, wide.x + 1):
+			cells.append(first + player.facing * i + side * j)
+			cells.append(first + player.facing * i - side * j)
 	return cells
 
 
@@ -2136,15 +2149,16 @@ func train_option_text(id: StringName) -> String:
 	var pick := train_from_option(id)
 	var s: Creature = pick[0]
 	var stat: StringName = pick[1]
-	var who := "%s %s · %s" % [s.data.element_names(), s.data.species.display_name, CreatureJobs.display_name(s.job)]
+	var who := "%s %s Lv%d · %s" % [s.data.element_names(), s.data.species.display_name, s.data.level, CreatureJobs.display_name(s.job)]
+	var cost := ("포인트 1 · %d원" % train_price(s, stat)) if s.data.train_points > 0 else "포인트 없음 · 일하면 레벨업"
 	if stat == &"radius":
 		var r := s.data.work_radius()
-		return "%s   범위 %d → %d (%d원)" % [who, r, r + Config.TRAIN_RADIUS_STEP, train_price(s, stat)]
+		return "%s   범위 %d → %d (%s)" % [who, r, r + Config.TRAIN_RADIUS_STEP, cost]
 	# 농사·쉬는 중은 급수 속도로 보여 준다 (훈련 배율은 모든 일에 같게 붙는다)
 	var job := s.job if s.job == CreatureJobs.FORAGE else CreatureJobs.WATER
 	var now := s.data.work_speed(job)
 	var next := now / s.data.train_speed_mult() * (s.data.train_speed_mult() + Config.TRAIN_SPEED_STEP)
-	return "%s   속도 %.2f → %.2f (%d원)" % [who, now, next, train_price(s, stat)]
+	return "%s   속도 %.2f → %.2f (%s)" % [who, now, next, cost]
 
 
 ## 크리처 하나의 범위(&"radius") 또는 속도(&"speed")를 한 단계 올린다. 선택창과 테스트가 함께 쓴다.
@@ -2156,10 +2170,16 @@ func train(s: Creature, stat: StringName) -> bool:
 	if price < 0:
 		GameState.notify("%s %s 훈련은 다 끝냈다." % [s.data.species.display_name, stat_name])
 		return false
+	# 크리처 레벨 (2026-10-03): 훈련 한 단계에 훈련 포인트 1 (레벨업마다 1)
+	if s.data.train_points <= 0:
+		GameState.notify("%s Lv%d: 훈련 포인트가 없다. 일을 시키면 경험치가 쌓여 레벨업마다 포인트 1 (다음 레벨까지 %d/%d)." % [
+			s.data.species.display_name, s.data.level, s.data.xp, CreatureData.xp_to_next(s.data.level)])
+		return false
 	if GameState.money < price:
 		GameState.notify("돈이 모자라다. %s 훈련 %d원 (가진 돈 %d원)." % [stat_name, price, GameState.money])
 		return false
 	GameState.money -= price
+	s.data.train_points -= 1
 	if stat == &"radius":
 		s.data.radius_level += 1
 	else:
@@ -2443,6 +2463,7 @@ func _rebuild_menu() -> void:
 		lines.append("   ▼")
 	if training:
 		lines.append("크리처마다 따로 · 단계마다 값 두 배 (%s원)" % " → ".join(Config.TRAIN_PRICES.map(func(p: int) -> String: return str(p))))
+		lines.append("한 단계에 훈련 포인트 1: 크리처가 일하면 경험치가 쌓여 레벨업마다 1 (최대 Lv %d)" % Config.CREATURE_LEVEL_CAP)
 	if menu_kind == &"forge":
 		lines.append_array(forge_cost_lines())
 	elif menu_kind == &"yak":
@@ -2820,6 +2841,9 @@ func next_day() -> Array[String]:
 	var rained := rain_on_farm()
 	if rained > 0:
 		lines.append("아기 청룡이 비를 불러 밭 %d칸에 물이 들었다." % rained)
+	var dewed := farm.dew(FarmSkills.dew_chance())
+	if dewed > 0:
+		lines.append("새벽 이슬이 내려 밭 %d칸에 물이 들었다." % dewed)
 	var night_done := night_work()
 	if night_done > 0:
 		lines.append("아기 악귀가 밤새 맡은 일을 %d번 해 두었다." % night_done)
@@ -2933,6 +2957,8 @@ func _hatch(species: CreatureSpecies, at_cell: Vector2i, element: CreatureElemen
 		data.guarantee_minimum(Config.FIRST_CREATURE_MIN_WORK_SPEED, Config.FIRST_CREATURE_MIN_RADIUS)
 	if element:
 		data.set_element(element)
+	# 알 품기 (농사 기술, 2026-10-03): 높은 레벨로 태어남 (오른 만큼 훈련 포인트)
+	data.start_at_level(FarmSkills.hatch_level())
 	return add_creature(data, at_cell, s.job, s)
 
 

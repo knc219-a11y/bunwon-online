@@ -99,7 +99,8 @@ const HUNTER_KNIFE_PRICE := 400
 
 ## 크리처 훈련 (2026-09-29 사용자 선택 A, 돈 쓸 곳 2단계): 공급함에서 크리처마다 범위·속도를 한 단계씩 올린다.
 ## 값은 단계마다 두 배, 크리처·능력마다 따로 낸다. 최대 단계 = 배열 길이. 값은 전부 임시.
-const TRAIN_PRICES: Array[int] = [300, 600, 1200]
+## 2026-10-03 크리처 레벨: 훈련 한 단계에 훈련 포인트 1 도 듦. 3 → 5단계
+const TRAIN_PRICES: Array[int] = [300, 600, 1200, 2400, 4800]
 ## 범위 훈련 한 단계 = 범위 +1, 속도 훈련 한 단계 = 일 속도 +25%
 const TRAIN_RADIUS_STEP := 1
 const TRAIN_SPEED_STEP := 0.25
@@ -1238,3 +1239,39 @@ const FOODS := {
 	&"kimchi": {name = "김치", main = &"cabbage", cost = {cabbage = 1, pepper = 1}, effect = &"luck", values = [0.1, 0.2, 0.35]},
 }
 const FOOD_ORDER: Array[StringName] = [&"steamed_potato", &"pepper_rice", &"kimchi"]
+
+## 농사 레벨 (2026-10-03 백로그 9, 후보 문서 design/farm-level-options.md, 고르는 동안 Claude 추천 A 로 짬). 값은 모두 임시.
+## 2026-10-03 사용자 선택 (카드): "거둔 작물 모두" — 주인공이든 크리처든 밭에서 거둔 작물마다 ★ 만큼 (FARM_XP_HARVEST).
+## 다음 레벨까지 = FARM_XP_BASE x Lv^FARM_XP_EXP. 레벨업마다 농사 포인트 1.
+const FARM_LEVEL_CAP := 20
+const FARM_XP_BASE := 20.0
+## 거둔 작물 모두 (사용자 선택) 로 바꾼 뒤 1.3 은 봇에서 75일쯤 Lv 20 이라 1.5 로 (2026-10-03)
+const FARM_XP_EXP := 1.5
+## 거둔 칸 하나마다 ★1 · ★2 · ★3
+const FARM_XP_HARVEST: Array[int] = [2, 3, 5]
+## 큰 물뿌리개 · 큰 괭이: 단계마다 [옆으로 넓힐 줄 (한쪽), 앞으로 더 닿는 칸]
+const FARM_WIDE: Array[Vector2i] = [Vector2i(0, 0), Vector2i(1, 0), Vector2i(1, 2), Vector2i(2, 2)]
+## 날랜 걸음: 마을에서 걷기 + (단계마다)
+const FARM_WALK_STEP := 0.08
+## 새벽 이슬: 아침마다 심은 칸 중 물이 드는 비율 (단계 1 · 2 · 3)
+const FARM_DEW: Array[float] = [0.0, 0.2, 0.35, 0.5]
+## 퇴비 솜씨: 퇴비 만들 때 하나 더 나올 확률 (단계마다)
+const FARM_COMPOST_STEP := 0.25
+## 손맛: 손으로 거둔 칸 ★+1 확률 · 풍년: 거둘 때 작물 +1 확률 (단계마다)
+const FARM_HAND_STAR_STEP := 0.15
+const FARM_BOUNTY_STEP := 0.15
+## 손맛 음식: 사냥 음식 효과 + (단계마다)
+const FARM_FOOD_STEP := 0.2
+## 다정한 손: 크리처 경험치 + · 짝꿍 농사: 속성 맞는 작물 ★+1 확률 + · 새참: 크리처 일 속도 + (단계마다)
+const FARM_CREATURE_XP_STEP := 0.2
+const FARM_MATCH_STEP := 0.15
+const FARM_SNACK_STEP := 0.05
+
+## 크리처 레벨 (2026-10-03 백로그 9, 고르는 동안 Claude 추천 A 포인트 + 돈). 값은 모두 임시.
+## 일 한 번마다 경험치 1 (농사 · 채집 · 시설 일 · 공사 · 밤일), 원정을 마치면 CREATURE_XP_EXPEDITION x (구역 + 1),
+## 사냥 동행이 몬스터를 쓰러뜨리면 1. 다음 레벨까지 = CREATURE_XP_BASE x Lv^CREATURE_XP_EXP. 레벨업마다 훈련 포인트 1.
+## 훈련 한 단계 = 포인트 1 + 돈 (TRAIN_PRICES).
+const CREATURE_LEVEL_CAP := 10
+const CREATURE_XP_BASE := 40.0
+const CREATURE_XP_EXP := 1.5
+const CREATURE_XP_EXPEDITION := 10

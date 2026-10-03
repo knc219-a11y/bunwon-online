@@ -43,6 +43,8 @@ var picks := 0
 var scraps := 0
 ## 오늘 캔 고철 수 (고물 캐기, 아침마다 0). 하루 dig_cap() 개까지.
 var dug_today := 0
+## 지금까지 밭에서 한 일 수 (크리처 레벨 경험치를 셀 때 scraps · picks 와 함께 본다)
+var farm_done := 0
 var _bob := 0.0
 var _anim := Anim.IDLE
 var _anim_time := 0.0
@@ -68,12 +70,14 @@ func setup(farm: Farm, creature_data: CreatureData, at_cell: Vector2i) -> void:
 
 
 func describe() -> String:
-	var text := "%s [%s] %s · 속도 %s / 범위 %d / %s" % [
-		data.species.display_name, CreatureJobs.display_name(job), data.element_names(),
+	var text := "%s Lv%d [%s] %s · 속도 %s / 범위 %d / %s" % [
+		data.species.display_name, data.level, CreatureJobs.display_name(job), data.element_names(),
 		speed_text(), data.work_radius(), data.trait_name(),
 	]
 	if data.train_total() > 0:
 		text += " / 훈련 범위 %d · 속도 %d단계" % [data.radius_level, data.speed_level]
+	if data.train_points > 0:
+		text += " / 훈련 포인트 %d" % data.train_points
 	return text
 
 
@@ -315,6 +319,7 @@ func night_work() -> int:
 			break
 		done += 1
 	if done > 0:
+		data.gain_xp(done)
 		GameState.touch()
 	return done
 
@@ -340,7 +345,9 @@ func _farm_once() -> bool:
 		task = t
 		# 풀밭에서 돌아오는 길이면 먼 만큼 오래 걸린다. 제 범위 안에서는 한 번 깡충.
 		var away := position.distance_to(home_pos) > (data.work_radius() + 1.5) * Config.TILE
-		_hop_to(Farm.center_of(target), func() -> void: _farm.do_work(work, target, element_ids()), away)
+		_hop_to(Farm.center_of(target), func() -> void:
+			if _farm.do_work(work, target, element_ids()):
+				farm_done += 1, away)
 		return true
 	task = &""
 	return _forage_once()
@@ -384,6 +391,11 @@ func _forage_once() -> bool:
 	return true
 
 
+## 지금까지 해낸 일 수 (밭 일 · 채집 · 시설 일)
+func work_count() -> int:
+	return farm_done + picks + scraps
+
+
 ## 여러 칸을 깡충깡충 건너가 일 동작을 하고 done 을 부른다. by_distance 면 멀수록 오래 걸리고, 아니면 한 번 깡충.
 func _hop_to(to: Vector2, done: Callable, by_distance := true) -> void:
 	_busy = true
@@ -395,7 +407,11 @@ func _hop_to(to: Vector2, done: Callable, by_distance := true) -> void:
 	tw.tween_callback(_play.bind(Anim.WORK))
 	tw.tween_interval(Config.CREATURE_WORK_ANIM_TIME)
 	tw.tween_callback(func() -> void:
+		var before := work_count()
 		done.call()
+		# 크리처 레벨 (2026-10-03): 일을 실제로 해냈으면 경험치 1 (제자리로 돌아가기만 한 것은 0)
+		if work_count() > before:
+			data.gain_xp(1.0)
 		_busy = false
 		_play(Anim.IDLE))
 

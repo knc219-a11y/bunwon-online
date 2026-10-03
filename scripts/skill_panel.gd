@@ -3,6 +3,7 @@ extends Control
 ## 사냥꾼 스킬 창 (2026-10-02 사용자 선택 B: 무기 트리 셋 + 조련). T 키로 어디서나 연다 (사냥터에선 멈춤).
 ## 마우스: 스킬 칸 클릭 = 한 단계 찍기. 키보드: WASD 칸 고르기, F = 찍기, T 또는 Esc 닫기.
 ## 2026-10-03 직업 · 스탯: 맨 아래 줄은 스탯 (힘 · 솜씨 · 지혜 · 교감, 트리 칸 아래 같은 자리). 자기 직업이 아닌 무기 트리는 흐리게.
+## 2026-10-03 농사 레벨 (백로그 9): 위 탭 [사냥 | 농사]. Tab 또는 탭 클릭으로 바꾼다. 농사 쪽은 FarmSkills.TREES (세 갈래), 스탯 줄 자리에 경험치 막대.
 
 const PAPER := Color(0.99, 0.95, 0.85)
 const INK := Color(0.3, 0.2, 0.15)
@@ -18,6 +19,29 @@ const TOP := 44.0
 
 ## 고른 칸 (x = 트리, y = 스킬. y == rows() 면 스탯 줄)
 var cursor := Vector2i(0, 0)
+## 보고 있는 쪽: &"hunt" 사냥꾼 · &"farm" 농사
+var page := &"hunt"
+const TAB_W := 52.0
+
+
+func farm_page() -> bool:
+	return page == &"farm"
+
+
+## 지금 쪽의 트리들
+func trees() -> Array[Dictionary]:
+	return FarmSkills.TREES if farm_page() else HunterSkills.TREES
+
+
+## 탭 [사냥 | 농사] 자리 (창 오른쪽 위 제목 줄 아래가 아니라 제목 왼쪽)
+func tab_rect(i: int) -> Rect2:
+	return Rect2(Vector2(6 + i * (TAB_W + 2), 4), Vector2(TAB_W, 14))
+
+
+func set_page(p: StringName) -> void:
+	page = p
+	cursor = Vector2i(0, 0)
+	queue_redraw()
 ## 스탯 줄을 트리 아래 조금 띄운다
 const STAT_GAP := 8.0
 
@@ -40,6 +64,12 @@ func _init() -> void:
 
 
 func open() -> void:
+	# 사냥 포인트는 없고 농사 포인트만 있으면 농사 쪽부터
+	if GameState.farm_points > 0 and GameState.skill_points == 0 and GameState.stat_points == 0:
+		page = &"farm"
+	elif (GameState.skill_points > 0 or GameState.stat_points > 0) and GameState.farm_points == 0:
+		page = &"hunt"
+	cursor = Vector2i(0, 0)
 	size = Vector2(COL_W * HunterSkills.TREES.size() + 24, TOP + (rows() + 1) * ROW_H + STAT_GAP + 54)
 	position = ((Vector2(640, 360) - size) / 2 + Vector2(0, 6)).round()
 	visible = true
@@ -51,20 +81,40 @@ func close() -> void:
 
 
 func skill_at(c: Vector2i) -> Dictionary:
-	if c.x < 0 or c.x >= HunterSkills.TREES.size():
+	if c.x < 0 or c.x >= trees().size():
 		return {}
-	var sk: Array = HunterSkills.TREES[c.x].skills
+	var sk: Array = trees()[c.x].skills
 	return sk[c.y] if c.y >= 0 and c.y < sk.size() else {}
 
 
+## 쪽마다 트리가 몇 개든 가운데 맞춤 (사냥 넷 · 농사 셋)
+func _x0() -> float:
+	return (size.x - COL_W * trees().size()) / 2
+
+
 func cell_rect(c: Vector2i) -> Rect2:
-	var x0 := (size.x - COL_W * HunterSkills.TREES.size()) / 2
+	var x0 := _x0()
+	if c.y >= rows() and not farm_page():
+		x0 = (size.x - COL_W * HunterSkills.TREES.size()) / 2
 	var cx := x0 + c.x * COL_W + COL_W / 2
 	return Rect2(Vector2(cx - CELL.x / 2, TOP + c.y * ROW_H + (STAT_GAP if c.y >= rows() else 0.0)), CELL)
 
 
 ## 고른 칸을 한 단계 찍는다. 못 찍으면 까닭을 알린다.
 func learn_cursor() -> bool:
+	if farm_page():
+		var fs := skill_at(cursor)
+		if fs.is_empty():
+			return false
+		var fwhy := FarmSkills.why_not(fs.id)
+		if fwhy != "":
+			GameState.notify("%s: %s" % [fs.name, fwhy])
+			return false
+		FarmSkills.learn(fs.id)
+		Sound.sfx(&"hatch", 0.0, 1.3)
+		GameState.notify("%s %d단계를 찍었다. 남은 농사 포인트 %d." % [fs.name, FarmSkills.rank(fs.id), GameState.farm_points])
+		queue_redraw()
+		return true
 	if on_stat_row():
 		var st: Dictionary = HunterClass.STATS[cursor.x]
 		if not HunterClass.spend(st.id):
@@ -89,29 +139,40 @@ func learn_cursor() -> bool:
 
 
 func handle_key(event: InputEvent) -> void:
+	var ts := trees()
+	if event.is_action_pressed("outfit_swap"):
+		set_page(&"hunt" if farm_page() else &"farm")
+		return
 	if event.is_action_pressed("move_left"):
-		cursor.x = (cursor.x - 1 + HunterSkills.TREES.size()) % HunterSkills.TREES.size()
+		cursor.x = (cursor.x - 1 + ts.size()) % ts.size()
 	elif event.is_action_pressed("move_right"):
-		cursor.x = (cursor.x + 1) % HunterSkills.TREES.size()
+		cursor.x = (cursor.x + 1) % ts.size()
 	elif event.is_action_pressed("move_up"):
 		cursor.y = maxi(cursor.y - 1, 0)
 	elif event.is_action_pressed("move_down"):
-		cursor.y = rows() if cursor.y >= HunterSkills.TREES[cursor.x].skills.size() - 1 else cursor.y + 1
+		if farm_page():
+			cursor.y = mini(cursor.y + 1, ts[cursor.x].skills.size() - 1)
+		else:
+			cursor.y = rows() if cursor.y >= ts[cursor.x].skills.size() - 1 else cursor.y + 1
 	elif event.is_action_pressed("interact") or event.is_action_pressed("use_tool"):
 		learn_cursor()
-	if event.is_action_pressed("move_up") and cursor.y >= HunterSkills.TREES[cursor.x].skills.size():
-		cursor.y = HunterSkills.TREES[cursor.x].skills.size() - 1
-	elif not on_stat_row():
-		cursor.y = mini(cursor.y, HunterSkills.TREES[cursor.x].skills.size() - 1)
+	if not farm_page() and on_stat_row():
+		cursor.x = mini(cursor.x, HunterClass.STATS.size() - 1)
+	elif event.is_action_pressed("move_up") and cursor.y >= ts[cursor.x].skills.size():
+		cursor.y = ts[cursor.x].skills.size() - 1
+	else:
+		cursor.y = mini(cursor.y, ts[cursor.x].skills.size() - 1)
 	queue_redraw()
 
 
 ## 마우스 아래 칸 (스킬 · 스탯), 없으면 (-1, -1)
 func cell_at(p: Vector2) -> Vector2i:
-	for ti in HunterSkills.TREES.size():
-		for si in HunterSkills.TREES[ti].skills.size():
+	for ti in trees().size():
+		for si in trees()[ti].skills.size():
 			if cell_rect(Vector2i(ti, si)).has_point(p):
 				return Vector2i(ti, si)
+	if farm_page():
+		return Vector2i(-1, -1)
 	for ti in HunterClass.STATS.size():
 		if cell_rect(Vector2i(ti, rows())).has_point(p):
 			return Vector2i(ti, rows())
@@ -120,6 +181,11 @@ func cell_at(p: Vector2) -> Vector2i:
 
 func _gui_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		for i in 2:
+			if tab_rect(i).has_point(event.position):
+				set_page([&"hunt", &"farm"][i])
+				accept_event()
+				return
 		var c := cell_at(event.position)
 		if c.x >= 0:
 			cursor = c
@@ -136,8 +202,12 @@ func _draw() -> void:
 	var font := ThemeDB.fallback_font
 	draw_rect(Rect2(Vector2.ZERO, size), EDGE)
 	draw_rect(Rect2(Vector2(2, 2), size - Vector2(4, 4)), PAPER)
-	draw_string(font, Vector2(8, 14), "%s 스킬 · 스탯 (T 닫기 · 클릭/F 찍기)" % HunterClass.class_name_of(GameState.hunter_class), HORIZONTAL_ALIGNMENT_LEFT, -1, 10, INK)
-	var right := "Lv %d · 스킬 포인트 %d · 스탯 포인트 %d" % [GameState.hunter_level, GameState.skill_points, GameState.stat_points]
+	_draw_tabs(font)
+	if farm_page():
+		_draw_farm(font)
+		return
+	draw_string(font, Vector2(tab_rect(1).end.x + 6, 14), "%s (Tab 농사)" % HunterClass.class_name_of(GameState.hunter_class), HORIZONTAL_ALIGNMENT_LEFT, -1, 10, INK)
+	var right := "Lv %d · 스킬 포인트 %d · 스탯 %d" % [GameState.hunter_level, GameState.skill_points, GameState.stat_points]
 	draw_string(font, Vector2(size.x - 8 - font.get_string_size(right, HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x, 14), right, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, GOLD.darkened(0.25) if GameState.skill_points > 0 or GameState.stat_points > 0 else SUB)
 	var weapon_kind: StringName = Wearables.weapon().kind
 	for ti in HunterSkills.TREES.size():
@@ -204,3 +274,64 @@ func _draw() -> void:
 		draw_string(font, Vector2(12, y + 25), cs.desc, HORIZONTAL_ALIGNMENT_LEFT, size.x - 24, 9, SUB)
 		if cs.per != "":
 			draw_string(font, Vector2(12, y + 37), "단계마다: %s" % cs.per, HORIZONTAL_ALIGNMENT_LEFT, size.x - 24, 9, SUB)
+
+
+## 위 탭 [사냥 | 농사]. 찍을 포인트가 남은 쪽은 금색 점
+func _draw_tabs(font: Font) -> void:
+	var names: Array[String] = ["사냥", "농사"]
+	var pts: Array[bool] = [GameState.skill_points > 0 or GameState.stat_points > 0, GameState.farm_points > 0]
+	for i in 2:
+		var r := tab_rect(i)
+		var on := (i == 1) == farm_page()
+		draw_rect(r, EDGE)
+		draw_rect(r.grow(-1), GOLD.lerp(PAPER, 0.55) if on else SLOT_BG)
+		draw_string(font, Vector2(r.position.x, r.position.y + 11), names[i], HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 10, INK if on else SUB)
+		if pts[i]:
+			draw_circle(r.end - Vector2(5, 7), 2.0, GOLD.darkened(0.2))
+
+
+## 농사 쪽: 세 갈래 트리 (Lv 1 · 4 · 8 · 12) + 아래 경험치 막대 · 고른 기술 설명
+func _draw_farm(font: Font) -> void:
+	draw_string(font, Vector2(tab_rect(1).end.x + 6, 14), "농사 기술 (Tab 사냥)", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, INK)
+	var right := "농사 Lv %d · 농사 포인트 %d" % [GameState.farm_level, GameState.farm_points]
+	draw_string(font, Vector2(size.x - 8 - font.get_string_size(right, HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x, 14), right, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, GOLD.darkened(0.25) if GameState.farm_points > 0 else SUB)
+	for ti in FarmSkills.TREES.size():
+		var t: Dictionary = FarmSkills.TREES[ti]
+		var first := cell_rect(Vector2i(ti, 0))
+		var tab := Rect2(first.get_center().x - COL_W / 2 + 3, 22, COL_W - 6, 15)
+		draw_rect(tab, (t.color as Color).lerp(PAPER, 0.55))
+		draw_string(font, Vector2(tab.position.x, 33), t.name, HORIZONTAL_ALIGNMENT_CENTER, tab.size.x, 10, INK)
+		for si in t.skills.size():
+			var s: Dictionary = t.skills[si]
+			var r := cell_rect(Vector2i(ti, si))
+			if si > 0:
+				var a := cell_rect(Vector2i(ti, si - 1))
+				draw_line(Vector2(a.get_center().x, a.end.y), Vector2(r.get_center().x, r.position.y), EDGE, 1.0)
+			var rank := FarmSkills.rank(s.id)
+			var locked: bool = s.req > GameState.farm_level
+			draw_rect(r, EDGE)
+			draw_rect(r.grow(-1), LOCK if locked else (SLOT_BG if rank == 0 else (t.color as Color).lerp(PAPER, 0.25)))
+			if cursor == Vector2i(ti, si):
+				draw_rect(r.grow(1), GOLD, false, 2.0)
+			draw_string(font, Vector2(r.position.x, r.position.y + 12), s.name, HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 10, SUB if locked else INK)
+			var sub := ("Lv %d" % s.req) if locked else ("%d/%d" % [rank, s.max])
+			draw_string(font, Vector2(r.position.x, r.position.y + 25), sub, HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 9, SUB if locked or rank == 0 else INK)
+	# 스탯 줄 자리: 농사 경험치 막대
+	var bar_y := cell_rect(Vector2i(0, rows())).position.y + 4
+	var bar := Rect2(Vector2(_x0() + 6, bar_y), Vector2(COL_W * FarmSkills.TREES.size() - 12, 8))
+	draw_rect(bar, EDGE)
+	draw_rect(Rect2(bar.position + Vector2.ONE, Vector2((bar.size.x - 2) * FarmSkills.progress(), bar.size.y - 2)), Color(0.5, 0.72, 0.35))
+	var xp_text := "최대 레벨" if GameState.farm_level >= Config.FARM_LEVEL_CAP else "%d / %d" % [GameState.farm_xp, FarmSkills.xp_to_next(GameState.farm_level)]
+	draw_string(font, Vector2(12, bar.end.y + 11), "농사 경험치 %s · 주인공 · 크리처가 거둔 작물마다 ★1 %d · ★2 %d · ★3 %d" % [xp_text, Config.FARM_XP_HARVEST[0], Config.FARM_XP_HARVEST[1], Config.FARM_XP_HARVEST[2]], HORIZONTAL_ALIGNMENT_CENTER, size.x - 24, 9, SUB)
+	var cs := skill_at(cursor)
+	if cs.is_empty():
+		return
+	var y := size.y - 48
+	draw_rect(Rect2(8, y, size.x - 16, 42), SLOT_BG)
+	var head := "%s %d/%d · %s · 농사 Lv %d" % [cs.name, FarmSkills.rank(cs.id), cs.max, FarmSkills.TREES[cursor.x].name, cs.req]
+	var why := FarmSkills.why_not(cs.id)
+	if why != "" and why != "농사 포인트 없음":
+		head += " · " + why
+	draw_string(font, Vector2(12, y + 12), head, HORIZONTAL_ALIGNMENT_LEFT, size.x - 24, 10, INK)
+	draw_string(font, Vector2(12, y + 25), cs.desc, HORIZONTAL_ALIGNMENT_LEFT, size.x - 24, 9, SUB)
+	draw_string(font, Vector2(12, y + 37), "단계마다: %s" % cs.per, HORIZONTAL_ALIGNMENT_LEFT, size.x - 24, 9, SUB)

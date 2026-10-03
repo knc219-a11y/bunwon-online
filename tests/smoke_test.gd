@@ -1256,10 +1256,16 @@ func _ready() -> void:
 	_check(main.supply_options().has(&"train"), "크리처가 있으면 공급함에 크리처 훈련")
 	var r0 := tr.data.work_radius()
 	var sp0 := tr.data.work_speed(CreatureJobs.WATER)
+	# 크리처 레벨 (2026-10-03): 훈련 한 단계에 훈련 포인트 1
+	tr.data.train_points = 0
+	GameState.money = 10000
+	_check(not main.train(tr, &"radius") and tr.data.radius_level == 0 and GameState.money == 10000, "훈련 포인트가 없으면 돈이 있어도 훈련 못 함")
+	tr.data.train_points = 20
 	GameState.money = Config.TRAIN_PRICES[0] - 1
 	_check(not main.train(tr, &"radius") and tr.data.radius_level == 0, "돈이 모자라면 훈련 못 함")
 	GameState.money = 10000
-	_check(main.train(tr, &"radius") and tr.data.work_radius() == r0 + 1 and GameState.money == 10000 - Config.TRAIN_PRICES[0], "범위 훈련 1단계: 범위 +1")
+	_check(main.train(tr, &"radius") and tr.data.work_radius() == r0 + 1 and GameState.money == 10000 - Config.TRAIN_PRICES[0] and tr.data.train_points == 19, "범위 훈련 1단계: 범위 +1 · 포인트 1")
+	GameState.money = 100000
 	_check(main.train_price(tr, &"radius") == Config.TRAIN_PRICES[0] * 2, "다음 단계 값은 두 배")
 	_check(main.train(tr, &"speed") and is_equal_approx(tr.data.work_speed(CreatureJobs.WATER), sp0 * (1.0 + Config.TRAIN_SPEED_STEP)), "속도 훈련 1단계: 일 속도 +25%")
 	for i in Config.TRAIN_PRICES.size() - 1:
@@ -2669,6 +2675,8 @@ func _ready() -> void:
 	await _crop_checks()
 	# 53) 작물 등급 (돌봄 점수) · 퇴비 · 사냥 음식 (2026-10-03 사용자 선택)
 	await _grade_checks()
+	# 54) 농사 레벨 · 기술 · 크리처 레벨 (2026-10-03 백로그 9)
+	await _farm_level_checks()
 
 	# 41) 저장/불러오기 (2026-09-30 사용자 선택 C 디아2식): 저장 → 장면을 버리고 → 새 장면에 불러오면 모든 상태가 같다
 	await _save_load_checks()
@@ -4307,4 +4315,77 @@ func _grade_checks() -> void:
 	_check(bc.fert and bc.missed and Crops.food_count(&"kimchi") == 1 and Crops.stars(&"potato")[1] == 3, "불러오면 퇴비 칸 · 음식 · ★ 그대로")
 	SaveGame.erase(3)
 	b.queue_free()
+	await get_tree().process_frame
+
+
+## 54) 농사 레벨 · 기술 (손일 경험치, 세 갈래 트리) · 크리처 레벨 (일 경험치 → 훈련 포인트)
+func _farm_level_checks() -> void:
+	var m: Node2D = load("res://scenes/main.tscn").instantiate()
+	add_child(m)
+	await get_tree().process_frame
+	GameState.reset()
+	var farm: Farm = m.farm
+	var cell := fc(1, 2)
+	farm.do_work(Farm.Work.TILL, cell)
+	farm.do_work(Farm.Work.SOW, cell)
+	m.player.position = Farm.center_of(cell + Vector2i.UP)
+	m.player.facing = Vector2i.DOWN
+	m.tool_index = m.TOOLS.find(Farm.Work.WATER)
+	m.use_tool()
+	_check(GameState.farm_xp == 0, "갈기 · 심기 · 물은 농사 경험치 없음 (거둘 때만)")
+	for d in Config.CROP_GROW_DAYS:
+		farm.do_work(Farm.Work.WATER, cell)
+		farm.advance_day()
+	m.tool_index = m.TOOLS.find(Farm.Work.HARVEST)
+	m.use_tool()
+	_check(GameState.farm_xp == Config.FARM_XP_HARVEST[farm.last_grade - 1], "손으로 거두면 ★ 만큼 경험치")
+	farm.do_work(Farm.Work.SOW, cell)
+	for d in Config.CROP_GROW_DAYS:
+		farm.do_work(Farm.Work.WATER, cell)
+		farm.advance_day()
+	var xp0 := GameState.farm_xp
+	farm.do_work(Farm.Work.HARVEST, cell, [&"water"] as Array[StringName])
+	_check(GameState.farm_xp - xp0 == Config.FARM_XP_HARVEST[farm.last_grade - 1], "크리처가 거둬도 ★ 만큼 경험치")
+	# 레벨업 → 포인트
+	_check(FarmSkills.gain(FarmSkills.xp_to_next(1)) >= 1 and GameState.farm_level >= 2 and GameState.farm_points >= 1, "경험치가 차면 농사 레벨업 + 포인트")
+	_check(FarmSkills.why_not(&"wide_hoe").contains("Lv"), "Lv 4 기술은 그 레벨부터")
+	var before: Array[Vector2i] = m.tool_cells(Farm.Work.WATER)
+	_check(FarmSkills.learn(&"wide_can") and FarmSkills.rank(&"wide_can") == 1, "큰 물뿌리개 1단계")
+	var after: Array[Vector2i] = m.tool_cells(Farm.Work.WATER)
+	_check(after.size() == before.size() * 3 and m.tool_cells(Farm.Work.TILL).size() == before.size(), "큰 물뿌리개: 물 주는 칸 세 줄 (괭이는 그대로)")
+	GameState.farm_level = 4
+	_check(FarmSkills.why_not(&"buddy_farm").contains("먼저"), "위 기술을 찍어야 다음")
+	GameState.farm_points = 0
+	_check(FarmSkills.why_not(&"wide_can") == "농사 포인트 없음", "포인트가 없으면 못 찍음")
+	# 효과들
+	GameState.farm_skills = {&"dawn_dew": 3, &"buddy_farm": 2, &"kind_hand": 1, &"field_snack": 3, &"food_hand": 1, &"warm_egg": 2}
+	farm.do_work(Farm.Work.SOW, cell)
+	_check(farm.dew(1.0) == 1 and farm.get_cell(cell).watered, "새벽 이슬: 심은 칸에 물이 듦")
+	_check(is_equal_approx(FarmSkills.match_chance(), Config.CROP_MATCH_CHANCE + 2 * Config.FARM_MATCH_STEP), "짝꿍 농사: 속성 맞춤 확률 +")
+	_check(Crops.food_effect_text(&"steamed_potato", 1) == "체력 +%d" % roundi(Config.FOODS[&"steamed_potato"].values[0] * 1.2), "손맛 음식: 음식 효과 +20%")
+	# 크리처 레벨
+	var s: Creature = m._hatch(CreatureCatalog.SLIME, fc(0, 0))
+	_check(s.data.level == 3 and s.data.train_points == 2, "알 품기 2단계: Lv 3 으로 태어나 포인트 2")
+	var sp := s.data.work_speed(CreatureJobs.WATER)
+	GameState.farm_skills.erase(&"field_snack")
+	_check(is_equal_approx(sp, s.data.work_speed(CreatureJobs.WATER) * (1.0 + 3 * Config.FARM_SNACK_STEP)), "새참: 크리처 일 속도 +15%")
+	var d := CreatureData.hatch(CreatureCatalog.SLIME, RandomNumberGenerator.new())
+	_check(d.level == 1 and d.gain_xp(CreatureData.xp_to_next(1) / 1.2) == 1 and d.level == 2 and d.train_points == 1, "크리처가 일 경험치로 레벨업 (다정한 손 +20%) → 훈련 포인트 1")
+	for i in 50:
+		d.gain_xp(1000)
+	_check(d.level == Config.CREATURE_LEVEL_CAP and d.train_points == Config.CREATURE_LEVEL_CAP - 1, "크리처 레벨은 %d 까지" % Config.CREATURE_LEVEL_CAP)
+	_check(s.describe().contains("Lv3"), "크리처 설명에 레벨")
+	# T 창 농사 쪽
+	GameState.farm_points = 1
+	GameState.farm_level = 1
+	GameState.farm_skills = {}
+	m.open_skills()
+	var panel: SkillPanel = m.skill_panel
+	_check(panel.farm_page(), "농사 포인트만 있으면 T 창이 농사 쪽으로 열림")
+	panel.cursor = Vector2i(1, 0)
+	_check(panel.learn_cursor() and FarmSkills.rank(&"compost_hand") == 1, "T 창 농사 쪽에서 찍기")
+	panel.set_page(&"hunt")
+	_check(not panel.farm_page() and panel.skill_at(Vector2i(0, 0)).id == &"whirl", "탭으로 사냥 쪽")
+	m.close_skills()
+	m.queue_free()
 	await get_tree().process_frame
