@@ -130,6 +130,9 @@ static func night(main: Node2D, rng: RandomNumberGenerator) -> String:
 		teams += 1
 		members += t.size()
 		var p := power(t, z) / float(Config.EXPEDITION_TEAM_MAX)
+		# 크리처 레벨 (2026-10-03): 원정대는 밤마다 구역만큼 경험치
+		for s in t:
+			s.data.gain_xp(Config.CREATURE_XP_EXPEDITION * (z + 1))
 		var e: Dictionary = Config.EXPEDITION_ZONES[z]
 		money += roundi(rng.randi_range(e.money[0], e.money[1]) * p)
 		junk += rng.randi_range(Config.EXPEDITION_JUNK[0], Config.EXPEDITION_JUNK[1])

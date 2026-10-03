@@ -160,6 +160,11 @@ var hunter_class := &""
 var stats := {}
 var stat_points := 0
 var free_respec_used := false
+## 농사 레벨 · 기술 (2026-10-03 백로그 9, FarmSkills). farm_xp 는 지금 레벨 안에서 모은 경험치, farm_skills = {기술 id: 찍은 단계}
+var farm_level := 1
+var farm_xp := 0
+var farm_points := 0
+var farm_skills := {}
 
 
 func _ready() -> void:
@@ -297,6 +302,10 @@ func reset() -> void:
 	stat_points = 0
 	free_respec_used = false
 	skill_left = {}
+	farm_level = 1
+	farm_xp = 0
+	farm_points = 0
+	farm_skills = {}
 	changed.emit()
 
 

@@ -300,7 +300,7 @@ static func star_bonus(kind: StringName) -> int:
 ## 거둘 때 등급: 1 + 물 안 빠뜨림 + 퇴비, 속성 맞는 크리처가 돌봤으면 CROP_MATCH_CHANCE 로 +1 (3 까지)
 static func harvest_grade(c: Farm.Cell, roll: float) -> int:
 	var g := 1 + (0 if c.missed else 1) + (1 if c.fert else 0)
-	if c.matched and roll < Config.CROP_MATCH_CHANCE:
+	if c.matched and roll < FarmSkills.match_chance():
 		g += 1
 	return mini(g, 3)
 
@@ -313,6 +313,9 @@ static func make_compost() -> bool:
 		if int(GameState.get(key)) >= Config.COMPOST_COST:
 			GameState.set(key, int(GameState.get(key)) - Config.COMPOST_COST)
 			GameState.compost += 1
+			# 퇴비 솜씨 (농사 기술, 2026-10-03): 가끔 하나 더
+			if randf() < FarmSkills.compost_extra_chance():
+				GameState.compost += 1
 			GameState.notify("%s %d개로 퇴비를 만들었다 (퇴비 %d). 씨앗 주머니를 이미 심은 칸에 쓰면 한 줌씩 준다 (★ +1)." % [
 				{"herbs": "들나물", "displayed_herbs": "진열해 둔 들나물", "junk": "잡템"}[key], Config.COMPOST_COST, GameState.compost])
 			return true
@@ -337,6 +340,7 @@ static func food_text(id: StringName) -> String:
 static func food_effect_text(id: StringName, grade: int) -> String:
 	var d: Dictionary = Config.FOODS[id]
 	var v = d.values[grade - 1]
+	v = roundi(v * FarmSkills.food_mult()) if d.effect == &"hp" else v * FarmSkills.food_mult()
 	match d.effect:
 		&"hp":
 			return "체력 +%d" % v
@@ -373,6 +377,7 @@ static func cook(id: StringName) -> int:
 	GameState.foods[id] = f
 	GameState.touch()
 	GameState.notify("%s ★%d 을(를) 만들었다 (%s). 다음 사냥에 들어갈 때 먹는다: %s." % [d.name, grade, food_text(id), food_effect_text(id, grade)])
+	FarmSkills.gain_for(&"cook")
 	return grade
 
 

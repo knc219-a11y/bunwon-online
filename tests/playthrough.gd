@@ -66,6 +66,8 @@ var gwang_hunts := 0
 var gwang_hurt := 0
 var gwang_knocked := 0
 var money_by_day := {}
+## 농사 레벨 · 크리처 레벨 (2026-10-03): 날 → "농사 Lv · 크리처 Lv 가장 높은 · 평균"
+var farm_level_by_day := {}
 ## 도마리 (2026-09-29, 2막 마지막 구역): 처음 도착한 날 · 사냥한 날 수 · 거기서 잃은 체력 · 쓰러진 횟수
 var doma_day := -1
 var doma_hunts := 0
@@ -279,6 +281,13 @@ func _ready() -> void:
 			lv.append("%d일 Lv%d" % [d, level_by_day[d]])
 	_log("\n시설 공사 시작한 날 (재료 다 모은 날): %s · 문 연 날: 대장간 %d · 약방 %d · 축사 %d · 나루터 %d · 회관 %d" % [build_start, restore_day, yak_restore_day, barn_restore_day, naru_restore_day, hall_restore_day])
 	_log("\n사냥꾼 레벨 (%s): %s · 끝 Lv %d (남은 포인트 %d) · 찍은 스킬 %s" % ["스킬 찍음" if skills_on else "스킬 안 찍음", " · ".join(lv), GameState.hunter_level, GameState.skill_points, GameState.skills])
+	var flv := []
+	for d in [10, 20, 40, 60, 80, 100, 120]:
+		if farm_level_by_day.has(d):
+			flv.append("%d일 %s" % [d, farm_level_by_day[d]])
+	_log("농사 레벨 · 크리처 레벨 (2026-10-03): %s · 끝 농사 Lv %d (남은 포인트 %d) · 찍은 기술 %s" % [" · ".join(flv), GameState.farm_level, GameState.farm_points, GameState.farm_skills])
+	_log("끝 크리처 Lv %s · 남은 훈련 포인트 합 %d" % [main.creatures.map(func(c: Creature) -> int: return c.data.level),
+		main.creatures.reduce(func(a: int, c: Creature) -> int: return a + c.data.train_points, 0)])
 	_log("직업 %s · 스탯 %s (남은 %d)" % [HunterClass.class_name_of(GameState.hunter_class), GameState.stats, GameState.stat_points])
 	_log("무기 (봇이 즐겨 듦: %s): 처음 든 날 %s · 쏜 화살 · 구슬 %d" % [weapon_pref, "%d일" % weapon_day if weapon_day > 0 else "없음", shots_fired])
 	_log("입은 장비: 밭 옷 %s · 사냥 옷 %s" % [_worn_text(&"farmer"), _worn_text(&"hunter")])
@@ -345,7 +354,13 @@ func play_day() -> void:
 		farm_counts[k] = farm_counts.get(k, 0) + more[k]
 	await let_creatures_work()
 	incubate()
+	spend_farm_points()
+	var clv: Array = main.creatures.map(func(c: Creature) -> int: return c.data.level)
+	farm_level_by_day[GameState.day] = "농사 Lv%d · 크리처 최고 Lv%d 평균 %.1f" % [GameState.farm_level, clv.max() if not clv.is_empty() else 0,
+		float(clv.reduce(func(a: int, b: int) -> int: return a + b, 0)) / maxi(clv.size(), 1)]
 	_log("손일: 손으로 한 도구질 %d번 %s · 공급함: %s" % [manual_actions, farm_counts, bought])
+	_log("농사 Lv %d (%d/%d) · 기술 %s · 크리처 Lv %s" % [GameState.farm_level, GameState.farm_xp, FarmSkills.xp_to_next(GameState.farm_level),
+		GameState.farm_skills, main.creatures.map(func(c: Creature) -> int: return c.data.level)])
 	var creature_herbs := GameState.displayed_herbs - herbs0 - herbs
 	if creature_herbs > 0 or GameState.displayed_roots > 0:
 		_log("크리처 채집: 들나물 %d포기 · %s %d뿌리 진열 (내일 물 준 풀밭 %d칸)" % [creature_herbs, Config.ROOT_NAME, GameState.displayed_roots, main.forage.watered.size()])
@@ -639,6 +654,7 @@ func forage() -> int:
 		# 크리처를 들지 않도록 들나물만 캔다
 		main.forage.pick(cell)
 		GameState.herbs += 1
+		FarmSkills.gain_for(&"herb")
 		n += 1
 	manual_actions += n
 	return n
@@ -662,11 +678,19 @@ func farm_by_hand() -> Dictionary:
 			reach += Wearables.stat_sum(&"farmer", "reach_add")
 		if work == Farm.Work.SOW:
 			reach = Wearables.sow_reach(&"farmer")
+		# 큰 물뿌리개 · 큰 괭이 (농사 기술): 한 번에 닿는 칸 = (앞 + 더) x (1 + 옆 줄 x 2), 줄이 다 차지는 않으니 절반쯤만 셈
+		var wide := FarmSkills.wide(work)
+		var area := maxf(1.0, (reach + wide.y) * (1 + 2 * wide.x) * (0.5 if wide != Vector2i.ZERO else 1.0))
+		area = maxf(area, reach)
 		var n := 0
 		for c in cells:
-			if farm.do_work(work, c):
+			if farm.do_work(work, c, [], true):
 				n += 1
-		var uses := ceili(float(n) / reach)
+				if work == Farm.Work.HARVEST:
+					FarmSkills.gain_harvest(farm.last_grade)
+				else:
+					FarmSkills.gain_for(main.FARM_XP_IDS[work])
+		var uses := ceili(float(n) / area)
 		manual_actions += uses
 		counts[main.TOOL_NAMES[work]] = uses
 	var fert := fertilize_by_hand()
@@ -807,6 +831,9 @@ func shop() -> Array[String]:
 			if id == &"back":
 				continue
 			var pick: Array = main.train_from_option(id)
+			# 크리처 레벨 (2026-10-03): 훈련 포인트가 있는 크리처만
+			if pick[0] == null or pick[0].data.train_points <= 0:
+				continue
 			var price: int = main.train_price(pick[0], pick[1])
 			if price < best_price:
 				best = id
@@ -895,6 +922,7 @@ func fertilize_by_hand() -> int:
 	for c in cells:
 		if farm.fertilize(c):
 			n += 1
+			FarmSkills.gain_for(&"fert")
 	compost_used += n
 	return ceili(float(n) / Wearables.sow_reach(&"farmer"))
 
@@ -1096,6 +1124,21 @@ const SKILL_ORDER := {
 }
 var skills_on := true
 var level_by_day := {}
+
+
+## 농사 기술 (2026-10-03 백로그 9): 손일을 넓히는 것 → 크리처 → 등급 순으로, 앞 기술을 다 찍거나 못 찍으면 다음
+const FARM_ORDER: Array[StringName] = [&"wide_can", &"wide_hoe", &"kind_hand", &"hand_touch", &"buddy_farm", &"compost_hand",
+	&"field_snack", &"quick_step", &"bounty", &"dawn_dew", &"warm_egg", &"food_hand"]
+
+
+func spend_farm_points() -> void:
+	var learned := true
+	while GameState.farm_points > 0 and learned:
+		learned = false
+		for id: StringName in FARM_ORDER:
+			if FarmSkills.learn(id):
+				learned = true
+				break
 
 
 func spend_skill_points() -> void:

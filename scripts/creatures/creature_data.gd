@@ -13,6 +13,11 @@ extends Resource
 ## 크리처 훈련 단계 (2026-09-29 사용자 선택 A). 공급함에서 돈으로 올린다.
 @export var radius_level := 0
 @export var speed_level := 0
+## 크리처 레벨 (2026-10-03 백로그 9, 고르는 동안 Claude 추천 A 포인트 + 돈): 일할수록 경험치 → 레벨, 레벨업마다 훈련 포인트 1.
+## 훈련 한 단계에 포인트 1 + 돈. xp 는 지금 레벨 안에서 모은 경험치.
+@export var level := 1
+@export var xp := 0
+@export var train_points := 0
 
 
 static func hatch(from_species: CreatureSpecies, rng: RandomNumberGenerator) -> CreatureData:
@@ -51,12 +56,43 @@ func work_speed(job: StringName) -> float:
 	var s := base_work_speed * aptitude(job)
 	if creature_trait:
 		s *= creature_trait.work_speed_mult
-	return s * train_speed_mult()
+	# 새참 (농사 기술): 모든 크리처 일 속도
+	return s * train_speed_mult() * FarmSkills.snack_mult()
 
 
 ## 속도 훈련 배율
 func train_speed_mult() -> float:
 	return 1.0 + Config.TRAIN_SPEED_STEP * speed_level
+
+
+## 다음 레벨까지 필요한 경험치
+static func xp_to_next(lv: int) -> int:
+	return roundi(Config.CREATURE_XP_BASE * pow(lv, Config.CREATURE_XP_EXP))
+
+
+## 경험치를 더한다 (다정한 손 배율 포함). 오른 레벨 수. 레벨업마다 훈련 포인트 1.
+func gain_xp(amount: float) -> int:
+	if amount <= 0.0 or level >= Config.CREATURE_LEVEL_CAP:
+		return 0
+	xp += maxi(1, roundi(amount * FarmSkills.creature_xp_mult()))
+	var ups := 0
+	while level < Config.CREATURE_LEVEL_CAP and xp >= xp_to_next(level):
+		xp -= xp_to_next(level)
+		level += 1
+		train_points += 1
+		ups += 1
+	if level >= Config.CREATURE_LEVEL_CAP:
+		xp = 0
+	return ups
+
+
+## 처음부터 이 레벨로 (알 품기 · 옛 저장). 오른 만큼 훈련 포인트.
+func start_at_level(lv: int) -> void:
+	lv = clampi(lv, 1, Config.CREATURE_LEVEL_CAP)
+	if lv > level:
+		train_points += lv - level
+		level = lv
+		xp = 0
 
 
 ## 훈련 단계 합 (겉에 ★로 보인다)
