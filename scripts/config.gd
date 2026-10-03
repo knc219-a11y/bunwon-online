@@ -1074,7 +1074,8 @@ const BOSS_MATERIAL5_NAME := "용 비늘"
 const HALL_RECT := Rect2i(11, 20, 4, 2)
 ## 이장이 처음 서는 칸 (회관 오른쪽 아래)
 const CHIEF_CELL := Vector2i(15, 22)
-## 복구에 드는 것. 용은 하루 한 번만 잡으니 재료는 적게 (로드맵: 5막 대장 ≈ 12시간, 잔치 ≈ 13시간)
+## 복구에 드는 것. 용 비늘은 5개만 (2026-10-03 사용자: "의미없이 보스를 10번잡아야 다음 시설로 넘어가는 부분 재미없음" →
+## 대장 재료 반복 사냥은 다음 주제에서 새로 정함. 그 전까지 회관만이라도 대장 반복을 짧게)
 const HALL_COST_MONEY := 15000
 const HALL_COST_CROPS := 100
 const HALL_COST_MATERIAL := 5
@@ -1099,7 +1100,8 @@ const ERRAND_CAP := 4
 ## 상: [id, 차리는 사람, 이름, {GameState 변수: 개수}] (그림 assets/props/feast_dishes.png 순서)
 const FEAST_RECT := Rect2i(25, 17, 3, 1)
 const FEAST_DISHES: Array = [
-	[&"greens", &"farmer", "무 · 나물 한 상", {crops = 30, herbs = 10}],
+	## 농부 상은 무만 (2026-10-03 봇: 늦게는 채집 크리처가 들나물을 다 캐서 농부 손에 나물이 안 모인다)
+	[&"greens", &"farmer", "무생채 · 뭇국", {crops = 40}],
 	[&"skewer", &"hunter", "사냥꾼 꼬치", {junk = 15}],
 	[&"cauldron", &"smith", "가마솥", {scrap = 20}],
 	[&"wine", &"alchemist", "약주", {roots = 10}],

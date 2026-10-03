@@ -3,7 +3,7 @@
 코드로 그린 임시 그림이다.
   ../assets/props/hall_ruin.png · hall.png (96 x 72): 마을회관 터 / 마을회관 (4칸 x 2칸 자리, 슬레이트 지붕 · 확성기 기둥 · 게시판)
   ../assets/props/feast_table.png (72 x 30): 당산나무 앞 잔치상 (3칸 x 1칸 자리, 빈 상 + 멍석)
-  ../assets/props/feast_dishes.png (112 x 16): 잔치 음식 일곱 칸 (농부 무 · 나물 / 사냥꾼 꼬치 / 대장장이 가마솥 / 연금술사 약주 /
+  ../assets/props/feast_dishes.png (112 x 16): 잔치 음식 일곱 칸 (농부 무생채 · 뭇국 / 사냥꾼 꼬치 / 대장장이 가마솥 / 연금술사 약주 /
       목축인 달걀찜 / 뱃사공 매운탕 / 이장 떡 · 막걸리), Config.FEAST_DISHES 순서
   ../assets/props/lantern.png (8 x 12): 잔치 청사초롱
   ../assets/characters/chief.png (288 x 144): 이장 (대장장이 시트에 하늘색 남방 · 초록 새마을 모자를 씌운 임시 그림)

@@ -665,6 +665,16 @@ func shop() -> Array[String]:
 		else:
 			reserve = maxi(reserve, Config.YAK_COST_MONEY)
 	# 축사 (2026-09-30 선택 A 닭장): 산군 발톱이 다 모이면 무 · 돈을 남겨 두고 고친다
+	# 마을회관 (2026-10-03): 용 비늘이 다 모이면 무 · 돈을 남겨 두고 고친다
+	if GameState.hall_state == 1 and GameState.material5 >= Config.HALL_COST_MATERIAL:
+		_feast_unhide()
+		if VillageHall.restore(main):
+			hall_restore_day = GameState.day
+			did.append("마을회관 복구(%d원 · 무 %d · %s %d)" % [Config.HALL_COST_MONEY, Config.HALL_COST_CROPS, Config.BOSS_MATERIAL5_NAME, Config.HALL_COST_MATERIAL])
+		else:
+			reserve = maxi(reserve, Config.HALL_COST_MONEY)
+			keep_crops = maxi(keep_crops, mini(GameState.crops, Config.HALL_COST_CROPS))
+	hall_day(did)
 	var barn_saving := GameState.barn_state == 1 and GameState.material3 >= Config.BARN_COST_MATERIAL
 	if barn_saving:
 		if main.can_restore_barn() and main.restore_barn():
@@ -683,16 +693,6 @@ func shop() -> Array[String]:
 		else:
 			reserve = maxi(reserve, Config.NARU_COST_MONEY)
 			keep_crops = maxi(keep_crops, mini(GameState.crops, Config.NARU_COST_CROPS))
-	# 마을회관 (2026-10-03): 용 비늘이 다 모이면 무 · 돈을 남겨 두고 고친다
-	if GameState.hall_state == 1 and GameState.material5 >= Config.HALL_COST_MATERIAL:
-		_feast_unhide()
-		if VillageHall.restore(main):
-			hall_restore_day = GameState.day
-			did.append("마을회관 복구(%d원 · 무 %d · %s %d)" % [Config.HALL_COST_MONEY, Config.HALL_COST_CROPS, Config.BOSS_MATERIAL5_NAME, Config.HALL_COST_MATERIAL])
-		else:
-			reserve = maxi(reserve, Config.HALL_COST_MONEY)
-			keep_crops = maxi(keep_crops, mini(GameState.crops, Config.HALL_COST_CROPS))
-	hall_day(did)
 	if GameState.naru_state >= 2:
 		dock_day(did)
 	if GameState.yak_state >= 2:
@@ -782,6 +782,8 @@ func hall_day(did: Array[String]) -> void:
 				feast_human_sec = total_human_sec
 				did.append("잔치!")
 	_feast_hide()
+	if not feast_hidden.is_empty():
+		did.append("잔치 재료 따로 둠 %s" % feast_hidden)
 
 
 ## 아직 못 차린 상에 드는 그 재료 수

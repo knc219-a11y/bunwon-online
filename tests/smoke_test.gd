@@ -3959,12 +3959,11 @@ func _hall_checks() -> void:
 	var lines2: Array[String] = m.next_day()
 	_check(not GameState.hall_request.is_empty() and GameState.errands == 0 and not GameState.hall_rerolled and lines2.any(func(l: String) -> bool: return l.contains("게시판")), "아침마다 새 부탁 · 방송")
 	# 잔치상: 그 사람만 차림
-	GameState.crops = 40
-	GameState.herbs = 10
+	GameState.crops = 50
 	m._set_active(m.hunter)
 	_check(not VillageHall.set_dish(m, &"greens") and GameState.feast_dishes.is_empty(), "농부 상은 사냥꾼이 못 차림")
 	m._set_active(m.farmer)
-	_check(VillageHall.set_dish(m, &"greens") and GameState.crops == 10 and GameState.herbs == 0, "농부가 무 · 나물 한 상")
+	_check(VillageHall.set_dish(m, &"greens") and GameState.crops == 10, "농부가 무생채 · 뭇국")
 	_check(not VillageHall.set_dish(m, &"greens"), "같은 상은 한 번")
 	_check(not VillageHall.options(m, &"feast").has(&"open_feast"), "다 안 찼으면 잔치 열기 없음")
 	GameState.junk = 20
