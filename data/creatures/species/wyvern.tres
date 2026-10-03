@@ -1,0 +1,29 @@
+[gd_resource type="Resource" script_class="CreatureSpecies" load_steps=7 format=3]
+
+[ext_resource type="Script" path="res://scripts/creatures/creature_species.gd" id="1"]
+[ext_resource type="Resource" path="res://data/creatures/traits/ordinary.tres" id="2"]
+[ext_resource type="Resource" path="res://data/creatures/traits/diligent.tres" id="3"]
+[ext_resource type="Resource" path="res://data/creatures/traits/keen_eye.tres" id="4"]
+[ext_resource type="Resource" path="res://data/creatures/elements/flying.tres" id="5"]
+[ext_resource type="Texture2D" path="res://assets/creatures/baby_wyvern.png" id="6"]
+
+[resource]
+script = ExtResource("1")
+id = &"wyvern"
+display_name = "아기 와이번"
+faces = 1
+possible_elements = Array[Resource]([ExtResource("5")])
+job_aptitude = {
+&"forage": 1.5
+}
+work_speed_range = Vector2(0.9, 1.3)
+radius_range = Vector2i(1, 2)
+traits = Array[Resource]([ExtResource("2"), ExtResource("3"), ExtResource("4")])
+companion_style = &"peck"
+courier = true
+sprite_sheets = {
+&"flying": ExtResource("6")
+}
+egg_color = Color(0.62, 0.78, 0.66, 1)
+egg_spot_color = Color(0.3, 0.5, 0.36, 1)
+color = Color(0.45, 0.7, 0.55, 1)

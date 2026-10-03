@@ -150,6 +150,13 @@ var _log_aim := -1.0
 var _log_t := -1.0
 var _log_from := Vector2.ZERO
 var _log_to := Vector2.ZERO
+## 소내섬 용 (dragon, 2026-10-03 사용자: "마지막은 기본이 일반용이고 희귀한 확률로 세가지 용이 우연하게나오는 구조로가자"):
+## 어떤 용인지 (&"" 일반 용 · &"blue" 청룡 · &"cloud" 운룡 · &"gold" 황금 드래곤), 다음 패턴 차례
+## (일반 용: 0 물어뜯기 돌진 · 1 날개 바람, 희귀 용: 2 자기 기술 = 청룡 물기둥 · 운룡 안개 · 황금 불 숨결 + 금화 비)
+var variant := &""
+var _dragon_step := 0
+## 방금 떨어진 짚단 · 기둥 · 날개 바람 · 금화 (bale_landed 를 받는 HuntGround 가 종류를 본다)
+var landing := {}
 
 ## 까마귀가 내려꽂았다 (내려앉은 곳). HuntGround 가 받아 원 안의 사냥꾼을 다치게 한다.
 signal swooped(at: Vector2)
@@ -169,7 +176,7 @@ signal rammed(at: Vector2)
 signal roared(at: Vector2)
 ## 대장이 혀를 뻗었다 (입 → 혀끝). HuntGround 가 받아 선 위의 사냥꾼을 다치게 하고 금가루를 뿌린다.
 signal lashed(from: Vector2, to: Vector2)
-## 마왕 등불이 꺼졌다 (정전 + 등 뒤에 악귀)
+## 마왕 등불이 꺼졌다 (정전 + 등 뒤에 악귀). 운룡은 안개 (안개 + 등 뒤에 와이번).
 signal dimmed(at: Vector2)
 
 
@@ -297,9 +304,23 @@ func _flee(delta: float, target: Vector2) -> void:
 	position = _stand(position + away * Config.IMP_FLEE_SPEED * delta)
 
 
-## 오른쪽을 보는 네발 짐승 그림 (늑대 · 백호 · 창기병 · 역마 장군)
+## 오른쪽을 보는 네발 짐승 그림 (늑대 · 백호 · 창기병 · 역마 장군 · 소내섬 용)
 func _quad() -> bool:
-	return wolf or lancer or pattern == &"tiger" or pattern == &"general"
+	return wolf or lancer or pattern == &"tiger" or _charger()
+
+
+## 꺾어 잇는 돌격을 하는 대장 (역마 장군 창 돌격 · 소내섬 용 물어뜯기 돌진)
+func _charger() -> bool:
+	return pattern == &"general" or pattern == &"dragon"
+
+
+## 소내섬 용을 희귀 용으로 바꾼다 (구역 데이터 variants 의 하나: {id, name, sheet}). make_boss 뒤에 부른다.
+func make_variant(v: Dictionary) -> void:
+	variant = v.id
+	title = v.name
+	sheet = load(v.sheet)
+	if _sprite:
+		_apply_sheet()
 
 
 func sort_y() -> float:
@@ -402,7 +423,9 @@ func telegraphs() -> Array[Dictionary]:
 		out.append({kind = &"circle", at = _dive_to, radius = Config.SWOOP_RADIUS, progress = 1.0 - _swoop / windup_time})
 	for b in _bales:
 		var w: float = b.get("w", Config.STRAW_WINDUP)
-		out.append({kind = &"circle", at = b.at, radius = b.get("r", Config.STRAW_RADIUS), progress = clampf(1.0 - b.t / w, 0.0, 1.0), bale = not b.get("pillar", false), pillar = b.get("pillar", false)})
+		var plain: bool = not (b.get("pillar", false) or b.get("gust", false) or b.get("coin", false))
+		out.append({kind = &"circle", at = b.at, radius = b.get("r", Config.STRAW_RADIUS), progress = clampf(1.0 - b.t / w, 0.0, 1.0), bale = plain, pillar = b.get("pillar", false),
+			water = b.get("water", false), coin = b.get("coin", false), gust = b.get("gust", false)})
 	var one := _telegraph_one()
 	if not one.is_empty():
 		out.append(one)
@@ -422,10 +445,10 @@ func _telegraph_one() -> Dictionary:
 		return {kind = &"circle", at = position, radius = Config.DEMON_SLAM_RADIUS if demon else Config.WISP_BURST_RADIUS, progress = 1.0 - _burst / (Config.DEMON_SECOND_WINDUP if _second else windup_time)}
 	if _roar >= 0.0:
 		return {kind = &"circle", at = position, radius = Config.TIGER_ROAR_RADIUS, progress = 1.0 - _roar / Config.TIGER_ROAR_WINDUP, roar = true}
-	if _bus_aim >= 0.0 and pattern == &"general":
-		return {kind = &"lane", from = _bus_from, to = _bus_to, width = Config.GENERAL_HIT_RADIUS * 2.0, progress = 1.0 - _bus_aim / _general_windup()}
-	if _bus_t >= 0.0 and pattern == &"general":
-		return {kind = &"lane", from = position, to = _bus_to, width = Config.GENERAL_HIT_RADIUS * 2.0, progress = 1.0}
+	if _bus_aim >= 0.0 and _charger():
+		return {kind = &"lane", from = _bus_from, to = _bus_to, width = _charge_radius() * 2.0, progress = 1.0 - _bus_aim / _general_windup()}
+	if _bus_t >= 0.0 and _charger():
+		return {kind = &"lane", from = position, to = _bus_to, width = _charge_radius() * 2.0, progress = 1.0}
 	if _bus_aim >= 0.0:
 		return {kind = &"lane", from = _bus_from, to = _bus_to, width = Config.BUS_WIDTH, progress = 1.0 - _bus_aim / Config.BUS_WINDUP}
 	if _bus_t >= 0.0:
@@ -436,9 +459,21 @@ func _telegraph_one() -> Dictionary:
 	return {}
 
 
-## 역마 장군 돌격 예고 시간 (첫 돌격은 길게, 꺾어 잇는 돌격은 짧게)
+## 역마 장군 돌격 예고 시간 (첫 돌격은 길게, 꺾어 잇는 돌격은 짧게). 소내섬 용도 같은 식 (DRAGON_*).
 func _general_windup() -> float:
+	if pattern == &"dragon":
+		return Config.DRAGON_WINDUP if _charges_left >= _dragon_charges() else Config.DRAGON_NEXT_WINDUP
 	return Config.GENERAL_WINDUP if _charges_left >= Config.GENERAL_CHARGES else Config.GENERAL_NEXT_WINDUP
+
+
+## 돌격에 닿는 반지름 (역마 장군 창 · 용 몸통)
+func _charge_radius() -> float:
+	return Config.DRAGON_HIT_RADIUS if pattern == &"dragon" else Config.GENERAL_HIT_RADIUS
+
+
+## 용 물어뜯기 돌진 횟수 (체력 절반 아래면 하나 더)
+func _dragon_charges() -> int:
+	return Config.DRAGON_CHARGES + (1 if enraged() else 0)
 
 
 ## from 에서 dir 쪽으로 length 만큼 가되, 막힌 칸 (나무 · 바위 · 마방) 앞에서 멈춘 자리 (창기병 · 장군 돌격 띠 끝)
@@ -463,7 +498,7 @@ func _aim_general(target: Vector2) -> void:
 	if dir == Vector2.ZERO:
 		dir = Vector2.LEFT
 	_bus_from = position
-	_bus_to = _stand_line(position, dir, Config.GENERAL_LENGTH)
+	_bus_to = _stand_line(position, dir, Config.DRAGON_LENGTH if pattern == &"dragon" else Config.GENERAL_LENGTH)
 	_bus_aim = _general_windup()
 
 
@@ -535,7 +570,7 @@ func tick(delta: float, target: Vector2) -> void:
 				_start_hop(target)
 	# 돌진·내려찍기도 깡충 그림을 쓴다
 	var hop_t := maxf(_hop_t, maxf(_lunge_t, _air_t))
-	if pattern == &"general" and _bus_t >= 0.0:
+	if _charger() and _bus_t >= 0.0:
 		hop_t = fmod(_bus_t * 3.0, 1.0)
 	var hopping := hop_t >= 0.0
 	var cols := BURIED_COLUMNS if buried else (HOP_COLUMNS if hopping else IDLE_COLUMNS)
@@ -547,7 +582,7 @@ func tick(delta: float, target: Vector2) -> void:
 		col = HOP_COLUMNS[int(_anim_time * 10.0) % 4] if in_air() else (BURIED_COLUMNS if _rest > 0.0 else IDLE_COLUMNS)[int(_anim_time * 3.0) % 2]
 	elif not _bales.is_empty() or _log_aim >= 0.0 or _log_t >= 0.0 or _roar >= 0.0:
 		col = BURIED_COLUMNS[int(_anim_time * 6.0) % 2]
-	elif _quad() and (_windup >= 0.0 or (pattern == &"general" and _bus_aim >= 0.0)):
+	elif _quad() and (_windup >= 0.0 or (_charger() and _bus_aim >= 0.0)):
 		# 네발 짐승 (밀목 · 역동): 6열 웅크림 (창기병 · 장군은 앞발 들어 발 구름) · 7열 지침, 둘러서서 돌 땐 걷기
 		col = BURIED_COLUMNS[0]
 	elif _quad() and (_recover > 0.0 or _stun > 0.0):
@@ -591,7 +626,7 @@ func tick(delta: float, target: Vector2) -> void:
 	elif flyer:
 		# 요괴 까마귀 그림은 왼쪽을 본다: 내려찍는 쪽 · 사냥꾼 쪽으로
 		_sprite.flip_h = (_dive_to.x > position.x) if in_air() else (target.x > position.x)
-	if pattern == &"general":
+	if _charger():
 		_sprite.flip_h = (_bus_to.x < _bus_from.x) if (_bus_aim >= 0.0 or _bus_t >= 0.0) else (target.x < position.x)
 	elif (demon or pattern == &"archdemon") and not gazed:
 		# 악귀 · 마왕 그림은 오른쪽을 본다: 사냥꾼 쪽으로 (달아날 땐 반대쪽)
@@ -729,9 +764,9 @@ func _tick_attack(delta: float, target: Vector2) -> bool:
 			_recover = Config.TIGER_ROAR_RECOVER
 			_pattern_cd = Config.TIGER_ROAR_COOLDOWN
 		return true
-	if _bus_t >= 0.0 and pattern == &"general":
-		# 역마 장군 창 돌격: 막힌 칸 앞에서 멈춘다. 다 달리면 사냥꾼 쪽으로 꺾어 다음 돌격, 세 번 뒤 헐떡임.
-		_bus_t = minf(_bus_t + delta / Config.GENERAL_TIME, 1.0)
+	if _bus_t >= 0.0 and _charger():
+		# 역마 장군 창 돌격 · 용 물어뜯기 돌진: 막힌 칸 앞에서 멈춘다. 다 달리면 사냥꾼 쪽으로 꺾어 다음 돌격, 다 하면 헐떡임.
+		_bus_t = minf(_bus_t + delta / (Config.DRAGON_TIME if pattern == &"dragon" else Config.GENERAL_TIME), 1.0)
 		var to := _stand(_bus_from.lerp(_bus_to, _bus_t))
 		var blocked := to == position and _bus_t < 1.0 and _bus_t > 0.2
 		position = to
@@ -742,8 +777,8 @@ func _tick_attack(delta: float, target: Vector2) -> bool:
 			if _charges_left > 0:
 				_aim_general(target)
 			else:
-				_recover = Config.GENERAL_RECOVER
-				_pattern_cd = Config.GENERAL_COOLDOWN
+				_recover = Config.DRAGON_RECOVER if pattern == &"dragon" else Config.GENERAL_RECOVER
+				_pattern_cd = Config.DRAGON_COOLDOWN if pattern == &"dragon" else Config.GENERAL_COOLDOWN
 				_stomped = false
 				_runs += 1
 				if _runs % 2 == 0:
@@ -766,9 +801,13 @@ func _tick_attack(delta: float, target: Vector2) -> bool:
 		for i in range(_bales.size() - 1, -1, -1):
 			_bales[i].t -= delta
 			if _bales[i].t <= 0.0:
+				landing = _bales[i]
 				bale_landed.emit(_bales[i].at)
 				_bales.remove_at(i)
-		if _bales.is_empty() and pattern == &"archdemon":
+		if _bales.is_empty() and pattern == &"dragon":
+			_recover = Config.DRAGON_SPECIAL_RECOVER
+			_pattern_cd = Config.DRAGON_COOLDOWN
+		elif _bales.is_empty() and pattern == &"archdemon":
 			_recover = Config.ARCH_RECOVER
 			_pattern_cd = Config.ARCH_COOLDOWN
 		elif _bales.is_empty():
@@ -856,6 +895,18 @@ func _tick_attack(delta: float, target: Vector2) -> bool:
 					_bales.append({at = at, t = Config.ARCH_PILLAR_WINDUP + i * Config.ARCH_PILLAR_GAP, w = Config.ARCH_PILLAR_WINDUP, r = Config.ARCH_PILLAR_RADIUS, pillar = true})
 			_arch_step += 1
 			return true
+		if pattern == &"dragon" and _pattern_cd <= 0.0 and d <= Config.DRAGON_RANGE:
+			# 물어뜯기 돌진 → 날개 바람 (→ 희귀 용은 자기 기술) 을 돌아가며
+			var step := _dragon_step % (2 if variant == &"" else 3)
+			_dragon_step += 1
+			if step == 0:
+				_charges_left = _dragon_charges()
+				_aim_general(target)
+			elif step == 1:
+				_bales.append({at = position, t = Config.DRAGON_GUST_WINDUP, w = Config.DRAGON_GUST_WINDUP, r = Config.DRAGON_GUST_RADIUS, gust = true})
+			else:
+				_dragon_special(target)
+			return true
 		if pattern == &"tongue" and _pattern_cd <= 0.0 and d <= Config.TONGUE_RANGE:
 			_tongue_to = position + (target - position).normalized() * Config.TONGUE_RANGE
 			_aim = Config.TONGUE_WINDUP
@@ -914,6 +965,30 @@ func _tick_attack(delta: float, target: Vector2) -> bool:
 		_windup = windup_time
 		return true
 	return false
+
+
+## 희귀 용의 자기 기술 (청룡 물기둥 · 운룡 안개 · 황금 드래곤 불 숨결 + 체력 절반부터 금화 비)
+func _dragon_special(target: Vector2) -> void:
+	match variant:
+		&"blue":
+			var n := Config.DRAGON_PILLARS + (2 if enraged() else 0)
+			var turn := randf() * TAU
+			for i in n:
+				var at := target if i == 0 else target + Vector2.from_angle(turn + TAU * i / maxf(n - 1, 1)) * Config.ARCH_PILLAR_SPREAD * Vector2(1.0, 0.7)
+				_bales.append({at = at, t = Config.DRAGON_PILLAR_WINDUP + i * Config.ARCH_PILLAR_GAP, w = Config.DRAGON_PILLAR_WINDUP, r = Config.ARCH_PILLAR_RADIUS, pillar = true, water = true})
+		&"cloud":
+			_dim = Config.DRAGON_FOG_WINDUP
+		&"gold":
+			var dir := (target - position).normalized()
+			if dir == Vector2.ZERO:
+				dir = Vector2.DOWN
+			_log_from = position + dir * 20.0
+			_log_to = (_log_from + dir * Config.LOG_LENGTH).clamp(area.position, area.end)
+			_log_aim = Config.DRAGON_BREATH_WINDUP
+			if enraged():
+				for i in Config.DRAGON_COINS:
+					var at := target + Vector2(randf_range(-1, 1), randf_range(-0.7, 0.7)) * Config.ARCH_PILLAR_SPREAD * 1.4
+					_bales.append({at = at.clamp(area.position, area.end), t = Config.DRAGON_BREATH_WINDUP + 0.6 + i * 0.25, w = 1.0, r = Config.STRAW_RADIUS, coin = true})
 
 
 ## 까마귀 한 틱: 땅에서 쪼기 → 날아올라 맴돌기 → 그림자 원 예고 → 내려꽂기 → 다시 쪼기.
@@ -1033,7 +1108,12 @@ func _draw() -> void:
 		draw_line(Vector2(0, -4), tip, Color(0.95, 0.45, 0.55), 3.0 / scale.x)
 		draw_circle(tip, 3.0 / scale.x, Color(0.95, 0.45, 0.55))
 	# 굴러가는 통나무 (임시 그림: 갈색 통나무 + 나이테 끝)
-	if _log_t >= 0.0:
+	if _log_t >= 0.0 and variant == &"gold":
+		# 황금 드래곤 불 숨결: 굴러가는 불덩이
+		var fat := (log_at() - position) / scale.x
+		draw_circle(fat, 13.0 / scale.x, Color(1.0, 0.45, 0.1, 0.8))
+		draw_circle(fat, 7.0 / scale.x, Color(1.0, 0.85, 0.4))
+	elif _log_t >= 0.0:
 		var at := (log_at() - position) / scale.x
 		var dir := (_log_to - _log_from).normalized()
 		var side := dir.orthogonal() * 11.0 / scale.x

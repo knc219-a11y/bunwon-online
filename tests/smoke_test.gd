@@ -2606,6 +2606,9 @@ func _ready() -> void:
 	# 49) 시설 4 나루터 (2026-10-02 사용자 선택 A 나루터 + B 통발): 팔당호 물가 · 뱃사공 · 통발 · 물고기 몰기 · 매운탕
 	await _naru_checks()
 
+	# 50) 5막 (2026-10-03 사용자: 9구역 귀여리 · 10구역 소내섬 와이번 + 일반 용, 드물게 희귀 용 셋)
+	await _sonae_checks()
+
 	# 41) 저장/불러오기 (2026-09-30 사용자 선택 C 디아2식): 저장 → 장면을 버리고 → 새 장면에 불러오면 모든 상태가 같다
 	await _save_load_checks()
 
@@ -3607,4 +3610,182 @@ func _naru_checks() -> void:
 	TestStarts.apply(b, &"naru")
 	_check(GameState.naru_state == 2 and b.ferryman.visible and GameState.fish == 4 and b.creatures.any(func(c: Creature) -> bool: return c.job == CreatureJobs.FISH), "시작 지점 나루터 복구 뒤: 뱃사공 · 물고기 4 · 물고기 몰기 크리처")
 	b.queue_free()
+	await get_tree().process_frame
+
+
+func _sonae_checks() -> void:
+	var m: Node2D = load("res://scenes/main.tscn").instantiate()
+	add_child(m)
+	await get_tree().process_frame
+	var gi := 8
+	var zi := 9
+	var z: Dictionary = Config.HUNT_ZONES[zi]
+	_check(Config.HUNT_ZONES[gi].name == "귀여리" and Config.HUNT_ZONES[gi].get("from_village", false) and Config.ZONE_MONSTER_LEVEL[gi] == 24, "9구역 귀여리: 마을 입구 웨이포인트로 감 · 몬스터 Lv 24")
+	_check(z.name == "소내섬" and z.flyer and z.ferry and z.final and z.boss_pattern == &"dragon" and z.boss_monster == "용" and z.variants.size() == 3 and Config.ZONE_MONSTER_LEVEL[zi] == 27, "10구역 소내섬: 와이번 (날기) · 용 · 희귀 용 셋 · 몬스터 Lv 27")
+	_check(Config.ferry_zone() == zi, "나룻배로만 가는 섬 = 소내섬")
+	var smap := HuntMap.load_map("sonae")
+	_check(not smap.find("K").is_empty() and not smap.find("E").is_empty() and smap.find("N").is_empty(), "소내섬 칸 지도: 용소 대장 자리 · 아래 나루 (위쪽 길 없음)")
+	_check(HuntMap.load_map("guiyeo").find("N").is_empty(), "귀여리 칸 지도: 위쪽 길 없음 (섬은 나룻배로)")
+	# 곤지암 마왕을 잡으면 위쪽 길 대신 마을 입구 귀여리 웨이포인트
+	TestStarts.apply(m, &"gonjiam")
+	GameState.hunts_today = 0
+	m.enter_hunt(null, 7)
+	var gh: HuntGround = m.hunt
+	gh.set_ai(false)
+	gh.set_process(false)
+	for o: WildSlime in gh.slimes.duplicate():
+		o.queue_free()
+	gh.slimes.clear()
+	var arch: WildSlime = gh.spawn_boss()
+	gh._defeat(arch)
+	_check(gi in GameState.waypoints and not gh.path_open, "곤지암 마왕 처치: 귀여리 웨이포인트 (위쪽 길은 안 열림)")
+	m.leave_hunt()
+	m.queue_free()
+	await get_tree().process_frame
+	m = load("res://scenes/main.tscn").instantiate()
+	add_child(m)
+	await get_tree().process_frame
+	# 나룻배: 귀여리 대장을 잡기 전엔 못 감
+	GameState.reset()
+	TestStarts.apply(m, &"guiyeo")
+	_check(m.waypoint_options().has(&"zone_8") and not m.waypoint_options().has(&"zone_9"), "시작 지점 귀여리 앞: 입구에 귀여리 (섬은 입구 목록에 없음)")
+	m._set_active(m.hunter)
+	m._pending_zone = 0
+	GameState.hunts_today = 0
+	m._ferry_interact()
+	_check(m._pending_zone == 0 and m.hunt == null, "귀여리 대장 전엔 나룻배를 못 띄움")
+	m.queue_free()
+	await get_tree().process_frame
+	m = load("res://scenes/main.tscn").instantiate()
+	add_child(m)
+	await get_tree().process_frame
+	GameState.reset()
+	TestStarts.apply(m, &"sonae")
+	_check(gi in GameState.bosses_beaten and not zi in GameState.bosses_beaten and GameState.naru_state == 2, "시작 지점 소내섬 앞: 귀여리 대장 처치 · 나루터")
+	_check(not m.waypoint_options().has(&"zone_9"), "섬은 사냥터 입구 웨이포인트 목록에 없음")
+	m._set_active(m.hunter)
+	GameState.hunts_today = 0
+	m._ferry_interact()
+	if m.hunt == null:
+		m.enter_hunt(null, m._pending_zone)
+	var h: HuntGround = m.hunt
+	_check(h != null and h.zone == zi and zi in GameState.waypoints, "나루터에서 사냥꾼 F → 나룻배로 소내섬")
+	h.set_ai(false)
+	h.set_process(false)
+	h.companion_ai = false
+	_check(h.slimes.all(func(o: WildSlime) -> bool: return o.flyer and o.title == "독꼬리 와이번"), "독꼬리 와이번은 날아다님")
+	for o: WildSlime in h.slimes.duplicate():
+		o.queue_free()
+	h.slimes.clear()
+	# 처음 만나는 대장은 늘 일반 용
+	HuntGround.force_variant = &""
+	var b: WildSlime = h.spawn_boss()
+	_check(b.title == "용" and b.variant == &"" and b._frame == 96 and is_equal_approx(b._sprite.scale.x * b.scale.x, 1.0), "처음 만나는 마지막 대장은 일반 용 (96칸 시트를 늘이지 않고)")
+	var rare := 0
+	for i in 2000:
+		if not h._roll_variant(z).is_empty():
+			rare += 1
+	_check(rare == 0, "한 번도 안 잡았으면 희귀 용은 안 나옴")
+	GameState.bosses_beaten.append(zi)
+	h.loot_rng.seed = 11
+	var seen := {}
+	rare = 0
+	for i in 2000:
+		var v := h._roll_variant(z)
+		if not v.is_empty():
+			rare += 1
+			seen[v.id] = true
+	_check(rare > 200 and rare < 400 and seen.size() == 3, "잡은 뒤엔 희귀 용 셋이 드물게 (2000번에 %d, 기대 300)" % rare)
+	# 일반 용: 물어뜯기 돌진 → 날개 바람
+	m.hunter.position = Vector2(25, 16) * Config.TILE
+	var feet: Vector2 = m.hunter.feet()
+	b.position = feet + Vector2(150, 0)
+	b.ai_enabled = true
+	b._pattern_cd = 0.0
+	b.tick(1.0 / 30.0, feet)
+	_check(b._charges_left == Config.DRAGON_CHARGES, "용: 물어뜯기 돌진 %d번" % Config.DRAGON_CHARGES)
+	h._invulnerable = 0.0
+	h.life = 400
+	var life0 := h.life
+	for i in 120:
+		h.tick(1.0 / 30.0)
+		if h.life < life0:
+			break
+	_check(h.life < life0, "돌진에 물어뜯기면 체력이 깎임")
+	b._charges_left = 0
+	b._bus_t = -1.0
+	b._bus_aim = -1.0
+	b._recover = 0.0
+	b._pattern_cd = 0.0
+	b._bales.clear()
+	b._dragon_step = 1
+	b.position = feet + Vector2(40, 0)
+	b.tick(1.0 / 30.0, feet)
+	_check(b.telegraphs().any(func(t: Dictionary) -> bool: return t.get("gust", false)), "다음 차례: 날개 바람 (둘레 원)")
+	h._invulnerable = 0.0
+	life0 = h.life
+	var at0: Vector2 = m.hunter.feet()
+	for i in 60:
+		h.tick(1.0 / 30.0)
+		if h.life < life0:
+			break
+	_check(h.life < life0 and m.hunter.feet().distance_to(b.position) > at0.distance_to(b.position), "날개 바람에 맞으면 다치고 밀려남")
+	for o: WildSlime in h.slimes.duplicate():
+		o.queue_free()
+	h.slimes.clear()
+	# 희귀 용 셋: 자기 기술
+	var expect := {&"blue": "팔당 청룡", &"cloud": "운룡", &"gold": "황금 드래곤"}
+	for id: StringName in expect:
+		HuntGround.force_variant = id
+		var r: WildSlime = h.spawn_boss()
+		r.position = feet + Vector2(150, 0)
+		r.ai_enabled = true
+		r._pattern_cd = 0.0
+		r._dragon_step = 2
+		r.tick(1.0 / 30.0, feet)
+		var ok := false
+		match id:
+			&"blue":
+				ok = r.telegraphs().filter(func(t: Dictionary) -> bool: return t.get("water", false)).size() == Config.DRAGON_PILLARS
+			&"cloud":
+				ok = r._dim > 0.0
+			&"gold":
+				ok = r._log_aim > 0.0
+		_check(r.title == expect[id] and r.variant == id and r._frame == 96 and ok, "희귀 용 %s: 자기 기술" % expect[id])
+		r.queue_free()
+		h.slimes.erase(r)
+	# 희귀 용은 자기 아기 알, 마지막 대장 처치 기록
+	HuntGround.force_variant = &"blue"
+	HuntGround.egg_roll = 0.0
+	var blue: WildSlime = h.spawn_boss()
+	h._defeat(blue)
+	_check(h.drops.any(func(d: Dictionary) -> bool: return d.species == CreatureCatalog.BLUE_DRAGON) and GameState.final_boss_down, "팔당 청룡은 아기 청룡 알을 남김 · 마지막 대장 처치 기록")
+	HuntGround.egg_roll = -1.0
+	HuntGround.force_variant = &""
+	m.leave_hunt()
+	# 아기 크리처 넷
+	var bd: Creature = m._hatch(CreatureCatalog.BLUE_DRAGON, Config.FORAGE_CELLS[5])
+	_check(bd.data.species.display_name == "아기 청룡" and bd.data.elements[0].id == &"water" and bd.data.species.rains, "아기 청룡 (물, 비 내리기)")
+	var farm: Farm = m.farm
+	for cell: Vector2i in farm._cells:
+		var c: Farm.Cell = farm.get_cell(cell)
+		if c.planted and not c.is_ripe():
+			c.watered = false
+	bd.job = CreatureJobs.FARM
+	var dry := 0
+	for cell: Vector2i in farm._cells:
+		var c: Farm.Cell = farm.get_cell(cell)
+		if c.planted and not c.is_ripe() and not c.watered:
+			dry += 1
+	_check(dry > 0 and m.rain_on_farm() == dry, "비 내리기: 아침에 심은 칸 전부 물 (%d칸)" % dry)
+	bd.job = CreatureJobs.REST
+	_check(m.rain_on_farm() == 0, "쉬는 아기 청룡은 비를 안 부름")
+	var wy: Creature = m._hatch(CreatureCatalog.WYVERN, Config.FORAGE_CELLS[4])
+	_check(wy.data.species.courier and Expedition.fit(wy.data, 0) == Config.EXPEDITION_HOME_MULT, "아기 와이번: 하늘 배달 = 어느 원정이든 제 구역처럼")
+	var cd: Creature = m._hatch(CreatureCatalog.CLOUD_DRAGON, Config.FORAGE_CELLS[3])
+	var gd: Creature = m._hatch(CreatureCatalog.GOLD_DRAGON, Config.FORAGE_CELLS[2])
+	_check(cd.data.species.display_name == "아기 운룡" and gd.data.species.display_name == "아기 황금 드래곤" and gd.data.species.daily_gold.y > 0, "아기 운룡 · 아기 황금 드래곤")
+	# 저장: 마지막 대장 처치
+	_check(SaveGame.snapshot(m).gs.get("final_boss_down", false), "마지막 대장 처치 기록도 저장됨")
+	m.queue_free()
 	await get_tree().process_frame

@@ -100,6 +100,8 @@ var naru_state := 0
 var naru_boss_down := false
 ## 4막 대장 재료
 var material4 := 0
+## 5막 대장 (소내섬, 마지막 대장) 을 쓰러뜨린 적이 있는지 (2026-10-03). 잔치 엔딩 · 시설 5 는 다음 주제.
+var final_boss_down := false
 ## 통발: 지금 물에 놓은 수 · 나루터 바구니의 물고기 · 꺼내 든 물고기 · 공급함에 진열한 물고기 · 뱃사공 매운탕
 var traps := 0
 var basket := 0
@@ -220,6 +222,7 @@ func reset() -> void:
 	naru_state = 0
 	naru_boss_down = false
 	material4 = 0
+	final_boss_down = false
 	traps = 0
 	basket = 0
 	fish = 0

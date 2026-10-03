@@ -19,6 +19,8 @@ signal knocked_out
 static var loot_enabled := true
 ## 0 이상이면 알 확률 굴림 대신 이 값을 쓴다 (0 = 늘 나옴, 1 = 안 나옴). 테스트에서 쓴다.
 static var egg_roll := -1.0
+## 테스트용: 소내섬 희귀 용을 정해서 부른다 (&"blue" · &"cloud" · &"gold", &"" = 확률대로)
+static var force_variant: StringName = &""
 ## 사냥 손맛 (2026-10-02 사용자: "요즘 로그라이크 액션게임처럼 좀 스피드하고 더 몰아잡는 느낌", "하데스2같은 느낌").
 ## feel = 구르기 · 꾹 눌러 연속 베기 · 3타 · 타격 멈춤 · 덜 밀려남, swarm = 몬스터 자리마다 떼 (체력 낮고 드롭 몫 나눔) · 한꺼번에 달려드는 수 제한.
 ## 후보 비교 화면을 찍을 때 끄고 켠다.
@@ -572,6 +574,16 @@ func road_dark() -> bool:
 ## 역마 다루는 법을 알려 주고 길을 연다 (대장간 → 광동리, 약방 → 번천 처럼 시설 하나가 다음 막을 연다).
 func gate_closed() -> bool:
 	return zone == Config.BARN_ZONE and GameState.barn_state < 2
+
+
+## 다음 구역이 위쪽 길이 아니라 마을 사냥터 입구에서 가는 구역인지 (5막 귀여리)
+func next_from_village() -> bool:
+	return zone + 1 < Config.HUNT_ZONES.size() and Config.HUNT_ZONES[zone + 1].get("from_village", false)
+
+
+## 다음 구역이 나루터 나룻배로만 가는 섬인지 (5막 소내섬)
+func next_by_ferry() -> bool:
+	return zone + 1 < Config.HUNT_ZONES.size() and Config.HUNT_ZONES[zone + 1].get("ferry", false)
 
 
 ## 위쪽 길이 막혔으면 그 까닭 (비었으면 안 막힘)
@@ -1252,6 +1264,15 @@ func _defeat(s: WildSlime) -> void:
 		GameState.notify("%s을(를) 쓰러뜨렸다! 위쪽 길 너머 %d구역 %s 쪽은 캄캄하다. 약방을 고치면 연금술사가 호롱을 만들어 줄 것 같다.%s" % [who, zone + 2, Config.HUNT_ZONES[zone + 1].name, material_text])
 	elif s.boss and gate_closed():
 		GameState.notify("%s을(를) 쓰러뜨렸다! 위쪽 길 너머 %d구역 %s 쪽 목책이 닫혀 있다. 축사를 고치면 목축인이 열어 줄 것 같다.%s" % [who, zone + 2, Config.HUNT_ZONES[zone + 1].name, material_text])
+	elif s.boss and next_from_village():
+		# 5막 귀여리 (2026-10-03): 이야기가 마을로 돌아온다. 위쪽 길 대신 마을 사냥터 입구 웨이포인트가 켜진다.
+		if not zone + 1 in GameState.waypoints:
+			GameState.waypoints.append(zone + 1)
+		GameState.notify("%s을(를) 쓰러뜨렸다! 마을 쪽 팔당호 물가에서 낯선 북소리가 들려온다. 마을로 돌아가 사냥터 입구에서 %d구역 %s 웨이포인트를 고르자.%s" % [who, zone + 2, Config.HUNT_ZONES[zone + 1].name, material_text])
+	elif s.boss and next_by_ferry():
+		GameState.notify("%s을(를) 쓰러뜨렸다! 호수 한가운데 %s 위로 먹구름이 감돈다. %s%s" % [who, Config.HUNT_ZONES[zone + 1].name, "나루터 뱃사공에게 가면 나룻배로 건너갈 수 있다." if GameState.naru_state >= 2 else "나루터를 고치면 뱃사공이 나룻배로 건네줄 것 같다.", material_text])
+	elif s.boss and z.get("final", false):
+		GameState.notify("%s을(를) 쓰러뜨렸다! 팔당호 위 먹구름이 걷히고 분원리 쪽 하늘이 맑아졌다. 아래 나루에서 F로 마을로 돌아가자.%s" % [who, material_text])
 	elif s.boss and zone + 1 < Config.HUNT_ZONES.size():
 		GameState.notify("%s을(를) 쓰러뜨렸다! 위쪽 길이 열렸다. 길에서 F로 %d구역 %s, 아래 입구 F로 마을.%s" % [who, zone + 2, Config.HUNT_ZONES[zone + 1].name, material_text])
 	elif s.boss:
@@ -1263,7 +1284,14 @@ func _defeat(s: WildSlime) -> void:
 	else:
 		GameState.notify("%s을(를) 쓰러뜨렸다. 남은 %d마리." % [s.title, slimes.size()])
 	var boss_egg: String = z.get("boss_egg", "")
-	if last_boss and boss_egg != "" and _egg_roll() < z.get("boss_egg_chance", 0.0):
+	var boss_egg_chance: float = z.get("boss_egg_chance", 0.0)
+	if s.boss and s.variant != &"":
+		# 희귀 용은 자기 아기 알을 남긴다 (아기 청룡 · 아기 운룡 · 아기 황금 드래곤)
+		for v in z.get("variants", []):
+			if v.id == s.variant:
+				boss_egg = v.egg
+				boss_egg_chance = v.egg_chance
+	if last_boss and boss_egg != "" and _egg_roll() < boss_egg_chance:
 		# 대장은 가끔 알을 남긴다 (금사리 금두꺼비 → 아기 금두꺼비 알, 2026-09-29 반드시 → 확률로 낮춤)
 		var sp: CreatureSpecies = load(boss_egg)
 		if sp == CreatureCatalog.TIGER and _egg_roll() < Config.WHITE_TIGER_CHANCE:
@@ -1274,8 +1302,10 @@ func _defeat(s: WildSlime) -> void:
 		GameState.notify("%s이(가) 알을 남겼다! 부화하면 %s." % [s.title, sp.display_name])
 	if last_boss and not zone in GameState.bosses_beaten:
 		GameState.bosses_beaten.append(zone)
-	if last_boss and zone + 1 < Config.HUNT_ZONES.size():
+	if last_boss and zone + 1 < Config.HUNT_ZONES.size() and not next_from_village() and not next_by_ferry():
 		path_open = true
+	if last_boss and z.get("final", false):
+		GameState.final_boss_down = true
 		_ground.queue_redraw()
 	if loot_enabled:
 		var d := HuntLoot.roll_for_boss(loot_rng, zone) if s.boss else HuntLoot.roll_for_kill(loot_rng, zone, s.share)
@@ -1307,6 +1337,10 @@ func _give_xp(base: int) -> void:
 func boss_waiting_text() -> String:
 	var z: Dictionary = Config.HUNT_ZONES[zone]
 	var who := "%s과(와) %s" % [z.boss_monster, z.partner.name] if z.has("partner") else String(z.boss_monster)
+	for s in slimes:
+		if s.boss and s.variant != &"":
+			# 희귀 용 (소내섬): 오늘 나온 용 이름으로
+			return "용소의 물빛이 이상하다... 오늘은 %s이(가) 기다리고 있다!" % s.title
 	return "전에 쓰러뜨린 %s이(가) 벌써 기다리고 있다!" % who
 
 
@@ -1318,12 +1352,36 @@ func spawn_boss() -> WildSlime:
 	boss_spawned = true
 	var z: Dictionary = Config.HUNT_ZONES[zone]
 	var b := _new_boss(boss_at() + (Vector2(-30, 0) if z.has("partner") else Vector2.ZERO))
+	var v := _roll_variant(z)
+	if not v.is_empty():
+		b.make_variant(v)
+		GameState.notify("용소의 물빛이 이상하다... 오늘은 %s이(가) 나타났다!" % v.name)
 	if z.has("partner"):
 		# 짝 대장 (도마리 천하대장군 · 지하여장군): 둘이 나란히 서 있고, 둘 다 쓰러뜨려야 구역을 깬다
 		var p := _new_boss(boss_at() + Vector2(30, 0))
 		p.make_partner(zone)
 		GameState.notify("%s과(와) %s이(가) 눈을 부릅떴다!" % [b.title, p.title])
 	return b
+
+
+## 소내섬 희귀 용 (2026-10-03 사용자: "마지막은 기본이 일반용이고 희귀한 확률로 세가지 용이 우연하게나오는 구조로가자").
+## 처음 만나는 대장은 늘 일반 용, 한 번 잡은 뒤엔 하나씩 DRAGON_RARE_CHANCE. 없으면 빈 사전.
+func _roll_variant(z: Dictionary) -> Dictionary:
+	var vs: Array = z.get("variants", [])
+	if vs.is_empty():
+		return {}
+	if force_variant != &"":
+		for v in vs:
+			if v.id == force_variant:
+				return v
+		return {}
+	if not zone in GameState.bosses_beaten:
+		return {}
+	var r := loot_rng.randf()
+	for i in vs.size():
+		if r < Config.DRAGON_RARE_CHANCE * (i + 1):
+			return vs[i]
+	return {}
 
 
 func _new_boss(at: Vector2) -> WildSlime:
@@ -1435,6 +1493,13 @@ func _on_dimmed(_at: Vector2, boss: WildSlime) -> void:
 	if back == Vector2.ZERO:
 		back = Vector2.DOWN
 	var minions := slimes.filter(func(o: WildSlime) -> bool: return o.minion).size()
+	if boss.pattern == &"dragon":
+		# 운룡 안개 (2026-10-03): 흰 안개 + 등 뒤 하늘에서 와이번
+		for i in mini(Config.DRAGON_CALL, Config.SLAM_MINION_MAX - minions):
+			_add_called_flyer(feet + back * 70.0 + back.orthogonal() * (-36.0 if i == 0 else 36.0), "안개 속 ", Config.DRAGON_MINION_HP)
+		GameState.notify("%s이(가) 섬을 안개로 덮었다! 여의주 빛만 보인다. 등 뒤에서 날갯짓 소리가 난다." % boss.title)
+		GameState.touch()
+		return
 	for i in mini(Config.ARCH_CALL, Config.SLAM_MINION_MAX - minions):
 		var m := WildSlime.new()
 		m.setup_zone(zone)
@@ -1461,19 +1526,28 @@ func _draw_dark() -> void:
 		return
 	var a := clampf(blackout_t / 0.25, 0.0, 1.0) * 0.86
 	var at := hunter.feet() + Vector2(0, -10)
+	# 운룡 안개는 희게 (마왕 정전은 검게)
+	var b := _boss()
+	var fog := b != null and b.variant == &"cloud"
+	var col := Color(0.88, 0.9, 0.96) if fog else Color(0.03, 0.02, 0.06)
 	_dark.draw_set_transform(at, 0.0, Vector2(1.0, 0.8))
-	_dark.draw_arc(Vector2.ZERO, Config.ARCH_DARK_RADIUS + 600.0, 0, TAU, 96, Color(0.03, 0.02, 0.06, a), 1200.0)
-	_dark.draw_arc(Vector2.ZERO, Config.ARCH_DARK_RADIUS + 6.0, 0, TAU, 64, Color(0.03, 0.02, 0.06, a * 0.5), 12.0)
+	_dark.draw_arc(Vector2.ZERO, Config.ARCH_DARK_RADIUS + 600.0, 0, TAU, 96, Color(col, a), 1200.0)
+	_dark.draw_arc(Vector2.ZERO, Config.ARCH_DARK_RADIUS + 6.0, 0, TAU, 64, Color(col, a * 0.5), 12.0)
 	_dark.draw_set_transform(Vector2.ZERO)
+	if fog:
+		# 안개 속 여의주 빛 (용 자리)
+		var orb := b.position + Vector2(0, -40)
+		_dark.draw_circle(orb, 12.0, Color(1, 1, 0.85, 0.5))
+		_dark.draw_circle(orb, 5.0, Color(0.85, 1, 1, 0.95))
 
 
 ## 유령 막차가 달린다: 버스에 닿으면 다친다 (다친 뒤 잠깐 무적이라 한 번만).
 func _on_rammed(at: Vector2, boss: WildSlime) -> void:
 	var feet := hunter.feet()
-	if boss.pattern == &"general":
-		# 역마 장군 창 돌격: 몸 둘레에 닿으면 받힌다
-		if _invulnerable <= 0.0 and not knocked and feet.distance_to(at) <= Config.GENERAL_HIT_RADIUS + 4.0:
-			_hurt(at, boss.damage, boss.title, "%s의 창 돌격에 받혔다!" % boss.title)
+	if boss.pattern == &"general" or boss.pattern == &"dragon":
+		# 역마 장군 창 돌격 · 용 물어뜯기 돌진: 몸 둘레에 닿으면 받힌다
+		if _invulnerable <= 0.0 and not knocked and feet.distance_to(at) <= boss._charge_radius() + 4.0:
+			_hurt(at, boss.damage, boss.title, ("%s의 창 돌격에 받혔다!" if boss.pattern == &"general" else "%s에게 물어뜯겼다!") % boss.title)
 		return
 	var d := feet - at
 	if _invulnerable <= 0.0 and not knocked and absf(d.x) <= 44.0 and absf(d.y) <= Config.BUS_WIDTH / 2.0 + 4.0:
@@ -1483,6 +1557,9 @@ func _on_rammed(at: Vector2, boss: WildSlime) -> void:
 ## 허수아비 장수의 짚단이 떨어졌다: 원 안이면 다친다.
 func _on_bale_landed(at: Vector2) -> void:
 	var boss := _boss()
+	if boss and boss.pattern == &"dragon":
+		_dragon_landed(at, boss)
+		return
 	if boss and boss.pattern == &"archdemon":
 		# 마왕 지옥불 기둥 (곤지암)
 		if _in_circle(at, Config.ARCH_PILLAR_RADIUS) and _invulnerable <= 0.0 and not knocked:
@@ -1492,11 +1569,38 @@ func _on_bale_landed(at: Vector2) -> void:
 		_hurt(at, boss.damage, boss.title, "%s이(가) 던진 짚단에 맞았다!" % boss.title)
 
 
+## 소내섬 용의 날개 바람 · 청룡 물기둥 · 황금 드래곤 금화가 떨어졌다 (boss.landing 이 종류를 안다)
+func _dragon_landed(at: Vector2, boss: WildSlime) -> void:
+	var b: Dictionary = boss.landing
+	if b.get("coin", false):
+		# 금화 비: 맞으면 아프지만, 떨어진 자리에 돈이 남는다
+		if _in_circle(at, b.get("r", Config.STRAW_RADIUS)) and _invulnerable <= 0.0 and not knocked:
+			_hurt(at, boss.damage, boss.title, "%s의 금화 비에 맞았다!" % boss.title)
+		if loot_enabled:
+			loot.append({kind = &"money", amount = loot_rng.randi_range(Config.DRAGON_COIN_MONEY[0], Config.DRAGON_COIN_MONEY[1]), at = _reachable(at)})
+		return
+	if not _in_circle(at, b.get("r", Config.STRAW_RADIUS)) or _invulnerable > 0.0 or knocked:
+		return
+	if b.get("gust", false):
+		_hurt(at, boss.damage, boss.title, "%s의 날개 바람에 휩쓸렸다!" % boss.title)
+		var away := (hunter.feet() - at).normalized()
+		hunter.step((away if away != Vector2.ZERO else Vector2.DOWN) * Config.DRAGON_GUST_PUSH)
+	else:
+		_hurt(at, boss.damage, boss.title, "%s의 물기둥에 휩쓸렸다!" % boss.title)
+
+
 ## 허수아비 장수가 까마귀를 불렀다 (최대 SLAM_MINION_MAX 마리, 알·드롭 없음)
 func _on_called(at: Vector2) -> void:
 	if knocked:
 		return
 	var minions := slimes.filter(func(o: WildSlime) -> bool: return o.minion).size()
+	if Config.HUNT_ZONES[zone].get("boss_pattern") == &"dragon":
+		# 소내섬 용 (2026-10-03): 하늘에서 와이번이 내려온다 (원래 크기, 체력 낮음, 드롭 · 알 없음)
+		for i in mini(Config.DRAGON_CALL, Config.SLAM_MINION_MAX - minions):
+			_add_called_flyer(at + Vector2(-60 if i == 0 else 60, -20), "부름 받은 ", Config.DRAGON_MINION_HP)
+		GameState.notify("%s이(가) 포효하자 하늘에서 와이번이 내려왔다!" % _boss().title if _boss() else "와이번이 내려왔다!")
+		GameState.touch()
+		return
 	if Config.HUNT_ZONES[zone].get("boss_pattern") == &"general":
 		# 역마 장군 파발 나팔 (2026-10-02 역동): 창기병이 원래 크기로 달려온다 (작게 줄이면 도트가 깨짐). 체력은 낮고 드롭 · 알 없음.
 		for i in mini(Config.GENERAL_CALL, Config.SLAM_MINION_MAX - minions):
@@ -1532,6 +1636,27 @@ func _on_called(at: Vector2) -> void:
 		slimes.append(m)
 	GameState.notify("허수아비 장수가 깃발을 흔들자 요괴 까마귀 떼가 몰려왔다!" if Config.HUNT_ZONES[zone].get("boss_pattern") == &"straw" else "막차 문이 열리고 도깨비불 승객이 내렸다!")
 	GameState.touch()
+
+
+## 대장이 부른 나는 몬스터 하나 (소내섬 와이번): 원래 크기, 체력 낮음, 드롭 · 알 없음, 곧바로 날아올라 노린다
+func _add_called_flyer(at: Vector2, prefix: String, hp_units: int) -> WildSlime:
+	var m := WildSlime.new()
+	m.setup_zone(zone)
+	m.minion = true
+	m.title = prefix + m.title
+	m.hp = HunterSkills.minion_hp(zone, hp_units)
+	m.max_hp = m.hp
+	m.area = monster_area()
+	m.terrain = map
+	m.position = at.clamp(m.area.position, m.area.end)
+	m.ai_enabled = _ai_on
+	m.alert = true
+	m.swooped.connect(_on_swooped.bind(m))
+	add_child(m)
+	if m.flyer:
+		m._fly = 0.6
+	slimes.append(m)
+	return m
 
 
 ## 사냥꾼 발이 at 둘레 원(3/4 시점 납작한 원) 안인지
@@ -1681,7 +1806,20 @@ func _draw() -> void:
 				for i in 5:
 					var off := Vector2(cos(i * 1.3) * 10.0, sin(i * 2.1) * 4.0)
 					var h := 6.0 + 18.0 * k * (0.6 + 0.4 * sin(i * 3.7))
-					draw_line(tg.at + off, tg.at + off + Vector2(0, -h), Color(0.4, 1.0, 0.45, 0.35 + 0.5 * k), 3.0)
+					# 청룡 물기둥은 물빛, 마왕 지옥불 기둥은 초록 불
+					var pc := Color(0.5, 0.8, 1.0, 0.35 + 0.5 * k) if tg.get("water", false) else Color(0.4, 1.0, 0.45, 0.35 + 0.5 * k)
+					draw_line(tg.at + off, tg.at + off + Vector2(0, -h), pc, 3.0)
+			if tg.get("coin", false):
+				# 황금 드래곤 금화 비: 떨어질수록 낮아지는 금화
+				var cp: Vector2 = tg.at + Vector2(0, -70.0 * (1.0 - tg.progress))
+				draw_circle(cp, 5.0, Color(0.85, 0.65, 0.2))
+				draw_circle(cp + Vector2(-1, -1), 3.5, Color(1.0, 0.88, 0.45))
+			if tg.get("gust", false):
+				# 용 날개 바람: 원 둘레에 바람 줄
+				for i in 6:
+					var a: float = i * TAU / 6.0 + tg.progress * 2.0
+					var r0: float = tg.radius * (0.4 + 0.5 * tg.progress)
+					draw_line(tg.at + Vector2(cos(a), sin(a) * 0.5) * r0, tg.at + Vector2(cos(a + 0.4), sin(a + 0.4) * 0.5) * r0, Color(0.9, 0.95, 1.0, 0.7), 2.0)
 			if tg.get("bale", false):
 				# 날아오는 짚단: 떨어질수록 낮아진다
 				var p: Vector2 = tg.at + Vector2(0, -60.0 * (1.0 - tg.progress))

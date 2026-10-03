@@ -1,0 +1,29 @@
+[gd_resource type="Resource" script_class="CreatureSpecies" load_steps=7 format=3]
+
+[ext_resource type="Script" path="res://scripts/creatures/creature_species.gd" id="1"]
+[ext_resource type="Resource" path="res://data/creatures/traits/ordinary.tres" id="2"]
+[ext_resource type="Resource" path="res://data/creatures/traits/diligent.tres" id="3"]
+[ext_resource type="Resource" path="res://data/creatures/traits/keen_eye.tres" id="4"]
+[ext_resource type="Resource" path="res://data/creatures/elements/fire.tres" id="5"]
+[ext_resource type="Texture2D" path="res://assets/creatures/baby_gold_dragon.png" id="6"]
+
+[resource]
+script = ExtResource("1")
+id = &"gold_dragon"
+display_name = "아기 황금 드래곤"
+faces = 1
+possible_elements = Array[Resource]([ExtResource("5")])
+job_aptitude = {
+&"scrap": 1.5
+}
+work_speed_range = Vector2(1.1, 1.5)
+radius_range = Vector2i(2, 3)
+traits = Array[Resource]([ExtResource("3"), ExtResource("4")])
+companion_style = &"ember"
+daily_gold = Vector2i(40, 90)
+sprite_sheets = {
+&"fire": ExtResource("6")
+}
+egg_color = Color(0.95, 0.8, 0.35, 1)
+egg_spot_color = Color(0.7, 0.45, 0.15, 1)
+color = Color(0.92, 0.72, 0.3, 1)

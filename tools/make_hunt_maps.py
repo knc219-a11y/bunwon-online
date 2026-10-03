@@ -23,6 +23,8 @@ data/hunt_maps/<이름>.txt 의 칸 지도를 읽어 assets/hunt/<이름>_ground
   역동 (옛 경안역 역참 · 넓은 말 들판 · 마방 · 경안천): 새 글자 없음 (H 창고 = 마방, F 울타리, h 여물 더미)
   곤지암 (폐병원 · 곤지천 · 신립 장군 묘 · 고양이 바위): Q 폐병원 건물 (막힘, 칸 덩어리 하나가 한 동)
      M 신립 장군 묘 (막힘, 봉분 + 비석)   Y 고양이 바위 (막힘, 덩어리 둘 = 천둥에 갈라진 두 쪽, 왼쪽에 고양이 머리)
+  귀여리 (팔당호 물가 마을 · 도마뱀인간 야영지): 새 글자 없음 (위 · 오른쪽 ~ 팔당호, H 옛 집, r 밭, B 갈대 덤불)
+  소내섬 (사방이 팔당호인 섬 · 아래 나루 b · 위 용소 물굽이): 새 글자 없음 (E 는 나루 끝 = 마을로 가는 나룻배)
 
 실행: python3 tools/make_hunt_maps.py [지도.txt ...] [--out 폴더]  (Pillow, numpy 필요)
 """
@@ -37,7 +39,7 @@ ROOT = os.path.join(os.path.dirname(__file__), "..")
 T = 24
 tiles = np.array(Image.open(os.path.join(ROOT, "assets/tiles/farm_tiles.png")).convert("RGB")).astype(float)
 ## 구역 풀빛 (Config.HUNT_ZONES ground_tint 와 같게). 파일 이름 앞부분으로 고른다.
-GRASS_TINTS = {"geumsa": np.array([0.9, 0.86, 0.72]), "nonghyup": np.array([0.82, 0.9, 0.8]), "gwangdong": np.array([0.92, 0.88, 0.74]), "doma": np.array([0.78, 0.86, 0.7]), "bunjeon": np.array([0.6, 0.72, 0.74]), "milmok": np.array([0.62, 0.76, 0.6]), "yeokdong": np.array([0.86, 0.9, 0.7]), "gonjiam": np.array([0.62, 0.66, 0.6])}
+GRASS_TINTS = {"geumsa": np.array([0.9, 0.86, 0.72]), "nonghyup": np.array([0.82, 0.9, 0.8]), "gwangdong": np.array([0.92, 0.88, 0.74]), "doma": np.array([0.78, 0.86, 0.7]), "bunjeon": np.array([0.6, 0.72, 0.74]), "milmok": np.array([0.62, 0.76, 0.6]), "yeokdong": np.array([0.86, 0.9, 0.7]), "gonjiam": np.array([0.62, 0.66, 0.6]), "guiyeo": np.array([0.82, 0.9, 0.74]), "sonae": np.array([0.76, 0.88, 0.76])}
 
 PATH_D = np.array((188, 162, 124)); PATH_DD = np.array((160, 134, 104))
 WET = np.array((176, 150, 116))

@@ -117,6 +117,9 @@ var foals_got := 0
 var plow_bonus := 0
 ## 곤지암 (2026-10-02, 4막 대장 구역): 첫 도착 · 사냥 수 · 잃은 체력 · 쓰러짐, 아기 악귀 알 · 밤일 수
 const GONJIAM := 7
+## 5막 (2026-10-03): 귀여리 (마을 입구) · 소내섬 (나룻배). 둘 다 웨이포인트에서 따로 들어가므로 사냥 한 번 통째로 센다.
+## 구역 번호 → {day 첫 도착, hunts, hurt, knocked, boss 처음 잡은 날, dragons 만난 대장 이름별 수}
+var act5 := {}
 var gj_day := -1
 var gj_hunts := 0
 var gj_hurt := 0
@@ -217,6 +220,12 @@ func _ready() -> void:
 	_log("\n나루터: 터 %s · 복구 %s · 남은 마왕 뿔 %d · 잡은 물고기 %d · 판 물고기 %d · 끓인 매운탕 %d · 먹은 매운탕 %d · 물고기 몰기 %s" % [
 		"%d일" % naru_site_day if naru_site_day > 0 else "없음", "%d일" % naru_restore_day if naru_restore_day > 0 else "없음", GameState.material4,
 		fish_caught, fish_sold, stews_made, stews_eaten, fish_creature.describe() if fish_creature else "없음"])
+	for zi: int in [8, 9]:
+		var a: Dictionary = act5.get(zi, {})
+		_log("\n%s: 첫 도착 %s · 대장 첫 처치 %s · 사냥 %d번 · 잃은 체력 %d (한 번에 %.1f) · 쓰러짐 %d번 · 만난 대장 %s" % [
+			Config.HUNT_ZONES[zi].name, "%d일" % a.day if a.has("day") else "없음", cleared_day.get(Config.HUNT_ZONES[zi].name, "없음"),
+			a.get("hunts", 0), a.get("hurt", 0), float(a.get("hurt", 0)) / maxi(a.get("hunts", 0), 1), a.get("knocked", 0), a.get("dragons", {})])
+	_log("마지막 대장 처치: %s" % ("예" if GameState.final_boss_down else "아니오"))
 	var crowd := []
 	for d in [20, 40, 60, 80, 100]:
 		if crowd_by_day.has(d):
@@ -951,6 +960,10 @@ func hunt_day() -> void:
 		# 동행: 금두꺼비 > 땅 슬라임 > 아무나 (플레이어가 할 법한 선택)
 		if pick == null or s.data.species.id == &"gold_toad" or (s.data.elements[0].id == &"earth" and pick.data.species.id != &"gold_toad"):
 			pick = s
+	# 5막 소내섬 (2026-10-03): 귀여리 대장을 잡고 나루터를 고쳤으면 사냥꾼이 나루터 나룻배로 섬에 간다 (main._ferry_interact 와 같은 조건)
+	var fz := Config.ferry_zone()
+	if fz >= 0 and not fz in GameState.waypoints and fz - 1 in GameState.bosses_beaten and GameState.naru_state >= 2:
+		GameState.waypoints.append(fz)
 	var zone: int = GameState.waypoints.max()
 	# ZONE (2026-10-02 3~4막 난이도): 이 구역 웨이포인트에서만 사냥 (역동처럼 봇이 지나쳐 버리는 구역을 재려고)
 	if OS.get_environment("ZONE") != "" and int(OS.get_environment("ZONE")) in GameState.waypoints:
@@ -1008,6 +1021,7 @@ func hunt_day() -> void:
 	var ignored := {}
 	var stuck_s: WildSlime = null
 	var stuck_hp := 0
+	var boss_names: Array[String] = []
 	var stuck_s_t := 0.0
 	var money0 := GameState.money
 	var potions0 := GameState.potions
@@ -1048,6 +1062,9 @@ func hunt_day() -> void:
 			yd_hunts += 1
 			if yd_day < 0:
 				yd_day = GameState.day
+		var b0 := h._boss()
+		if b0 and not b0.title in boss_names:
+			boss_names.append(b0.title)
 		if h.zone == GONJIAM and gj_hurt0 < 0:
 			gj_hurt0 = hurt
 			gj_hunts += 1
@@ -1183,6 +1200,8 @@ func hunt_day() -> void:
 			h.advance()
 			zones_seen.append(Config.HUNT_ZONES[h.zone].name)
 			continue
+		if OS.get_environment("DEBUG_STUCK") != "" and fmod(t, 20.0) < DT:
+			_log("  @ %.0f초 칸 %s goal %s target %s 대상 %s %s air %s" % [t, hunter.cell(), goal, Vector2i(target / Config.TILE), nearest_s.title if nearest_s else "-", Vector2i(nearest_s.position / Config.TILE) if nearest_s else Vector2i.ZERO, nearest_s.airborne() if nearest_s else false])
 		if goal == &"exit" and h.near_exit():
 			break
 		# 주운 무기를 빈 칸이라 바로 들었으면 즐겨 드는 종류로 바꾼다
@@ -1277,6 +1296,14 @@ func hunt_day() -> void:
 		gj_knocked += int(knocked and h.zone == GONJIAM)
 	if h.boss_spawned and h._boss() == null:
 		_cleared(h.zone)
+	if h.zone >= 8:
+		var a: Dictionary = act5.get(h.zone, {day = GameState.day, hunts = 0, hurt = 0, knocked = 0, dragons = {}})
+		a.hunts += 1
+		a.hurt += hurt
+		a.knocked += int(knocked)
+		for nm: String in boss_names:
+			a.dragons[nm] = a.dragons.get(nm, 0) + 1
+		act5[h.zone] = a
 	var comp := h.companion.display_name() if h.companion else "혼자"
 	var picked := h.picked.size()
 	if main.hunt:
