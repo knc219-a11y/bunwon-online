@@ -494,6 +494,8 @@ func interact() -> void:
 		_yak_interact()
 	elif barn and _near(barn) and _carried_creature() == null and active != hunter:
 		_barn_interact()
+	elif naru and _near(naru) and _carried_creature() == null and active == hunter and GameState.naru_state >= 2:
+		_ferry_interact()
 	elif naru and _near(naru) and _carried_creature() == null and active != hunter:
 		open_menu(&"naru" if GameState.naru_state == 1 else &"dock")
 	elif scrap_heap and _near(scrap_heap) and _carried_creature() == null and active != hunter:
@@ -608,7 +610,7 @@ func _gate_menus() -> void:
 		# 오늘 사냥을 마쳤으면 입구에서 할 일은 직업 · 초기화뿐
 		GameState.notify("오늘은 이미 사냥을 다녀왔다. 내일 다시 가자.")
 		open_menu(&"respec")
-	elif GameState.waypoints.size() > 1:
+	elif GameState.waypoints.filter(func(z: int) -> bool: return not Config.HUNT_ZONES[z].get("ferry", false)).size() > 1:
 		open_menu(&"waypoint")
 	else:
 		_open_companion_or_enter()
@@ -620,6 +622,23 @@ func _open_companion_or_enter() -> void:
 		open_menu(&"companion")
 	else:
 		enter_hunt(null, _pending_zone)
+
+## 나룻배 (2026-10-03 5막): 고친 나루터에서 사냥꾼 F → 뱃사공이 팔당호 섬 (소내섬) 으로 건네준다.
+## 섬 앞 구역 (귀여리) 대장을 잡아야 물길이 열린다. 하루 사냥 한 번으로 친다. 섬은 사냥터 입구 웨이포인트 목록에 없다.
+func _ferry_interact() -> void:
+	var fz := Config.ferry_zone()
+	if fz < 0:
+		GameState.notify("나룻배가 매여 있다. 뱃사공: \"섬 쪽 물길은 아직 모르오.\"")
+	elif not fz - 1 in GameState.bosses_beaten:
+		GameState.notify("뱃사공: \"%s 쪽에 먹구름이 끼어 배를 못 띄우오. %s 물가의 %s부터 어떻게 해 보시오.\"" % [Config.HUNT_ZONES[fz].name, Config.HUNT_ZONES[fz - 1].name, Config.HUNT_ZONES[fz - 1].boss_monster])
+	elif GameState.hunts_today >= Config.HUNTS_PER_DAY:
+		GameState.notify("오늘은 이미 사냥을 다녀왔다. 내일 나룻배를 타자.")
+	else:
+		if not fz in GameState.waypoints:
+			GameState.waypoints.append(fz)
+		_pending_zone = fz
+		_open_companion_or_enter()
+
 
 ## 사냥에 데려갈 수 있는 크리처 (농장에 나와 있고 들려 있지 않은 크리처)
 func companion_candidates() -> Array[Creature]:
@@ -692,9 +711,14 @@ func enter_hunt(companion: Creature = null, zone := 0) -> bool:
 				best.process_mode = Node.PROCESS_MODE_DISABLED
 				var c2 := hunt.add_companion(best)
 				drank_text += " %s도 함께 왔다 (둘이 함께)." % c2.display_name()
+		if Config.HUNT_ZONES[zone].get("ferry", false):
+			GameState.notify("뱃사공의 나룻배를 타고 %s과(와) %s에 건너왔다. 아래 나루에서 F로 마을로 돌아간다.%s" % [c.display_name(), Config.HUNT_ZONES[zone].name, drank_text])
+			return true
 		GameState.notify("%s과(와) 사냥터에 들어왔다. 클릭(꾹 누르면 연속 베기)으로 싸우고 Space로 구른다. %s도 알아서 돕는다!%s" % [c.display_name(), c.display_name(), drank_text])
 		return true
-	if zone > 0:
+	if Config.HUNT_ZONES[zone].get("ferry", false):
+		GameState.notify("뱃사공의 나룻배를 타고 %s에 건너왔다. 아래 나루에서 F로 마을로 돌아간다." % Config.HUNT_ZONES[zone].name)
+	elif zone > 0:
 		GameState.notify("%s 웨이포인트에서 사냥을 시작했다. 클릭(꾹 누르면 연속 베기) · Space 구르기!" % Config.HUNT_ZONES[zone].name)
 	else:
 		GameState.notify("사냥터에 들어왔다. 클릭(꾹 누르면 연속 베기)으로 휘두르고 Space로 구른다. 야생 슬라임을 쓰러뜨리자!")
@@ -1813,6 +1837,16 @@ func can_restore_naru() -> bool:
 	return GameState.naru_state == 1 and naru_costs().all(func(c: Array) -> bool: return c[1] >= c[2])
 
 
+## 나루터 창 아래 나룻배 줄 (5막 섬 뱃길)
+func ferry_line() -> String:
+	var fz := Config.ferry_zone()
+	if fz < 0:
+		return "나룻배: 팔당호 섬 뱃길 (아직 물길을 모른다)"
+	if not fz - 1 in GameState.bosses_beaten:
+		return "나룻배: %s 쪽은 먹구름 (%s 대장을 잡으면 열림)" % [Config.HUNT_ZONES[fz].name, Config.HUNT_ZONES[fz - 1].name]
+	return "나룻배: 사냥꾼이 나루터에서 F → %d구역 %s (Lv %d)" % [fz + 1, Config.HUNT_ZONES[fz].name, HunterSkills.monster_level(fz)]
+
+
 func naru_cost_lines() -> Array[String]:
 	var out: Array[String] = []
 	for c: Array in naru_costs():
@@ -2017,7 +2051,9 @@ func companion_option_text(id: StringName) -> String:
 func waypoint_options() -> Array[StringName]:
 	var options: Array[StringName] = []
 	for z in GameState.waypoints:
-		options.append(StringName("zone_%d" % z))
+		# 나룻배로만 가는 섬 (소내섬) 은 입구 목록에 없다
+		if not Config.HUNT_ZONES[z].get("ferry", false):
+			options.append(StringName("zone_%d" % z))
 	options.append(&"respec")
 	options.append(&"close")
 	return options
@@ -2239,7 +2275,7 @@ func _rebuild_menu() -> void:
 		lines.append("든 물고기 %d · 무 %d · 매운탕 %d · 오늘 물고기 몰기 %d/%d" % [GameState.fish, GameState.crops, GameState.stews, GameState.fish_drive, Config.FISH_DRIVE_CAP])
 		lines.append("놓은 통발은 다음 날 아침 하나에 물고기 0~2마리 (걷히면 다시 놓기)")
 		lines.append("물고기 몰기 크리처: 통발이 있으면 한 번에 내일 물고기 +1")
-		lines.append("나룻배: 5막 팔당호 섬 뱃길 (아직 물길을 모른다)")
+		lines.append(ferry_line())
 	elif menu_kind == &"coop":
 		lines.append("든 달걀 %d · 무 %d · 사냥 도시락 %d · 오늘 모이 %d/%d" % [GameState.hen_eggs, GameState.crops, GameState.lunches, mini(GameState.fed, GameState.hens), GameState.hens])
 		lines.append("모이를 먹은 암탉은 아침마다 달걀 하나 (굶으면 반쯤)")
@@ -2471,31 +2507,40 @@ func next_day() -> Array[String]:
 	GameState.minutes = float(Config.DAY_START_MINUTE)
 	_update_dusk()
 	var lines: Array[String] = []
+	var sold := 0
 	if GameState.displayed_crops > 0:
 		var earned := GameState.displayed_crops * Config.CROP_PRICE
 		GameState.money += earned
+		sold += earned
 		lines.append("공급함의 무 %d개가 팔렸다. 돈통에 +%d원" % [GameState.displayed_crops, earned])
 		GameState.displayed_crops = 0
 	if GameState.displayed_herbs > 0:
 		var earned := GameState.displayed_herbs * Config.HERB_PRICE
 		GameState.money += earned
+		sold += earned
 		lines.append("공급함의 들나물 %d포기가 팔렸다. 돈통에 +%d원" % [GameState.displayed_herbs, earned])
 		GameState.displayed_herbs = 0
 	if GameState.displayed_roots > 0:
 		var earned := GameState.displayed_roots * Config.ROOT_PRICE
 		GameState.money += earned
+		sold += earned
 		lines.append("공급함의 %s %d뿌리가 팔렸다. 돈통에 +%d원" % [Config.ROOT_NAME, GameState.displayed_roots, earned])
 		GameState.displayed_roots = 0
 	if GameState.displayed_fish > 0:
 		var earned := GameState.displayed_fish * Config.FISH_PRICE
 		GameState.money += earned
+		sold += earned
 		lines.append("공급함의 물고기 %d마리가 팔렸다. 돈통에 +%d원" % [GameState.displayed_fish, earned])
 		GameState.displayed_fish = 0
 	if GameState.displayed_hen_eggs > 0:
 		var earned := GameState.displayed_hen_eggs * Config.HEN_EGG_PRICE
 		GameState.money += earned
+		sold += earned
 		lines.append("공급함의 달걀 %d개가 팔렸다. 돈통에 +%d원" % [GameState.displayed_hen_eggs, earned])
 		GameState.displayed_hen_eggs = 0
+	var market := market_bonus(sold)
+	if market > 0:
+		lines.append("아기 도마뱀이 장에 내다 팔아 +%d원 더 받았다." % market)
 	var forge_line := _forge_morning()
 	if forge_line != "":
 		lines.append(forge_line)
@@ -2519,6 +2564,9 @@ func next_day() -> Array[String]:
 		lines.append("아기 나무 정령이 밭을 돌봐 작물 %d개가 하루 더 자랐다." % boosted)
 	if grown > 0:
 		lines.append("밤사이 작물 %d개가 자랐다." % grown)
+	var rained := rain_on_farm()
+	if rained > 0:
+		lines.append("아기 청룡이 비를 불러 밭 %d칸에 물이 들었다." % rained)
 	var night_done := night_work()
 	if night_done > 0:
 		lines.append("아기 악귀가 밤새 맡은 일을 %d번 해 두었다." % night_done)
@@ -2570,6 +2618,27 @@ func gather_gold_dust() -> int:
 			total += _rng.randi_range(r.x, r.y)
 	GameState.money += total
 	return total
+
+
+## 장보기 (아기 도마뱀, 2026-10-03 귀여리 사용자 선택 A): 일을 맡은 (쉬지 않고 원정도 안 간) 아기 도마뱀이 있으면 밤사이 판매값 +MARKET_BONUS.
+## 더 받은 돈을 돌려준다 (돈통에 이미 넣음).
+func market_bonus(sold: int) -> int:
+	if sold <= 0:
+		return 0
+	for c in creatures:
+		if c.data.species.market and c.job != CreatureJobs.REST and c.expedition_zone < 0:
+			var extra := roundi(sold * Config.MARKET_BONUS)
+			GameState.money += extra
+			return extra
+	return 0
+
+
+## 비 내리기 (아기 청룡, 2026-10-03 소내섬): 일을 맡은 (쉬지 않고 원정도 안 간) 아기 청룡이 하나라도 있으면 아침에 밭 전체에 물.
+func rain_on_farm() -> int:
+	for c in creatures:
+		if c.data.species.rains and c.job != CreatureJobs.REST and c.expedition_zone < 0:
+			return farm.rain()
+	return 0
 
 
 ## 키우기 (아기 나무 정령, 2026-09-29 도마리): 농사를 맡은 개체마다 범위 안 밭의 작물을 가끔 하루 더 키운다.

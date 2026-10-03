@@ -34,6 +34,14 @@ extends Resource
 @export var grow_chance := 0.0
 ## 축사 지킴이 (아기 호랑이, 2026-09-30 밀목): 모이 주기를 맡은 개체가 있으면 밤에 족제비가 닭장에 안 온다
 @export var guards_coop := false
+## 비 내리기 (아기 청룡, 2026-10-03 소내섬): 일을 맡은 개체가 있으면 아침마다 밭의 심은 칸에 모두 물이 든다
+@export var rains := false
+## 하늘 배달 (아기 와이번, 2026-10-03 소내섬): 원정대에 끼면 그 구역 고향 종만큼 (Config.EXPEDITION_HOME_MULT) 잘 맞는다
+@export var courier := false
+## 장보기 (아기 도마뱀, 2026-10-03 귀여리 사용자 선택 A): 일하는 개체가 하나라도 있으면 공급함 밤사이 판매값 +MARKET_BONUS
+@export var market := false
+## 냄비뚜껑 방패 (아기 도마뱀 동행): 사냥에서 몇 초마다 한 번 대신 막아 줌 (조련 크리처 방패와 같은 식)
+@export var lid := false
 
 @export_group("그래픽")
 ## 속성 id → 스프라이트 시트 (규격은 docs/sprites.md). 시트가 없으면 color 로 도형을 그린다.

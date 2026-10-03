@@ -169,6 +169,17 @@ func advance_day() -> int:
 	return grown
 
 
+## 비 내리기 (아기 청룡, 2026-10-03): 심은 칸 중 아직 안 익은 칸에 모두 물이 든다. 물이 든 칸 수를 돌려준다.
+func rain() -> int:
+	var n := 0
+	for c: Cell in _cells.values():
+		if c.planted and not c.watered and not c.is_ripe():
+			c.watered = true
+			n += 1
+	queue_redraw()
+	return n
+
+
 ## 키우기 (아기 나무 정령): center 둘레 radius 칸 안에서 오늘 밤 자란(물 준) 작물이 chance 확률로 하루 더 자란다.
 ## advance_day 앞에 부른다 (물 준 칸만 = 그날 밤 자라는 칸). 더 자란 수를 돌려준다.
 func boost_growth(center: Vector2i, radius: int, chance: float, rng: RandomNumberGenerator) -> int:

@@ -50,7 +50,7 @@ static func away_count(main: Node2D) -> int:
 ## 그 구역과 얼마나 잘 맞나: 그 구역 알에서 나온 종 x1.5, 속성이 맞으면 x1.25, 아니면 1
 static func fit(data: CreatureData, zone: int) -> float:
 	var e: Dictionary = Config.EXPEDITION_ZONES[zone]
-	if data.species.id in e.species:
+	if data.species.id in e.species or data.species.courier:
 		return Config.EXPEDITION_HOME_MULT
 	for el in data.elements:
 		if el.id in e.elements:

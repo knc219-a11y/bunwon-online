@@ -25,6 +25,18 @@ const FOAL: CreatureSpecies = preload("res://data/creatures/species/foal.tres")
 ## 곤지암(8구역, 4막 대장 구역) 뿔 악귀 · 마왕을 쓰러뜨리면 가끔 나오는 알 (2026-10-02 사용자 선택 A).
 ## 불 속성. 밤일: 밤사이 맡은 일 (농사 · 고철 · 도라지 · 모이) 을 한 바퀴 더 해 둔다. 사냥 동행 = 불 할퀴기 + 겁주기.
 const IMP: CreatureSpecies = preload("res://data/creatures/species/imp.tres")
+## 소내섬(10구역, 5막 대장 구역) 독꼬리 와이번 · 일반 용을 쓰러뜨리면 가끔 나오는 알 (2026-10-03). 비행 속성.
+## 채집이 빠르고 원정대에 끼면 하늘 배달 (어느 구역이든 고향 종만큼 잘 맞음), 사냥 동행 = 날아가 쪼기.
+const LIZARD: CreatureSpecies = preload("res://data/creatures/species/lizard.tres")
+const WYVERN: CreatureSpecies = preload("res://data/creatures/species/wyvern.tres")
+## 소내섬 희귀 용 (2026-10-03 사용자: "마지막은 기본이 일반용이고 희귀한 확률로 세가지 용이 우연하게나오는 구조로가자") 이
+## 드물게 남기는 알. 셋 다 능력치 범위가 높다.
+## 아기 청룡 (물): 비 내리기 = 아침마다 밭 전체에 물. 동행 = 물총.
+const BLUE_DRAGON: CreatureSpecies = preload("res://data/creatures/species/blue_dragon.tres")
+## 아기 운룡 (신령): 농사를 맡으면 밤사이 작물이 절반 확률로 하루 더 자람. 동행 = 포효 + 번개 발톱.
+const CLOUD_DRAGON: CreatureSpecies = preload("res://data/creatures/species/cloud_dragon.tres")
+## 아기 드래곤 (불): 금 모으기 = 아침마다 돈 40~90원. 동행 = 불빛 + 불씨.
+const GOLD_DRAGON: CreatureSpecies = preload("res://data/creatures/species/gold_dragon.tres")
 
 ## 게임 시작 시 마을 공급함에 들어 있는 알
 const STARTER_EGG := SLIME

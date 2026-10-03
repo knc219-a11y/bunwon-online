@@ -662,7 +662,73 @@ const HUNT_ZONES: Array[Dictionary] = [
 		money = [55, 105], boss_money = [180, 280],
 		monster_tint = Color.WHITE, boss_tint = Color.WHITE, ground_tint = Color(0.62, 0.66, 0.6), tree_tint = Color(0.42, 0.5, 0.44),
 	},
+	{
+		## 5막 첫 구역 (2026-10-03 사용자: "9구역은 귀여리로가자 / 9구역에서는 도마뱀인간 종류 보스는 알아서 후보정해주고").
+		## 귀여리 = 분원리 바로 옆 팔당호 물가 마을 (Claude 지식, 광주시 페이지 남종면 설명은 못 불러옴). 5막은 이야기가 마을로 돌아온다:
+		## 곤지암 마왕을 잡으면 위쪽 길 대신 마을 사냥터 입구 웨이포인트로 귀여리가 켜진다 (from_village).
+		## 아래 입구 → 귀여리 옛 집 · 밭 → 물가 모래길 → 위 · 오른쪽 팔당호 (얕은 물가 · 갈대) → 위 모래톱 도마뱀인간 야영지 (대장 자리).
+		name = "귀여리", junk_name = "도마뱀 비늘", monster = "방패 도마뱀", boss_monster = "도마뱀 족장", waypoint = true,
+		map = "guiyeo", from_village = true,
+		labels = [[Vector2(26.5, 7.3), "도마뱀 야영지"]],
+		sheet = "res://assets/creatures/wild_shield_lizard.png", boss_sheet = "res://assets/creatures/wild_lizard_chief.png", burrow = false,
+		## 방패 도마뱀 (shield, 2026-10-03 사용자 선택 A): 바라보는 쪽에서 친 공격은 방패에 막힘 (팅!).
+		## 창을 당겼다 (구역 windup) 길게 찌른 뒤 (LIZARD_THRUST) 방패가 내려간 틈 (LIZARD_SHIELD_DOWN) · 옆 · 등 뒤를 노린다. 떼 4.
+		## 대장 도마뱀 족장 (chief): 전쟁 북 (모든 방패 금빛 CHIEF_GOLD_TIME + 도마뱀 CHIEF_CALL 마리) → 꼬리 휘두르기 (둘레 원),
+		## 체력 절반부터 창 던지기 CHIEF_SPEARS 개.
+		shield = true,
+		## 알: 아기 도마뱀 (땅, 장보기 = 공급함 판매값 +20%, 동행 냄비뚜껑 방패). 대장도 가끔 같은 알.
+		egg = "res://data/creatures/species/lizard.tres", boss_egg = "res://data/creatures/species/lizard.tres",
+		egg_chance = 0.012, boss_egg_chance = 0.2,
+		## 곤지암보다 한 계단 (임시, 봇으로 맞춤)
+		count = 9, hp = 15, speed = 1.3, boss_hp = 110,
+		swarm = 4, max_attackers = 3,
+		damage = 3, knockback = 3.0, windup = 0.45, pack = false, boss_pattern = &"chief",
+		advice = "권장: 사냥 도시락",
+		loot = {&"money": 32, &"potion": 26, &"junk": 20, &"gear": 22},
+		rarity = {&"normal": 18, &"magic": 46, &"rare": 36}, boss_rarity = {&"normal": 0, &"magic": 44, &"rare": 56},
+		money = [60, 110], boss_money = [190, 300],
+		monster_tint = Color.WHITE, boss_tint = Color.WHITE, ground_tint = Color(0.82, 0.9, 0.74), tree_tint = Color(0.56, 0.72, 0.52),
+	},
+	{
+		## 5막 둘째 구역 = 5막 대장 = 마지막 대장 (2026-10-03 사용자: "나도 마지막은 10구역 소내섬 하려고했어 / 10구역 은 와이번이고
+		## 마지막보스는 신비로운 용? 드래곤? 이런걸로 했으면 좋겠어"). 소내섬 = 팔당호 안 섬. 걸어서는 못 가고, 귀여리 대장을 잡은 뒤
+		## 고친 나루터에서 뱃사공 나룻배로 건너간다 (ferry: 사냥터 입구 웨이포인트 목록에 없음). 아래 나루 (E = 마을로 가는 배) → 모래 기슭
+		## → 솔숲 · 바위 → 가운데 돌계단 → 위 용소 물굽이 (대장 자리).
+		name = "소내섬", junk_name = "와이번 비늘", monster = "독꼬리 와이번", boss_monster = "용", waypoint = true,
+		map = "sonae", ferry = true, final = true,
+		labels = [[Vector2(26.0, 6.4), "용소"]],
+		sheet = "res://assets/creatures/wild_wyvern.png", boss_sheet = "res://assets/creatures/wild_dragon.png", burrow = false,
+		## 와이번은 까마귀처럼 날다가 내려꽂는다 (flyer). 나는 동안은 안 맞고, 내려앉아 숨 고를 때 맞는다.
+		flyer = true,
+		## 알: 와이번 → 아기 와이번 (하늘 배달). 일반 용도 가끔 같은 알.
+		egg = "res://data/creatures/species/wyvern.tres", boss_egg = "res://data/creatures/species/wyvern.tres",
+		egg_chance = 0.012, boss_egg_chance = 0.25,
+		## 마지막 대장 (2026-10-03 사용자: "마지막은 기본이 일반용이고 희귀한 확률로 세가지 용이 우연하게나오는 구조로가자").
+		## 처음 만나는 대장은 늘 일반 용. 한 번 잡은 뒤 다시 오면 셋 중 하나가 DRAGON_RARE_CHANCE 씩 대신 나온다.
+		## 희귀 용은 자기 기술이 하나 더 있고, egg_chance 확률로 자기 아기 알을 남긴다 (값 임시).
+		variants = [
+			{id = &"blue", name = "팔당 청룡", sheet = "res://assets/creatures/wild_blue_dragon.png", egg = "res://data/creatures/species/blue_dragon.tres", egg_chance = 0.5},
+			{id = &"cloud", name = "운룡", sheet = "res://assets/creatures/wild_cloud_dragon.png", egg = "res://data/creatures/species/cloud_dragon.tres", egg_chance = 0.5},
+			{id = &"gold", name = "황금 드래곤", sheet = "res://assets/creatures/wild_gold_dragon.png", egg = "res://data/creatures/species/gold_dragon.tres", egg_chance = 0.5},
+		],
+		count = 9, hp = 15, speed = 1.3, boss_hp = 200,
+		swarm = 3, max_attackers = 3,
+		damage = 3, knockback = 3.0, windup = 0.4, pack = false, boss_pattern = &"dragon",
+		advice = "권장: 사냥 도시락 · 매운탕",
+		loot = {&"money": 30, &"potion": 26, &"junk": 20, &"gear": 24},
+		rarity = {&"normal": 15, &"magic": 45, &"rare": 40}, boss_rarity = {&"normal": 0, &"magic": 40, &"rare": 60},
+		money = [65, 120], boss_money = [260, 400],
+		monster_tint = Color.WHITE, boss_tint = Color.WHITE, ground_tint = Color(0.76, 0.88, 0.76), tree_tint = Color(0.46, 0.64, 0.5),
+	},
 ]
+## 나룻배로만 가는 섬 구역 번호 (HUNT_ZONES 에 ferry = true), 없으면 -1
+static func ferry_zone() -> int:
+	for i in HUNT_ZONES.size():
+		if HUNT_ZONES[i].get("ferry", false):
+			return i
+	return -1
+
+
 ## 켄타우로스 창기병 (역동 lancer, 2026-10-02): 사냥꾼이 LANCER_TRIGGER 안이면 발을 구르며 (구역 windup) 긴 띠 예고 →
 ## LANCER_TIME 동안 LANCER_DISTANCE 만큼 돌격 (나무 · 바위에 막히면 거기서 멈춤). 돌격 뒤 LANCER_RECOVER 초 돌아섬 = 칠 틈.
 ## 2026-10-02 3~4막 난이도: 돌격 쿨 1.8 → 1.2, 돌아서는 틈 1.1 → 0.8 (임시)
@@ -686,6 +752,60 @@ const GENERAL_RECOVER := 1.8
 const GENERAL_COOLDOWN := 2.2
 const GENERAL_CALL := 2
 const GENERAL_MINION_HP := 3
+## 귀여리 방패 도마뱀 (shield, 2026-10-03 사용자 선택 A): 창 찌르기 길이 · 시간, 찌른 뒤 방패가 내려가 있는 시간 (= 앞에서도 칠 틈).
+## 방패는 바라보는 쪽 LIZARD_FRONT_DOT (cos, 약 ±70도) 안을 막고, 금빛 (족장 북) 이면 LIZARD_GOLD_DOT (약 ±115도) 까지 · 찌른 뒤에도 막음.
+const LIZARD_THRUST := 64.0
+const LIZARD_THRUST_TIME := 0.22
+const LIZARD_SHIELD_DOWN := 1.3
+const LIZARD_FRONT_DOT := 0.35
+const LIZARD_GOLD_DOT := -0.4
+## 도마뱀 족장 (chief): CHIEF_RANGE 안이면 전쟁 북 (예고 CHIEF_DRUM_WINDUP) → 꼬리 휘두르기 (원 CHIEF_TAIL_RADIUS) → (절반부터) 창 던지기.
+const CHIEF_RANGE := 220.0
+const CHIEF_DRUM_WINDUP := 1.0
+const CHIEF_GOLD_TIME := 4.0
+const CHIEF_CALL := 2
+const CHIEF_MINION_HP := 3
+const CHIEF_TAIL_WINDUP := 0.7
+const CHIEF_TAIL_RADIUS := 56.0
+const CHIEF_SPEARS := 3
+const CHIEF_SPEAR_WINDUP := 0.8
+const CHIEF_SPEAR_RADIUS := 18.0
+const CHIEF_RECOVER := 1.2
+const CHIEF_COOLDOWN := 1.4
+## 아기 도마뱀 장보기: 공급함 밤사이 판매값 +20% · 냄비뚜껑 방패 쿨 (초)
+const MARKET_BONUS := 0.2
+const LID_COOLDOWN := 6.0
+## 소내섬 용 (dragon, 2026-10-03, 값 전부 임시): DRAGON_RANGE 안이면 물어뜯기 돌진 → 날개 바람 (→ 희귀 용은 자기 기술) 을 돌아가며.
+## 돌진은 역마 장군 창 돌격과 같은 식 (첫 예고 DRAGON_WINDUP, 꺾어 잇는 돌진 DRAGON_NEXT_WINDUP, DRAGON_CHARGES 번, 절반부터 +1),
+## 몸통 반지름 DRAGON_HIT_RADIUS. 다 달리면 DRAGON_RECOVER 초 숨 고름 = 칠 틈, 두 번에 한 번 와이번 DRAGON_CALL 마리를 부름.
+## 날개 바람: 용 둘레 원 DRAGON_GUST_RADIUS (예고 DRAGON_GUST_WINDUP), 안이면 다치고 DRAGON_GUST_PUSH 만큼 밀려남.
+const DRAGON_RANGE := 260.0
+const DRAGON_CHARGES := 2
+const DRAGON_WINDUP := 0.8
+const DRAGON_NEXT_WINDUP := 0.4
+const DRAGON_LENGTH := 170.0
+const DRAGON_TIME := 0.5
+const DRAGON_HIT_RADIUS := 26.0
+const DRAGON_RECOVER := 1.6
+const DRAGON_SPECIAL_RECOVER := 1.0
+const DRAGON_COOLDOWN := 1.6
+const DRAGON_CALL := 2
+const DRAGON_MINION_HP := 3
+const DRAGON_GUST_WINDUP := 0.9
+const DRAGON_GUST_RADIUS := 70.0
+const DRAGON_GUST_PUSH := 40.0
+## 희귀 용 (variants): 첫 만남은 늘 일반 용, 그 뒤 찾아갈 때마다 하나씩 DRAGON_RARE_CHANCE 확률 (셋 합 15%)
+const DRAGON_RARE_CHANCE := 0.05
+## 청룡 물기둥 (마왕 지옥불 기둥과 같은 식): 수 (절반부터 +2) · 예고
+const DRAGON_PILLARS := 3
+const DRAGON_PILLAR_WINDUP := 0.9
+## 운룡 안개 (마왕 정전과 같은 식, 흰 안개): 여의주 빛 예고
+const DRAGON_FOG_WINDUP := 0.8
+## 황금 드래곤 불 숨결 (굴러가는 불덩이) 예고 · 절반부터 금화 비 (원 수, 떨어진 자리에 돈)
+const DRAGON_BREATH_WINDUP := 0.7
+const DRAGON_COINS := 4
+const DRAGON_COIN_MONEY := [20, 40]
+
 ## 아기 망아지 동행 뒷발차기 (kick): 맞은 몬스터가 KICK_PUSH 만큼 밀려나며 KICK_STUN 초 멈춤 (대장은 안 밀림)
 const COMPANION_KICK_PUSH := 44.0
 const COMPANION_KICK_STUN := 0.5
@@ -958,6 +1078,8 @@ const EXPEDITION_ZONES: Array[Dictionary] = [
 	{money = [55, 100], elements = [&"spirit"], species = [&"tiger", &"white_tiger"], hint = "신령 · 아기 호랑이"},
 	{money = [60, 110], elements = [&"earth"], species = [&"foal"], hint = "땅 · 아기 망아지"},
 	{money = [70, 125], elements = [&"fire"], species = [&"imp"], hint = "불 · 아기 악귀"},
+	{money = [75, 135], elements = [&"earth"], species = [&"lizard"], hint = "땅 · 아기 도마뱀"},
+	{money = [85, 150], elements = [&"flying"], species = [&"wyvern", &"blue_dragon", &"cloud_dragon", &"gold_dragon"], hint = "비행 · 아기 와이번 · 아기 용"},
 ]
 ## 원정대 하나가 하룻밤에 가져오는 잡템 (그 구역 잡템, 공급함에서 사냥꾼 잡템처럼 판다)
 const EXPEDITION_JUNK := [1, 2]

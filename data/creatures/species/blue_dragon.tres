@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="CreatureSpecies" load_steps=7 format=3]
+
+[ext_resource type="Script" path="res://scripts/creatures/creature_species.gd" id="1"]
+[ext_resource type="Resource" path="res://data/creatures/traits/ordinary.tres" id="2"]
+[ext_resource type="Resource" path="res://data/creatures/traits/diligent.tres" id="3"]
+[ext_resource type="Resource" path="res://data/creatures/traits/keen_eye.tres" id="4"]
+[ext_resource type="Resource" path="res://data/creatures/elements/water.tres" id="5"]
+[ext_resource type="Texture2D" path="res://assets/creatures/baby_blue_dragon.png" id="6"]
+
+[resource]
+script = ExtResource("1")
+id = &"blue_dragon"
+display_name = "아기 청룡"
+faces = 1
+possible_elements = Array[Resource]([ExtResource("5")])
+job_aptitude = {
+&"water": 1.5
+}
+work_speed_range = Vector2(1.1, 1.5)
+radius_range = Vector2i(2, 3)
+traits = Array[Resource]([ExtResource("3"), ExtResource("4")])
+rains = true
+sprite_sheets = {
+&"water": ExtResource("6")
+}
+egg_color = Color(0.5, 0.82, 0.84, 1)
+egg_spot_color = Color(0.95, 0.9, 0.62, 1)
+color = Color(0.35, 0.72, 0.74, 1)
