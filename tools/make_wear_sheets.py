@@ -308,15 +308,16 @@ ITEMS = {
 # 부위 지도(tools/char_parts/<몸>.png)가 있는 캐릭터의 장비는 아래 방식으로 새 몸에 맞춘다.
 #   모자: 위 모자 그림을 옛 머리(가로 11-36, 머리끝 y=1) 기준에서 새 머리카락 상자로 옮기고 늘려 그린다.
 #   옷 · 신발: 새 몸의 옷 · 신발 픽셀을 장비 색으로 다시 칠한다 (밝기 순서를 지켜 음영이 그대로 산다).
-BODY_OF = {"farmer": "player", "hunter": "hunter"}  # 누가 입는지 → 몸 시트 이름 (부위 지도가 없는 몸은 위 그림 그대로)
+# 어느 벌인지 → 몸 시트 이름 (부위 지도가 없는 몸은 위 그림 그대로). 2026-10-03 주인공 하나: 밭 옷 · 사냥 옷 다 주인공 몸
+BODY_OF = {"farmer": "protagonist", "hunter": "protagonist"}
 PARTS_DIR = os.path.join(os.path.dirname(__file__), "char_parts")
 PART = {"hair": (40, 40, 40), "skin": (250, 200, 160), "top": (160, 160, 160), "pants": (70, 100, 200),
         "shoes": (120, 60, 20), "detail": (255, 255, 255)}  # import_ai_character.PART_COLORS 와 같음
 OLD_HEAD_X0, OLD_HEAD_X1, OLD_HEAD_TOP = 11, 36, 1
 # 멜빵바지처럼 바지가 가슴까지 올라오는 몸: 이 줄(칸 y)까지의 바지 픽셀도 옷(조끼 · 망토)이 덮는다
-BIB = {"hunter": 33}
+BIB = {"hunter": 33, "protagonist": 33}
 # 모자를 머리카락 위에서 몇 줄 옮길지 (사냥꾼은 정수리 올림머리 때문에 모자가 눈을 가려 2줄 올린다)
-HAT_DY = {"hunter": -2}
+HAT_DY = {"hunter": -2, "protagonist": -2}
 CUR_BODY = [None]
 
 

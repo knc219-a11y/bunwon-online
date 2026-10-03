@@ -3,8 +3,8 @@ extends RefCounted
 ## 마을회관 · 이장 · 잔치상 (2026-10-03 시설 5, 사용자 선택 A 마을회관 · 이장 + 엔딩 B 잔치상 차리기).
 ## main.gd 가 너무 길어 시설 5 와 잔치는 여기 모았다. main 의 hall · feast_table · chief 를 다룬다. 값은 Config (HALL_* · FEAST_*).
 ##
-## 흐름: 소내섬 용 첫 처치 (GameState.final_boss_down) → 다음 날 아침 마을회관 터 → 돈 · 무 · 용 비늘로 고침 → 이장 (Tab) ·
-## 게시판 부탁 · 확성기 방송 · 크리처 심부름 → 이장이 잔치를 알리고 당산나무 앞에 빈 잔치상 → 일곱 직업이 한 상씩 →
+## 흐름: 소내섬 용 첫 처치 (GameState.final_boss_down) → 다음 날 아침 마을회관 터 → 돈 · 무 · 용 비늘로 고침 → 이장 ·
+## 게시판 부탁 · 확성기 방송 · 크리처 심부름 → 이장이 잔치를 알리고 당산나무 앞에 빈 잔치상 → 주인공이 재료를 가져오면 일곱 사람이 한 상씩 →
 ## 잔치 열기 (FeastScene: 잔치 장면 + 크레딧) → 다음 날 아침 평소대로.
 
 const HALL_RUIN_TEX: Texture2D = preload("res://assets/props/hall_ruin.png")
@@ -77,7 +77,7 @@ static func can_restore() -> bool:
 
 
 static func cost_lines() -> Array[String]:
-	return SiteWork.lines(&"hall", costs(), "이장 (Tab) · 게시판 · 그리고 잔치")
+	return SiteWork.lines(&"hall", costs(), "이장 · 게시판 · 그리고 잔치")
 
 
 ## 한 번에 고친다 (선택창 · 테스트 · 봇이 함께 쓴다). 고치면 이장이 바로 잔치를 알린다.
@@ -110,7 +110,7 @@ static func restore(main: Node2D) -> bool:
 	if GameState.feast_state == 0:
 		GameState.feast_state = 1
 		show_feast(main)
-	GameState.notify("마을회관을 고쳤다! 이장이 왔다 (Tab). 확성기: \"용이 물러갔으니 잔치를 엽시다! 당산나무 앞 잔치상에 집집마다 한 상씩 차려 주시오.\"")
+	GameState.notify("마을회관을 고쳤다! 이장이 왔다. 확성기: \"용이 물러갔으니 잔치를 엽시다! 당산나무 앞 잔치상에 집집마다 한 상씩 차려 주시오.\"")
 	return true
 
 
@@ -186,9 +186,9 @@ static func turn_in(main: Node2D) -> bool:
 	return true
 
 
-## 이장만: 하루 한 번 오늘 부탁을 다른 것으로 바꾼다
+## 이장에게 부탁해 하루 한 번 오늘 부탁을 다른 것으로 바꾼다
 static func reroll(main: Node2D) -> bool:
-	if main.active != main.chief or GameState.hall_rerolled or GameState.hall_request.is_empty():
+	if GameState.hall_rerolled or GameState.hall_request.is_empty():
 		return false
 	new_request(main._rng, GameState.hall_request.id)
 	GameState.hall_rerolled = true
@@ -205,7 +205,7 @@ static func options(main: Node2D, kind: StringName) -> Array[StringName]:
 	elif kind == &"board":
 		if not GameState.hall_request.is_empty():
 			out.append(&"turn_in")
-			if main.active == main.chief and not GameState.hall_rerolled:
+			if not GameState.hall_rerolled:
 				out.append(&"reroll")
 	elif kind == &"feast":
 		for d: Array in Config.FEAST_DISHES:
@@ -223,7 +223,7 @@ static func option_text(main: Node2D, id: StringName) -> String:
 		&"turn_in":
 			return "부탁 들어주기 (%s, 더 낼 것 %d)" % [request_text(), still_needed()]
 		&"reroll":
-			return "부탁 바꾸기 (이장, 하루 한 번)"
+			return "이장에게 부탁 바꿔 달라기 (하루 한 번)"
 		&"open_feast":
 			return "잔치 열기!"
 		&"close":
@@ -258,7 +258,7 @@ static func lines(kind: StringName) -> Array[String]:
 			out.append("심부름 크리처가 모은 것 %d (하루 %d번까지) · 아침마다 새 부탁" % [GameState.errands, Config.ERRAND_CAP])
 			out.append("들어주면 이따금 장비도 준다 (공용 창고)")
 		&"feast":
-			out.append("상마다 그 사람이 직접 차린다 (Tab 으로 바꿔 와서 F)")
+			out.append("상마다 그 사람 몫 재료를 가져오면 그 사람이 차린다")
 			out.append("일곱 상이 다 차면 잔치를 연다 · 잔치 뒤에도 계속 놀 수 있다")
 	return out
 
@@ -318,7 +318,7 @@ static func feast_full() -> bool:
 	return GameState.feast_dishes.size() >= Config.FEAST_DISHES.size()
 
 
-## 한 상 차린다. 그 상을 맡은 사람으로 와야 하고, 재료가 있어야 한다.
+## 한 상 차린다. 그 상을 맡은 사람이 마을에 있어야 하고, 주인공이 재료를 가져와야 한다.
 static func set_dish(main: Node2D, id: StringName) -> bool:
 	var i := dish_index(id)
 	if i < 0 or GameState.feast_state != 1 or id in GameState.feast_dishes:
@@ -326,9 +326,6 @@ static func set_dish(main: Node2D, id: StringName) -> bool:
 	var d: Array = Config.FEAST_DISHES[i]
 	if not person_open(d[1]):
 		GameState.notify("%s이(가) 아직 마을에 없다. %s을(를) 고치면 온다." % [PEOPLE[d[1]][0], PEOPLE[d[1]][1]])
-		return false
-	if main.active.who != d[1]:
-		GameState.notify("%s은(는) %s이(가) 차린다. Tab 으로 바꿔서 와 F." % [d[2], PEOPLE[d[1]][0]])
 		return false
 	var stuff: Dictionary = d[3]
 	for k: String in stuff:

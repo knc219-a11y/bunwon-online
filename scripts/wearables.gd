@@ -6,14 +6,17 @@ extends RefCounted
 ## 마을에서 사는 물건은 현대풍. 사냥터에서 떨어지는 완제품(from: hunt)은 판타지풍 (사용자 방향).
 ## 그림은 캐릭터 시트와 같은 규격의 덧그림 (assets/wear, tools/make_wear_sheets.py). 값과 효과는 전부 임시.
 
-## 무기 칸 (2026-09-29 사용자: 근거리 · 활 · 지팡이)은 사냥꾼만. 비어 있으면 사냥칼로 휘두른다. 무기는 덧그림이 없다 (sheet 없음).
+## 무기 칸 (2026-09-29 사용자: 근거리 · 활 · 지팡이)은 사냥 옷만. 비어 있으면 사냥칼로 휘두른다. 무기는 덧그림이 없다 (sheet 없음).
 const SLOTS: Array[StringName] = [&"hat", &"clothes", &"shoes", &"weapon"]
+## 주인공의 옷 두 벌 (2026-10-03 주인공 하나). 키는 옛 농부 · 사냥꾼 장비 주인 (who) 그대로:
+## 마을에서는 밭 옷, 사냥터에 들어가면 사냥 옷으로 저절로 갈아입는다.
+const OUTFIT_NAMES := {&"farmer": "밭 옷", &"hunter": "사냥 옷"}
 const SLOT_NAMES := {&"hat": "모자", &"clothes": "옷", &"shoes": "신발", &"weapon": "무기"}
 const WEAPON_KIND_NAMES := {&"melee": "근거리", &"bow": "활", &"staff": "지팡이"}
 const ELEMENT_NAMES := {&"water": "물", &"earth": "땅", &"fire": "불"}
 const ELEMENT_EFFECTS := {&"water": "느려짐", &"earth": "잠깐 멈춤", &"fire": "잠시 뒤 한 번 더 피해"}
 
-## who: 누가 입는지 (&"farmer" / &"hunter"). speed: 걷기 배율. sow_reach: 씨앗 뿌리는 칸 수.
+## who: 어느 벌인지 (&"farmer" 밭 옷 / &"hunter" 사냥 옷). speed: 걷기 배율. sow_reach: 씨앗 뿌리는 칸 수.
 ## from: &"hunt" 면 공급함에서 팔지 않고 사냥터에서만 떨어진다. set: 세트 id (SETS).
 ## hearts: 사냥터 최대 체력 + (1 = Config.HP_PER_HEART, 2026-10-02 하트 → 체력 숫자). swing_radius: 휘두르기 반지름 (px, 큰 값 하나만).
 const ITEMS := {
@@ -548,12 +551,12 @@ static func set_worn_count(set_id: StringName, who: StringName) -> int:
 ## 장비 설명 한 줄 (가방 창 아래에 보여 준다)
 static func describe(id: StringName) -> String:
 	var it := item(id)
-	var kind := "%s %s" % ["농부" if it.who == &"farmer" else "사냥꾼", SLOT_NAMES[it.slot]]
+	var kind := "%s %s" % [OUTFIT_NAMES[it.who], SLOT_NAMES[it.slot]]
 	if is_rolled(id):
 		# 사냥터 등급 장비는 모두 사냥꾼 것이라 짧게. 레어는 디아블로2처럼 기본 장비 이름도 함께.
 		kind = "%s %s" % [RARITY_NAMES[it.rarity], ITEMS[GameState.gear[id].base].name if it.rarity == &"rare" else SLOT_NAMES[it.slot]]
 		if it.rarity == &"crafted":
-			kind = "제작 · %s %s" % ["농부" if it.who == &"farmer" else "사냥꾼", SLOT_NAMES[it.slot]]
+			kind = "제작 · %s %s" % [OUTFIT_NAMES[it.who], SLOT_NAMES[it.slot]]
 	var text := "%s (%s) · %s" % [it.name, kind, it.effect]
 	if it.slot == &"weapon":
 		var w: Dictionary = (it.weapon as Dictionary).duplicate()

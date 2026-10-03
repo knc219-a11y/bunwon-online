@@ -19,7 +19,7 @@ func _ready() -> void:
 	await get_tree().process_frame
 
 	# 1) 농부 직접 농사: 갈기 → 심기 → 물주기 → (3일) → 수확
-	var farmer: Character = main.farmer
+	var farmer: Character = main.player
 	var cell := fc(1, 2)
 	farmer.position = Farm.center_of(cell + Vector2i.UP)
 	farmer.facing = Vector2i.DOWN
@@ -105,7 +105,7 @@ func _ready() -> void:
 	_check(GameState.money == 0 and not main.supply_action(&"rain_boots"), "산 장비는 다시 못 삼")
 	_check(Wearables.worn_by(&"farmer").size() == 3 and Wearables.worn_by(&"hunter").size() == 2, "농부 모자·옷·신발, 사냥꾼 모자·신발")
 	_check(is_equal_approx(Wearables.speed_mult(&"farmer"), 1.15) and is_equal_approx(Wearables.speed_mult(&"hunter"), 1.15), "장화·등산화는 걷기 +15%")
-	_check(farmer._wear.size() == 3 and main.hunter._wear.size() == 2, "입은 장비 덧그림")
+	_check(farmer._wear.size() == 3 and farmer.outfit == &"farmer", "마을에서는 밭 옷 덧그림 (모자 · 옷 · 신발)")
 	farmer.facing = Vector2i.LEFT
 	farmer._update_sprite()
 	_check(farmer._wear[0].frame_coords == farmer._sprite.frame_coords and farmer._wear[0].flip_h, "덧그림이 몸과 같은 칸 · 좌우 반전")
@@ -127,8 +127,10 @@ func _ready() -> void:
 
 	# 2) 시작 상태: 공급함에 알 1개, 사냥꾼은 잠김
 	_check(GameState.village_eggs.size() == Config.START_VILLAGE_EGGS and GameState.village_eggs[0] == CreatureCatalog.SLIME, "공급함에 슬라임 알 1개로 시작")
-	main.switch_character()
-	_check(main.active == farmer, "첫 슬라임 배치 전에는 사냥꾼 전환 불가")
+	farmer.position = main.hunt_gate.position
+	main.interact()
+	_check(not main.menu_open and main.hunt == null, "첫 슬라임 배치 전에는 사냥터 입구가 잠김")
+	_check(farmer == main.player and main.farmer != farmer and main.farmer.npc and not main.player.npc, "조작은 주인공 하나, 농부는 마을 사람 NPC")
 
 	# 3) 농부: 공급함에서 받기 → 부화기 → 다음 날 부화 (첫 슬라임은 급수)
 	farmer.position = main.supply_box.position
@@ -174,10 +176,8 @@ func _ready() -> void:
 			watered += 1
 	_check(watered == 2, "슬라임이 범위 안 작물에 물주기")
 
-	# 5) 사냥꾼: 사냥터 입구 → 알 획득 → 마을 공급함
-	main.switch_character()
-	_check(main.active == main.hunter, "사냥꾼 전환")
-	var hunter: Character = main.hunter
+	# 5) 같은 주인공이 사냥터 입구 → 알 획득 → 부화기
+	var hunter: Character = main.player
 	hunter.position = main.hunt_gate.position
 	main.interact()
 	# 처음엔 직업부터 고른다 (2026-10-03). 전사 → 사냥칼 그대로, 피해 +20%
@@ -191,7 +191,7 @@ func _ready() -> void:
 	main._unhandled_input(_action(&"move_down"))
 	main._unhandled_input(_action(&"interact"))
 	var hunt: HuntGround = main.hunt
-	_check(hunt != null and hunt.companion == null and not main.menu_open and not main.farm.visible and not farmer.visible and hunt.slimes.size() == Config.WILD_SLIME_COUNT, "사냥터 입구 F → 사냥터 화면, 야생 슬라임 %d마리" % Config.WILD_SLIME_COUNT)
+	_check(hunt != null and hunt.companion == null and not main.menu_open and not main.farm.visible and not main.farmer.visible and hunter.visible and hunter.outfit == &"hunter" and hunt.slimes.size() == Config.WILD_SLIME_COUNT, "사냥터 입구 F → 사냥터 화면 (사냥 옷으로 갈아입음), 야생 슬라임 %d마리" % Config.WILD_SLIME_COUNT)
 	hunt.set_ai(false)
 	_check(hunt.life == hunt.max_life() and hunt.max_life() == Config.HUNTER_HP, "체력 가득 (%d) 으로 시작" % Config.HUNTER_HP)
 	# Space(바라보는 쪽)로 두 번 휘두르면 쓰러진다
@@ -230,20 +230,13 @@ func _ready() -> void:
 	_check(hunt.picked.size() == 1 and hunt.drops.is_empty(), "떨어진 알 줍기")
 	hunter.position = hunt.spawn_at()
 	main.interact()
-	_check(main.hunt == null and main.farm.visible and GameState.hunter_eggs.size() == 1, "아래 입구 F로 마을에 돌아오면 알 1개")
+	_check(main.hunt == null and main.farm.visible and GameState.farmer_eggs.size() == 1, "아래 입구 F로 마을에 돌아오면 알 1개 (주인공 손에)")
 	_check(main._near(main.hunt_gate) and hunter.walk_area == Rect2(), "마을 사냥터 입구 앞으로 돌아옴")
 	main.interact()
-	_check(main.hunt == null and GameState.hunter_eggs.size() == 1, "사냥터는 하루 한 번")
-	hunter.position = main.supply_box.position
-	main.interact()
-	_check(GameState.village_eggs.size() == 1 and GameState.hunter_eggs.is_empty(), "마을 공급함에 알 공급")
+	main.close_menu()
+	_check(main.hunt == null and GameState.farmer_eggs.size() == 1, "사냥터는 하루 한 번")
 
 	# 두 번째 슬라임은 역할 없이 태어나 직접 정한다
-	main.switch_character()
-	farmer.position = main.supply_box.position
-	main.interact()
-	main.menu_confirm()
-	main.close_menu()
 	farmer.position = main.incubator.position
 	main.interact()
 	main.next_day()
@@ -342,7 +335,7 @@ func _ready() -> void:
 	# 12-1) 넓은 마을 (2026-10-01): 맵이 화면보다 크면 마을 카메라가 조작 중인 캐릭터를 따라가고 맵 가장자리에서 멈춘다
 	var world_px := Vector2(Config.MAP_SIZE * Config.TILE)
 	_check(world_px.x > 640 and world_px.y > 360 and main.camera.is_current() and Vector2(main.camera.limit_right, main.camera.limit_bottom) == world_px, "마을 맵 %s칸은 화면보다 넓고 카메라 끝 = 맵 끝" % Config.MAP_SIZE)
-	var cam_who: Character = main.active
+	var cam_who: Character = main.player
 	var cam_keep := cam_who.position
 	cam_who.position = Farm.center_of(Config.MAP_SIZE - Vector2i(2, 2))
 	# process_frame 은 _process 앞에 오니까 한 프레임 더
@@ -401,8 +394,6 @@ func _ready() -> void:
 	carried.place(fc(6, 6))
 
 	# 14) 잠자기 (A②): 집 현관에서 F → 밤 1초 → 아침 카드 → F로 일어남
-	if main.active != farmer:
-		main.switch_character()
 	farmer.position = Farm.center_of(fc(10, 6))
 	_check(not main.near_door(), "현관에서 멀면 잠잘 수 없음")
 	var sleep_cell := fc(3, 3)
@@ -467,9 +458,8 @@ func _ready() -> void:
 
 	# 17) 사냥터에서 쓰러져도 주운 것(떨어진 알 포함)은 그대로, 다음 날 다시 들어갈 수 있다
 	main.next_day()
-	var eggs_before := GameState.hunter_eggs.size()
-	main._set_active(main.hunter)
-	main.hunter.position = main.hunt_gate.position
+	var eggs_before := GameState.farmer_eggs.size()
+	main.player.position = main.hunt_gate.position
 	main.interact()
 	main.menu_index = main.companion_options().size() - 1
 	main.menu_confirm()
@@ -478,23 +468,23 @@ func _ready() -> void:
 	h2.set_ai(false)
 	var w: WildSlime = h2.slimes[0]
 	w.hp = 1
-	main.hunter.facing = Vector2i.UP
-	w.position = main.hunter.feet() + Vector2(0, -8 - Config.SWING_REACH)
+	main.player.facing = Vector2i.UP
+	w.position = main.player.feet() + Vector2(0, -8 - Config.SWING_REACH)
 	h2.swing()
 	_check(h2.drops.is_empty(), "새 날 첫 처치라도 알은 보장되지 않음 (2026-09-29 드롭률 낮춤)")
 	HuntGround.egg_roll = 0.0
 	var w1b: WildSlime = h2.slimes[0]
 	w1b.hp = 1
-	w1b.position = main.hunter.feet() + Vector2(0, -8 - Config.SWING_REACH)
+	w1b.position = main.player.feet() + Vector2(0, -8 - Config.SWING_REACH)
 	h2.tick(Config.SWING_COOLDOWN)
 	h2.swing()
 	_check(h2.drops.size() == 1, "알 확률에 걸리면 알이 떨어짐")
 	h2.life = 1
 	var w2: WildSlime = h2.slimes[0]
-	w2.position = main.hunter.feet()
+	w2.position = main.player.feet()
 	h2.tick(0.01)
 	_check(main.hunt == null and main.farm.visible, "하트가 0이 되면 쓰러져 마을로 돌아옴")
-	_check(GameState.hunter_eggs.size() == eggs_before + 1, "쓰러져도 떨어진 알은 챙겨 옴")
+	_check(GameState.farmer_eggs.size() == eggs_before + 1, "쓰러져도 떨어진 알은 챙겨 옴")
 	_check(main._near(main.hunt_gate), "쓰러지면 사냥터 입구 앞으로")
 
 	# 18) 크리처 동행 (A. 따라오는 동료): 입구에서 고른 크리처가 따라와 알아서 싸우고, 돌아오면 제자리로
@@ -503,7 +493,7 @@ func _ready() -> void:
 	var buddy_home := buddy.home
 	var buddy_job := buddy.job
 	var buddy_pos := buddy.position
-	main.hunter.position = main.hunt_gate.position
+	main.player.position = main.hunt_gate.position
 	main.interact()
 	main.menu_index = 0
 	main.menu_confirm()
@@ -515,7 +505,7 @@ func _ready() -> void:
 	h3.companion_ai = false
 	# 물총: 먼 거리의 야생 슬라임을 맞힌다. 그날 첫 슬라임이라 알 보장.
 	var far: WildSlime = h3.slimes[0]
-	h3.companion.position = main.hunter.feet() + Vector2(0, 20)
+	h3.companion.position = main.player.feet() + Vector2(0, 20)
 	for other in h3.slimes:
 		other.position = h3.companion.position + Vector2(200, 0)
 	far.position = h3.companion.position + Vector2(Config.COMPANION_SHOT_RANGE - 10, 0)
@@ -532,24 +522,24 @@ func _ready() -> void:
 	# 따라다니기
 	h3.companion_ai = true
 	for other in h3.slimes:
-		other.position = main.hunter.feet() + Vector2(0, -200)
-	h3.companion.position = main.hunter.feet() + Vector2(80, 0)
+		other.position = main.player.feet() + Vector2(0, -200)
+	h3.companion.position = main.player.feet() + Vector2(80, 0)
 	for i in 30:
 		h3.tick(0.05)
-	_check(h3.companion.position.distance_to(main.hunter.feet()) <= Config.COMPANION_FOLLOW_DISTANCE + 4.0, "사냥꾼 뒤를 따라온다")
+	_check(h3.companion.position.distance_to(main.player.feet()) <= Config.COMPANION_FOLLOW_DISTANCE + 4.0, "사냥꾼 뒤를 따라온다")
 	_check(h3.life == h3.max_life(), "크리처 동행 중에도 체력은 그대로 (크리처는 다치지 않음)")
 	# 돌아오면 원래 자리·원래 일
-	var eggs_before_buddy := GameState.hunter_eggs.size()
-	main.hunter.position = h3.spawn_at()
+	var eggs_before_buddy := GameState.farmer_eggs.size()
+	main.player.position = h3.spawn_at()
 	main.interact()
 	_check(main.hunt == null and buddy.visible and buddy.can_process(), "돌아오면 크리처가 농장에 다시 나타나 일한다")
 	_check(buddy.home == buddy_home and buddy.job == buddy_job and buddy.position == buddy_pos, "원래 자리·원래 일 그대로")
-	_check(GameState.hunter_eggs.size() == eggs_before_buddy + 1, "크리처 덕에 떨어진 알도 챙겨 옴")
+	_check(GameState.farmer_eggs.size() == eggs_before_buddy + 1, "크리처 덕에 떨어진 알도 챙겨 옴")
 	# 땅 슬라임은 붙어서 박치기
 	main.next_day()
 	var earth_buddy: Creature = main._hatch(CreatureCatalog.SLIME, fc(3, 3))
 	earth_buddy.data.set_element(load("res://data/creatures/elements/earth.tres"))
-	main.hunter.position = main.hunt_gate.position
+	main.player.position = main.hunt_gate.position
 	main.interact()
 	main.menu_index = main.companion_candidates().find(earth_buddy)
 	_check(main.companion_option_text(main.companion_options()[main.menu_index]).contains("박치기"), "땅 슬라임은 박치기로 돕는다고 표시")
@@ -560,8 +550,8 @@ func _ready() -> void:
 	h4.companion_ai = false
 	var near: WildSlime = h4.slimes[0]
 	for other in h4.slimes:
-		other.position = main.hunter.feet() + Vector2(0, -150)
-	h4.companion.position = main.hunter.feet() + Vector2(0, 20)
+		other.position = main.player.feet() + Vector2(0, -150)
+	h4.companion.position = main.player.feet() + Vector2(0, 20)
 	near.position = h4.companion.position + Vector2(40, 0)
 	h4.tick(0.01)
 	_check(near.hp == near.max_hp, "박치기는 멀리서는 못 때림")
@@ -574,7 +564,7 @@ func _ready() -> void:
 	var gap := h4.companion.position.distance_to(near.position)
 	h4.tick(0.1)
 	_check(h4.companion.position.distance_to(near.position) < gap, "박치기 크리처는 가까운 야생 슬라임에게 다가간다")
-	main.hunter.position = h4.spawn_at()
+	main.player.position = h4.spawn_at()
 	main.interact()
 	_check(main.hunt == null and earth_buddy.can_process(), "땅 슬라임도 돌아와 다시 일함")
 
@@ -610,7 +600,7 @@ func _ready() -> void:
 	GameState.owned_wear = owned_before
 	# 실제 사냥터: 쓰러뜨린 자리에 떨어진 장비를 주우면 바로 입는다
 	main.next_day()
-	main.hunter.position = main.hunt_gate.position
+	main.player.position = main.hunt_gate.position
 	main.interact()
 	main.menu_index = main.companion_options().size() - 1
 	main.menu_confirm()
@@ -621,14 +611,14 @@ func _ready() -> void:
 	h5.loot_rng.seed = 3
 	var target: WildSlime = h5.slimes[0]
 	target.hp = 1
-	main.hunter.facing = Vector2i.UP
-	target.position = main.hunter.feet() + Vector2(0, -8 - Config.SWING_REACH)
+	main.player.facing = Vector2i.UP
+	target.position = main.player.feet() + Vector2(0, -8 - Config.SWING_REACH)
 	h5.swing()
 	_check(h5.slimes.size() == Config.WILD_SLIME_COUNT - 1, "사냥터에서 쓰러뜨리면 드롭표를 굴림")
 	h5.loot.clear()
-	h5.loot.append({kind = &"gear", id = &"acorn_helm", at = main.hunter.feet() + Vector2(0, 30)})
+	h5.loot.append({kind = &"gear", id = &"acorn_helm", at = main.player.feet() + Vector2(0, 30)})
 	_check(HuntLoot.label(h5.loot[0]) == "도토리 투구", "땅에 장비 이름이 보임")
-	main.hunter.position = h5.loot[0].at - Vector2(0, Character.FEET_Y)
+	main.player.position = h5.loot[0].at - Vector2(0, Character.FEET_Y)
 	h5.tick(0.01)
 	_check(h5.loot.is_empty() and GameState.worn[&"hunter"].get(&"hat") == &"acorn_helm" and Wearables.is_owned(&"acorn_helm"), "주우면 바로 입음 (모자 칸)")
 	_check(h5.max_life() == base_hearts + Config.HP_PER_HEART and h5.life == h5.max_life(), "도토리 투구: 최대 체력 +10, 그만큼 채워짐")
@@ -646,47 +636,50 @@ func _ready() -> void:
 	h5.loot.append({kind = &"junk", at = Vector2(7 * Config.TILE, 5 * Config.TILE)})
 	h5.loot.append({kind = &"money", amount = 20, at = Vector2(8 * Config.TILE, 5 * Config.TILE)})
 	var junk_before := GameState.junk
-	main.hunter.position = h5.spawn_at()
+	main.player.position = h5.spawn_at()
 	main.interact()
 	_check(main.hunt == null and GameState.junk == junk_before + 1 and GameState.money == money_before + 20, "떠날 때 안 주운 젤리·돈도 챙김")
 	_check(Wearables.set_complete(&"forest", &"hunter") and Wearables.bonus_hearts(&"hunter") == 2, "숲 공터 세트 완성: 하트 +1 더")
 	_check(is_equal_approx(Wearables.swing_radius(&"hunter"), 24.0) and is_equal_approx(Wearables.speed_mult(&"hunter"), 1.25), "숲지기 망토 휘두르기 범위 · 깃털 장화 걷기 +25%")
-	main.hunter.position = main.supply_box.position
+	main.player.position = main.supply_box.position
 	var money_before_sell := GameState.money
 	var junk_to_sell := GameState.junk
 	main.interact()
-	_check(GameState.junk == 0 and GameState.money == money_before_sell + junk_to_sell * Config.JUNK_PRICE, "사냥꾼이 공급함에서 F로 젤리를 팜")
+	_check(GameState.junk == 0 and GameState.money == money_before_sell + junk_to_sell * Config.JUNK_PRICE, "공급함에서 F로 젤리를 팜")
+	main.close_menu()
 
 	# 20) 디아블로식 가방 + 공용 창고 (2026-09-28 사용자 요청)
 	# 지금 사냥꾼: 숲 공터 세트 다 입음, 가방에 캡모자·등산화 (주운 세트가 밀어냄)
 	var hb: Array[StringName] = GameState.bag[&"hunter"]
 	_check(&"ball_cap" in hb and &"hiking_shoes" in hb, "세트를 주워 입으면 입던 캡모자·등산화는 가방으로")
-	main.hunter.position = Farm.center_of(Config.HUNTER_START)
+	main.player.position = Farm.center_of(Config.HUNTER_CELL)
 	main._unhandled_input(_action(&"inventory"))
 	var inv: InventoryUI = main.inventory
-	_check(inv.visible and inv.character == main.hunter and main.hunter.frozen and not inv.with_stash, "I 키로 어디서나 가방 창")
+	_check(inv.visible and inv.character == main.player and main.player.frozen and not inv.with_stash and inv.outfit == &"farmer", "I 키로 어디서나 가방 창 (마을에서는 밭 옷부터)")
+	main._unhandled_input(_action(&"outfit_swap"))
+	_check(inv.visible and inv.outfit == &"hunter", "가방 창에서 Tab = 사냥 옷으로 바꿔 보기")
 	var cap_i := hb.find(&"ball_cap")
 	_check(inv.primary(&"bag", cap_i) and GameState.worn[&"hunter"][&"hat"] == &"ball_cap" and &"acorn_helm" in hb, "가방 캡모자 클릭 = 입기, 도토리 투구는 가방으로 바꿔 들어감")
-	_check(main.hunter._wear.size() == 3 and Wearables.set_worn_count(&"forest", &"hunter") == 2 and Wearables.bonus_hearts(&"hunter") == 0, "덧그림 바뀜 · 세트 2/3 이면 보너스 없음")
+	_check(Wearables.set_worn_count(&"forest", &"hunter") == 2 and Wearables.bonus_hearts(&"hunter") == 0, "세트 2/3 이면 보너스 없음")
 	_check(inv.primary(&"equip", 0) and not GameState.worn[&"hunter"].has(&"hat") and &"ball_cap" in hb, "입은 칸 클릭 = 벗어서 가방으로 (안 입음)")
 	_check(inv.secondary(&"bag", hb.find(&"acorn_helm")) and Wearables.set_complete(&"forest", &"hunter"), "오른쪽 클릭으로도 입기, 세트 다시 완성")
 	main._unhandled_input(_action(&"inventory"))
-	_check(not inv.visible and not main.hunter.frozen, "I 키로 닫기")
-	# 농부 장비는 사냥꾼이 입지 못함 (창고로 넘기면 농부가 꺼내 입음)
+	_check(not inv.visible and not main.player.frozen, "I 키로 닫기")
+	# 밭 옷 장비는 사냥 옷에 못 입음 (창고로 넘겼다가 밭 옷 가방으로 꺼내 입음)
 	GameState.stash.append(&"straw_hat")
 	GameState.owned_wear.append(&"straw_hat")
-	main.hunter.position = main.stash_box.position + Vector2(-Config.TILE + 4, 0)
+	main.player.position = main.stash_box.position + Vector2(-Config.TILE + 4, 0)
 	main.interact()
 	_check(inv.visible and inv.with_stash, "창고 궤짝에서 F = 가방 + 창고 창")
+	inv.swap_outfit()
 	_check(inv.primary(&"stash", 0) and hb.back() == &"straw_hat" and GameState.stash.is_empty(), "창고 칸 클릭 = 가방으로 꺼내기")
 	var before_hat: StringName = GameState.worn[&"hunter"].get(&"hat", &"")
-	_check(not inv.secondary(&"bag", hb.size() - 1) and GameState.worn[&"hunter"].get(&"hat", &"") == before_hat, "농부 밀짚모자는 사냥꾼이 입지 못함")
+	_check(not inv.secondary(&"bag", hb.size() - 1) and GameState.worn[&"hunter"].get(&"hat", &"") == before_hat, "밀짚모자 (밭 옷) 는 사냥 옷 칸에 못 입음")
 	_check(inv.primary(&"bag", hb.size() - 1) and GameState.stash.size() == 1 and GameState.stash[0] == &"straw_hat", "창고가 열려 있으면 가방 칸 클릭 = 창고로 넣기")
 	main.close_inventory()
-	main._set_active(main.farmer)
-	main.farmer.position = main.stash_box.position + Vector2(-Config.TILE + 4, 0)
+	main.player.position = main.stash_box.position + Vector2(-Config.TILE + 4, 0)
 	main.interact()
-	_check(inv.visible and inv.character == main.farmer and inv.primary(&"stash", 0) and inv.secondary(&"bag", 0) and GameState.worn[&"farmer"][&"hat"] == &"straw_hat", "농부가 창고에서 꺼내 입음 (공용 창고)")
+	_check(inv.visible and inv.character == main.player and inv.primary(&"stash", 0) and inv.secondary(&"bag", 0) and GameState.worn[&"farmer"][&"hat"] == &"straw_hat", "밭 옷 가방으로 꺼내 입음 (공용 창고)")
 	main.close_inventory()
 	# 가방이 차면 창고로, 잃어버리지 않음
 	var fb: Array[StringName] = GameState.bag[&"farmer"]
@@ -698,8 +691,7 @@ func _ready() -> void:
 	fb.clear()
 	# 사냥터에서도 I, 여는 동안 사냥터는 멈춤
 	GameState.hunts_today = 0
-	main._set_active(main.hunter)
-	main.hunter.position = main.hunt_gate.position
+	main.player.position = main.hunt_gate.position
 	main.enter_hunt()
 	var h6: HuntGround = main.hunt
 	main._unhandled_input(_action(&"inventory"))
@@ -711,7 +703,7 @@ func _ready() -> void:
 
 	# 21) 장비 등급 (2026-09-28 사용자 선택 A: 디아블로2 그대로): 일반 · 마법 · 레어, 무작위 옵션, 공급함 팔기
 	main.close_inventory()
-	main.hunter.position = h6.spawn_at()
+	main.player.position = h6.spawn_at()
 	main.interact()
 	_check(main.hunt == null, "사냥터에서 돌아옴")
 	var rr := RandomNumberGenerator.new()
@@ -735,7 +727,7 @@ func _ready() -> void:
 	_check(Wearables.pick_rarity(0.0) == &"normal" and Wearables.pick_rarity(60.0) == &"magic" and Wearables.pick_rarity(92.0) == &"rare", "등급 무게 경계")
 	# 옵션 효과: 새로 시작한 사냥꾼에게 굴린 장비를 입힌다
 	GameState.reset()
-	main.hunter.refresh_wear()
+	main.player.refresh_wear()
 	var rare := {base = &"leather_shoes", rarity = &"rare", name = "이끼 발굽", affixes = [
 		{stat = &"speed", value = 20}, {stat = &"hearts", value = 1}, {stat = &"swing", value = 4}, {stat = &"money", value = 50}]}
 	_check(Wearables.gain_rolled(rare) == &"worn", "칸이 비었으면 주운 등급 장비를 바로 입음")
@@ -761,10 +753,9 @@ func _ready() -> void:
 	Wearables.take_off(&"hunter", &"hat")  # 마법 두건은 가방으로
 	GameState.bag[&"hunter"].append(&"ball_cap")
 	GameState.owned_wear.append(&"ball_cap")
-	main._set_active(main.hunter)
-	main.hunter.position = main.supply_box.position
+	main.player.position = main.supply_box.position
 	main.interact()
-	_check(main.menu_open and main.supply_options() == [&"sell_normal", &"sell_gear", &"close"], "사냥꾼 공급함 F → 일반 한꺼번에 팔기 · 가방에서 팔기 · 닫기")
+	_check(main.menu_open and main.supply_options().has(&"sell_normal") and main.supply_options().has(&"sell_gear"), "공급함 F → 일반 한꺼번에 팔기 · 가방에서 팔기")
 	var m0 := GameState.money
 	var n0 := Wearables.normal_in_bag(&"hunter")
 	_check(n0 == 2 and main.supply_action(&"sell_normal") and GameState.money == m0 + n0 * Config.GEAR_SELL_PRICES[&"normal"] and Wearables.normal_in_bag(&"hunter") == 0, "일반 장비 한꺼번에 팔기 (두건 · 조끼, 첫 조끼는 빈 옷 칸에 입음)")
@@ -799,7 +790,7 @@ func _ready() -> void:
 	# 22) 대장 슬라임 (2026-09-28 사용자 선택 B): 셋을 다 쓰러뜨리면 대장 1마리, 대장은 반드시 하나를 떨어뜨림
 	# 앞에서 입힌 "돈 드롭 +%" 옵션을 벗긴다
 	GameState.worn[&"hunter"] = {}
-	main.hunter.refresh_wear()
+	main.player.refresh_wear()
 	var money_in_range := true
 	var brng := RandomNumberGenerator.new()
 	brng.seed = 11
@@ -826,17 +817,16 @@ func _ready() -> void:
 	# 실제 사냥터: 셋을 다 쓰러뜨리면 대장이 나오고, 네 번 때려야 쓰러지고, 드롭이 반드시 떨어진다
 	main.close_inventory()
 	main.next_day()
-	main._set_active(main.hunter)
-	main.hunter.position = main.hunt_gate.position
+	main.player.position = main.hunt_gate.position
 	_check(main.enter_hunt(), "다음 날 다시 사냥터에 들어감")
 	var bh: HuntGround = main.hunt
 	bh.set_ai(false)
-	main.hunter.facing = Vector2i.UP
+	main.player.facing = Vector2i.UP
 	for i in Config.WILD_SLIME_COUNT:
 		var bw: WildSlime = bh.slimes[0]
 		_check(not bh.boss_spawned, "셋을 다 잡기 전엔 대장이 없음 (%d)" % i)
 		bw.hp = 1
-		bw.position = main.hunter.feet() + Vector2(0, -8 - Config.SWING_REACH)
+		bw.position = main.player.feet() + Vector2(0, -8 - Config.SWING_REACH)
 		bh.tick(Config.SWING_COOLDOWN)
 		bh.swing()
 	var boss_full := HunterSkills.monster_hp(0, Config.BOSS_HP)
@@ -846,7 +836,7 @@ func _ready() -> void:
 	bh.loot.clear()
 	var boss_hits := ceili(float(boss_full) / HunterClass.hunter_damage(1, &"melee"))
 	for i in boss_hits:
-		bs.position = main.hunter.feet() + Vector2(0, -8 - Config.SWING_REACH)
+		bs.position = main.player.feet() + Vector2(0, -8 - Config.SWING_REACH)
 		bh.tick(Config.SWING_COOLDOWN)
 		bh.swing()
 		if i < boss_hits - 1:
@@ -875,9 +865,8 @@ func _ready() -> void:
 	# 앞 섹션에서 잡은 대장은 지운다 (처음 들어가는 흐름부터 보고, 다시 들어가면 대장이 나와 있는 것은 이 섹션 끝에서 본다)
 	GameState.bosses_beaten.clear()
 	main.next_day()
-	main._set_active(main.hunter)
-	main.hunter.position = main.hunt_gate.position
-	main._hunter_interact()
+	main.player.position = main.hunt_gate.position
+	main._gate_interact()
 	_check(not main.menu_open or main.menu_kind != &"waypoint", "웨이포인트가 하나면 시작 구역을 묻지 않음")
 	if main.menu_open:
 		main.close_menu()
@@ -886,23 +875,23 @@ func _ready() -> void:
 	var sh: HuntGround = main.hunt
 	sh.set_ai(false)
 	_check(sh.zone == 0 and sh.slimes.size() == Config.WILD_SLIME_COUNT, "1구역 %s에서 시작" % Config.HUNT_ZONES[0].name)
-	main.hunter.facing = Vector2i.UP
+	main.player.facing = Vector2i.UP
 	for i in Config.WILD_SLIME_COUNT + 1:
 		var sw: WildSlime = sh.slimes[0]
 		_check(not sh.path_open, "대장을 쓰러뜨리기 전엔 위쪽 길이 닫힘 (%d)" % i)
 		sw.hp = 1
-		sw.position = main.hunter.feet() + Vector2(0, -8 - Config.SWING_REACH)
+		sw.position = main.player.feet() + Vector2(0, -8 - Config.SWING_REACH)
 		sh.tick(Config.SWING_COOLDOWN)
 		sh.swing()
 	_check(sh.path_open and sh.slimes.is_empty(), "대장을 쓰러뜨리면 위쪽 길이 열림")
-	main.hunter.position = Vector2(13, 8) * Config.TILE
+	main.player.position = Vector2(13, 8) * Config.TILE
 	main.interact()
 	_check(main.hunt == sh and sh.zone == 0, "위쪽 길에서 멀면 F로 넘어가지 않음")
 	# 드롭이 하트 장비면 하트 칸이 바뀌므로 비교 전에 치운다
 	sh.loot.clear()
 	var hearts_before := sh.life - 1
 	sh.life = hearts_before
-	main.hunter.position = sh.next_area().get_center()
+	main.player.position = sh.next_area().get_center()
 	main.interact()
 	_check(sh.zone == 1 and not sh.path_open and not sh.boss_spawned, "위쪽 길에서 F → 2구역 %s" % z2.name)
 	_check(sh.life == hearts_before and GameState.hunts_today == 1, "체력은 그대로, 같은 날 같은 사냥 (%d/%d, %d번)" % [sh.life, hearts_before, GameState.hunts_today])
@@ -913,30 +902,30 @@ func _ready() -> void:
 	_check(crab.buried and crab.sheet.resource_path.ends_with("wild_sand_crab.png"), "모래게는 모래에 숨어 있음")
 	_check(sh.sign_node != null and z2.sign == "금사리(구터)", "금사리 입구에 마을 표지")
 	var hearts_c := sh.life
-	crab.position = main.hunter.feet() + Vector2(Config.WILD_BURROW_POP_DISTANCE + 20, 0)
+	crab.position = main.player.feet() + Vector2(Config.WILD_BURROW_POP_DISTANCE + 20, 0)
 	sh.tick(0.01)
 	_check(crab.buried, "멀면 숨은 채로")
-	crab.position = main.hunter.feet() + Vector2(Config.WILD_BURROW_POP_DISTANCE - 10, 0)
+	crab.position = main.player.feet() + Vector2(Config.WILD_BURROW_POP_DISTANCE - 10, 0)
 	sh.tick(0.01)
 	_check(not crab.buried and sh.life == hearts_c, "가까이 가면 모래에서 튀어나옴 (아직 안 부딪힘)")
 	for i in z2.count:
 		var zw: WildSlime = sh.slimes[0]
-		zw.position = main.hunter.feet() + Vector2(0, -8 - Config.SWING_REACH)
+		zw.position = main.player.feet() + Vector2(0, -8 - Config.SWING_REACH)
 		for k in ceili(float(HunterSkills.monster_hp(1, z2.hp)) / HunterClass.hunter_damage(1, &"melee")):
 			sh.tick(Config.SWING_COOLDOWN)
 			sh.swing()
-			zw.position = main.hunter.feet() + Vector2(0, -8 - Config.SWING_REACH)
+			zw.position = main.player.feet() + Vector2(0, -8 - Config.SWING_REACH)
 	_check(sh.boss_spawned and sh.slimes.size() == 1 and sh.slimes[0].hp == HunterSkills.monster_hp(1, z2.boss_hp), "2구역 대장 체력 %d (레벨 반영)" % sh.slimes[0].hp)
 	_check(sh.slimes[0].title == z2.boss_monster and not sh.slimes[0].buried and sh.slimes[0].sheet.resource_path.ends_with("wild_gold_toad_hd.png"), "금사리 대장은 %s" % z2.boss_monster)
 	sh.slimes[0].hp = 1
-	sh.slimes[0].position = main.hunter.feet() + Vector2(0, -8 - Config.SWING_REACH)
+	sh.slimes[0].position = main.player.feet() + Vector2(0, -8 - Config.SWING_REACH)
 	sh.tick(Config.SWING_COOLDOWN)
 	sh.swing()
 	_check(sh.slimes.is_empty() and sh.path_open, "금사리 대장 뒤엔 2막 3구역 광동리 길이 열림")
 	var toad_eggs := sh.drops.filter(func(d: Dictionary) -> bool: return d.species == CreatureCatalog.GOLD_TOAD)
 	_check(toad_eggs.size() == 1, "대장 금두꺼비는 알 확률에 걸리면 금두꺼비 알을 남김")
 	sh.drops.clear()
-	main.hunter.position = sh.next_area().get_center()
+	main.player.position = sh.next_area().get_center()
 	# 끊어진 쇠다리 (2026-09-29 "대장간과 묶기"): 대장간을 고치기 전엔 광동리로 못 건넘
 	var br_state := GameState.forge_state
 	GameState.forge_state = 1
@@ -945,16 +934,17 @@ func _ready() -> void:
 	_check(not sh.bridge_broken(), "대장간을 고치면 쇠다리가 이어짐")
 	_check(sh.advance() and sh.zone == 2 and 2 in GameState.waypoints and sh.slimes[0].title == "요괴 까마귀", "위쪽 길로 3구역 광동리 (웨이포인트 켜짐, 요괴 까마귀)")
 	GameState.forge_state = br_state
-	main.hunter.position = sh.exit_area().get_center()
+	main.player.position = sh.exit_area().get_center()
 	main.interact()
 	_check(main.hunt == null, "아래 입구 F로 마을로")
 	# 다음 날: 사냥터 입구에서 웨이포인트를 고른다
 	main.next_day()
-	main.hunter.position = main.hunt_gate.position
+	main.player.position = main.hunt_gate.position
 	if not HunterClass.chosen():
 		HunterClass.choose(&"warrior")
-	main._hunter_interact()
-	_check(main.menu_open and main.menu_kind == &"waypoint" and main.waypoint_options() == [&"zone_0", &"zone_1", &"zone_2", &"respec", &"close"], "웨이포인트가 여럿이면 어디서 시작할지 물음")
+	GameState.hunter_unlocked = true
+	main._gate_interact()
+	_check(main.menu_open and main.menu_kind == &"waypoint" and main.waypoint_options().slice(0, 4) == [&"zone_0", &"zone_1", &"zone_2", &"respec"] and main.waypoint_options().back() == &"close", "웨이포인트가 여럿이면 어디서 시작할지 물음")
 	main.menu_move(1)
 	main.menu_confirm()
 	if main.menu_open and main.menu_kind == &"companion":
@@ -1036,8 +1026,8 @@ func _ready() -> void:
 	th.set_ai(false)
 	th.companion_ai = false
 	var pc := th.companion
-	main.hunter.position = Vector2(10, 7) * HuntGround.T
-	pc.position = main.hunter.feet() + Vector2(0, 20)
+	main.player.position = Vector2(10, 7) * HuntGround.T
+	pc.position = main.player.feet() + Vector2(0, 20)
 	var pulled: WildSlime = th.slimes[0]
 	pulled.buried = false
 	pulled.hp = 3 * U
@@ -1050,10 +1040,10 @@ func _ready() -> void:
 	th.tick(Config.COMPANION_PULL_TIME)
 	_check(pulled.hp == hp_before - HunterClass.companion_damage(1) and pulled.position.distance_to(pc.position) <= Config.COMPANION_PULL_GAP + 1 and pulled.stunned(), "혀 당기기: 멀리 있는 몬스터를 끌어와 피해 1 + 멈춤")
 	var hearts_t := th.life
-	pulled.position = main.hunter.feet()
+	pulled.position = main.player.feet()
 	th.tick(0.01)
 	_check(th.life == hearts_t, "멈춘 몬스터에 닿아도 다치지 않음")
-	pulled.tick(Config.COMPANION_PULL_STUN, main.hunter.feet())
+	pulled.tick(Config.COMPANION_PULL_STUN, main.player.feet())
 	_check(not pulled.stunned(), "%.0f초 뒤 다시 움직임" % Config.COMPANION_PULL_STUN)
 	main.leave_hunt()
 
@@ -1065,9 +1055,9 @@ func _ready() -> void:
 	var wm := wh.map
 	_check(wm != null and wm.size == Vector2i(52, 30) and wm.pixel_size() == Vector2(1248, 720), "금사리는 52x30칸 (화면 2x2) 넓은 맵")
 	_check(wh.camera.is_current() and wh.camera.limit_right == 1248 and wh.camera.limit_bottom == 720, "카메라가 맵 끝까지 따라감")
-	_check(main.hunter.position == wm.spot("S") and wh.near_exit(), "아래 입구 앞에서 시작")
+	_check(main.player.position == wm.spot("S") and wh.near_exit(), "아래 입구 앞에서 시작")
 	_check(wh.slimes.size() == z2.count and wh.slimes.all(func(s: WildSlime) -> bool: return s.buried and wm.at_point(s.position) == "c"), "모래게 %d마리가 모래톱마다 숨어 있음" % z2.count)
-	var hunter_w: Character = main.hunter
+	var hunter_w: Character = main.player
 	hunter_w.position = Vector2(46, 26) * HuntGround.T
 	wh.tick(0.01)
 	await get_tree().process_frame
@@ -1140,7 +1130,7 @@ func _ready() -> void:
 	var nh: HuntGround = main.hunt
 	nh.set_ai(false)
 	var nm := nh.map
-	var hunter_n: Character = main.hunter
+	var hunter_n: Character = main.player
 	_check(nh.zone == 0 and nm != null and z1.map == "nonghyup" and nm.size == Vector2i(52, 30), "분원농협도 52x30칸 (화면 2x2) 넓은 맵")
 	_check(hunter_n.position == nm.spot("S") and nh.near_exit(), "아래 입구 앞에서 시작")
 	_check(nh.slimes.size() == Config.WILD_SLIME_COUNT and nh.slimes.all(func(s: WildSlime) -> bool: return not s.buried and nm.at_point(s.position) == "c"), "야생 슬라임 %d마리가 마당·논밭에 흩어져 있음" % Config.WILD_SLIME_COUNT)
@@ -1258,7 +1248,6 @@ func _ready() -> void:
 	mcard.visible = false
 
 	# 29) 크리처 훈련 (2026-09-29 사용자 선택 A, 돈 쓸 곳 2단계): 공급함에서 크리처마다 범위·속도, 값은 단계마다 두 배
-	main._set_active(farmer)
 	farmer.position = main.supply_box.position + Vector2(0, 16)
 	var tr: Creature = main.creatures[0]
 	tr.data.radius_level = 0
@@ -1304,7 +1293,6 @@ func _ready() -> void:
 	if main.hunt:
 		main.leave_hunt()
 	main.close_menu()
-	main._set_active(main.hunter)
 	GameState.hunts_today = 0
 	if not 1 in GameState.waypoints:
 		GameState.waypoints.append(1)
@@ -1312,7 +1300,7 @@ func _ready() -> void:
 	GameState.worn[&"hunter"].erase(&"weapon")  # 드롭으로 무기를 들었으면 사냥칼로 (이 아래는 칼 휘두르기 점검)
 	var d_dh: HuntGround = main.hunt
 	d_dh.set_ai(false)
-	var d_hf: Vector2 = main.hunter.feet()
+	var d_hf: Vector2 = main.player.feet()
 	var d_lw: WildSlime = d_dh.slimes[0]
 	for o: WildSlime in d_dh.slimes:
 		o.position = d_hf + Vector2(0, 300)
@@ -1334,10 +1322,10 @@ func _ready() -> void:
 		d_dh.tick(1.0 / 30.0)
 		if not d_lw.telegraph().is_empty():
 			break
-	d_lw.position = main.hunter.feet() + Vector2(40, 0)
+	d_lw.position = main.player.feet() + Vector2(40, 0)
 	d_lw._lunge_dir = Vector2.LEFT
 	var d_h1 := d_dh.life
-	main.hunter.position += Vector2(0, 40)
+	main.player.position += Vector2(0, 40)
 	for i in 25:
 		d_dh.tick(1.0 / 30.0)
 	_check(d_dh.life == d_h1, "A. 예고를 보고 옆으로 비키면 안 맞음")
@@ -1350,7 +1338,7 @@ func _ready() -> void:
 	var d_z2d: Dictionary = Config.HUNT_ZONES[1]
 	_check(d_z2d.damage == 2 and d_gh.slimes[0].damage == HunterSkills.monster_damage(1, 2) and d_gh.slimes[0].hp == HunterSkills.monster_hp(1, d_z2d.hp) and d_z2d.hp > Config.HUNT_ZONES[0].hp, "B. 금사리는 체력 %d · 피해 %d" % [d_gh.slimes[0].hp, d_gh.slimes[0].damage])
 	_check(main.waypoint_option_text(&"zone_1").contains(d_z2d.advice), "B. 웨이포인트 메뉴에 권장 준비")
-	var d_gf: Vector2 = main.hunter.feet()
+	var d_gf: Vector2 = main.player.feet()
 	for o: WildSlime in d_gh.slimes:
 		o.buried = true
 		o.position = d_gf + Vector2(0, 400)
@@ -1374,18 +1362,18 @@ func _ready() -> void:
 	_check(d_toad_b != null and d_toad_b.pattern == &"tongue" and d_toad_b.hp == HunterSkills.monster_hp(1, d_z2d.boss_hp), "C. 금두꺼비 대장 (혀 채찍, 체력 %d)" % d_toad_b.hp)
 	d_toad_b.ai_enabled = true
 	d_toad_b._pattern_cd = 0.0
-	main.hunter.position = d_toad_b.position + Vector2(60, 0) - Vector2(0, main.hunter.feet().y - main.hunter.position.y)
+	main.player.position = d_toad_b.position + Vector2(60, 0) - Vector2(0, main.player.feet().y - main.player.position.y)
 	var d_h3 := d_gh.life
 	d_gh.tick(0.02)
 	_check(not d_toad_b.telegraph().is_empty() and d_gh.life == d_h3, "C. 혀 채찍 예고 (직선 띠)")
 	for i in int(Config.TONGUE_WINDUP * 30) + 3:
 		d_gh.tick(1.0 / 30.0)
 	_check(d_gh.life == d_h3 - d_toad_b.damage and d_gh.dust.size() == 3, "C. 혀에 맞으면 체력 -%d, 지나간 자리에 금가루 3곳" % d_toad_b.damage)
-	main.hunter.position += d_gh.dust[0].at - main.hunter.feet()
+	main.player.position += d_gh.dust[0].at - main.player.feet()
 	d_gh.tick(0.01)
-	_check(is_equal_approx(main.hunter.slow_mult, Config.GOLD_DUST_SLOW), "C. 금가루를 밟으면 느려짐")
+	_check(is_equal_approx(main.player.slow_mult, Config.GOLD_DUST_SLOW), "C. 금가루를 밟으면 느려짐")
 	main.leave_hunt()
-	_check(is_equal_approx(main.hunter.slow_mult, 1.0), "C. 사냥터를 나오면 빠르기 원래대로")
+	_check(is_equal_approx(main.player.slow_mult, 1.0), "C. 사냥터를 나오면 빠르기 원래대로")
 	# C. 대장 슬라임 내려찍기 + 새끼
 	GameState.hunts_today = 0
 	GameState.bosses_beaten.clear()  # 일반 몬스터를 다 잡아 대장이 나오는 흐름으로
@@ -1398,12 +1386,12 @@ func _ready() -> void:
 	var d_sb: WildSlime = d_bh2._boss()
 	d_sb.ai_enabled = true
 	d_sb._pattern_cd = 0.0
-	main.hunter.position = d_sb.position + Vector2(0, 80)
+	main.player.position = d_sb.position + Vector2(0, 80)
 	var d_h4 := d_bh2.life
 	d_bh2.tick(0.02)
 	_check(d_sb.airborne() and d_sb.telegraph().kind == &"circle", "C. 대장 슬라임이 뛰어올라 사냥꾼 발밑에 그림자 원")
 	var d_sb_hp := d_sb.hp
-	d_sb.position = main.hunter.feet() + Vector2(0, -8 - Config.SWING_REACH)
+	d_sb.position = main.player.feet() + Vector2(0, -8 - Config.SWING_REACH)
 	d_bh2._cooldown = 0.0
 	d_bh2.swing(Vector2.UP)
 	_check(d_sb.hp == d_sb_hp, "C. 공중에 뜬 대장은 칼에 안 맞음")
@@ -1418,19 +1406,18 @@ func _ready() -> void:
 	main.leave_hunt()
 
 	# 31) 들나물 캐기 (2026-09-29 사용자 선택 A, 초반 며칠 할 일): 아침마다 풀밭에 돋고, F로 캐서 공급함에 진열 → 밤사이 팔림
-	main._set_active(main.farmer)
 	var h_forage: Forage = main.forage
 	var h_bad: Array[Vector2i] = []
 	for spot in Config.HERB_SPOTS:
 		# 대장간 터 · 고물 더미가 들어선 자리는 쓰지 않는다 (Forage.blocked)
 		if main.forage.blocked.any(func(r: Rect2i) -> bool: return r.has_point(spot)):
 			continue
-		var stand := Farm.center_of(spot) - Vector2(0, main.farmer.FEET_Y)
+		var stand := Farm.center_of(spot) - Vector2(0, main.player.FEET_Y)
 		var h_inside: bool = main.farm.get_cell(spot) != null or main.farm._path.has(spot) or main.farm._fence.has(spot) or spot.y < 1 or spot.y > Config.MAP_SIZE.y - 3
 		for p: Prop in main.props:
 			if p.footprint_rect().has_point(Farm.center_of(spot) - p.position):
 				h_inside = true
-		if h_inside or not main.farm.is_free(main.farmer.feet_rect(stand)):
+		if h_inside or not main.farm.is_free(main.player.feet_rect(stand)):
 			h_bad.append(spot)
 	_check(h_bad.is_empty(), "들나물 자리는 모두 밭·길·울타리·오브젝트 밖, 서서 캘 수 있는 풀밭 %s" % [h_bad])
 	main.next_day()
@@ -1440,10 +1427,10 @@ func _ready() -> void:
 		s.position = Vector2(-500, -500)
 	GameState.herbs = 0
 	for spot: Vector2i in h_forage.herbs.keys():
-		main.farmer.position = Farm.center_of(spot) - Vector2(0, main.farmer.FEET_Y) + Vector2(10, 0)
+		main.player.position = Farm.center_of(spot) - Vector2(0, main.player.FEET_Y) + Vector2(10, 0)
 		main.interact()
 	_check(GameState.herbs == h_n and h_forage.herbs.is_empty(), "농부가 가까이서 F로 캠 (들나물 %d)" % GameState.herbs)
-	main.farmer.position = main.supply_box.position
+	main.player.position = main.supply_box.position
 	_check(main.supply_options().has(&"display_herbs") and main.supply_option_text(&"display_herbs").contains("%d원" % (h_n * Config.HERB_PRICE)), "공급함에 들나물 진열하기")
 	_check(main.supply_action(&"display_herbs") and GameState.herbs == 0 and GameState.displayed_herbs == h_n, "들나물 진열")
 	var h_money := GameState.money
@@ -1451,12 +1438,10 @@ func _ready() -> void:
 	_check(GameState.money - h_money >= h_n * Config.HERB_PRICE and GameState.displayed_herbs == 0 and " ".join(h_lines).contains("들나물 %d포기가 팔렸다" % h_n), "밤사이 팔려 아침에 +%d원" % (h_n * Config.HERB_PRICE))
 	_check(not h_forage.herbs.is_empty() and " ".join(h_lines).contains("들나물"), "다음 날 아침 새로 돋음")
 	_check(Forage.object_particle("쑥") == "을" and Forage.object_particle("냉이") == "를", "들나물 이름에 맞는 조사 (쑥을 · 냉이를)")
-	main._set_active(main.hunter)
-	main.hunter.position = Farm.center_of(h_forage.herbs.keys()[0]) - Vector2(0, main.hunter.FEET_Y)
+	main.player.position = Farm.center_of(h_forage.herbs.keys()[0]) - Vector2(0, main.player.FEET_Y)
 	var h_before: int = h_forage.herbs.size()
 	main.interact()
-	_check(h_forage.herbs.size() == h_before, "사냥꾼은 들나물을 캐지 않음 (농부 일)")
-	main._set_active(main.farmer)
+	_check(h_forage.herbs.size() == h_before - 1, "사냥 다녀온 주인공도 들나물을 캠 (한 사람)")
 
 	# 32) 하루 시계 (2026-09-29 사용자: 시간은 아주 여유 있게, 막지 않고, 자야 하루가 넘어감)
 	main.next_day()
@@ -1491,12 +1476,12 @@ func _ready() -> void:
 		# 대장간 터 · 고물 더미가 들어선 자리는 쓰지 않는다 (Forage.blocked)
 		if main.forage.blocked.any(func(r: Rect2i) -> bool: return r.has_point(spot)):
 			continue
-		var stand := Farm.center_of(spot) - Vector2(0, main.farmer.FEET_Y)
+		var stand := Farm.center_of(spot) - Vector2(0, main.player.FEET_Y)
 		var f_inside: bool = main.farm.get_cell(spot) != null or main.farm._path.has(spot) or main.farm._fence.has(spot) or spot.y < 1 or spot.y > Config.MAP_SIZE.y - 3 or spot in Config.HERB_SPOTS
 		for p: Prop in main.props:
 			if p.footprint_rect().has_point(Farm.center_of(spot) - p.position):
 				f_inside = true
-		if f_inside or not main.farm.is_free(main.farmer.feet_rect(stand)):
+		if f_inside or not main.farm.is_free(main.player.feet_rect(stand)):
 			f_bad.append(spot)
 	_check(f_bad.is_empty(), "도라지 자리는 모두 들나물 자리와 겹치지 않는 풀밭 %s" % [f_bad])
 	for s: Creature in main.creatures:
@@ -1505,11 +1490,10 @@ func _ready() -> void:
 	main.next_day()
 	var f_roots := f_forage.roots.size()
 	_check(f_roots >= Config.ROOTS_PER_DAY.x and f_roots <= Config.ROOTS_PER_DAY.y, "아침마다 땅속에 도라지 %d~%d뿌리 (%d)" % [Config.ROOTS_PER_DAY.x, Config.ROOTS_PER_DAY.y, f_roots])
-	main._set_active(main.farmer)
 	var f_root_cell: Vector2i = f_forage.roots.keys()[0]
-	main.farmer.position = Farm.center_of(f_root_cell) - Vector2(0, main.farmer.FEET_Y) + Vector2(10, 0)
+	main.player.position = Farm.center_of(f_root_cell) - Vector2(0, main.player.FEET_Y) + Vector2(10, 0)
 	for f_cell: Vector2i in f_forage.herbs.keys():
-		if Farm.center_of(f_cell).distance_to(main.farmer.feet()) <= Config.INTERACT_DISTANCE:
+		if Farm.center_of(f_cell).distance_to(main.player.feet()) <= Config.INTERACT_DISTANCE:
 			f_forage.herbs.erase(f_cell)
 	main.interact()
 	_check(f_forage.roots.has(f_root_cell) and main._message.text.contains("손으로는 못 캔다"), "농부는 도라지를 손으로 못 캠 (알려 줌)")
@@ -1664,11 +1648,7 @@ func _ready() -> void:
 	for fc: Vector2i in main.forage.herbs:
 		f_blocked = f_blocked and not Config.FORGE_RECT.has_point(fc)
 	_check(f_blocked, "대장간 터 자리에는 들나물이 돋지 않음")
-	main._set_active(main.farmer)
 	GameState.hunter_unlocked = true
-	main.switch_character()
-	main.switch_character()
-	_check(main.active == main.farmer, "고치기 전에는 Tab 이 농부 ↔ 사냥꾼만")
 	GameState.money = 0
 	GameState.crops = 0
 	GameState.material = 0
@@ -1681,7 +1661,7 @@ func _ready() -> void:
 	GameState.money = Config.FORGE_COST_MONEY + 1000
 	GameState.crops = Config.FORGE_COST_CROPS + 10
 	GameState.material = Config.FORGE_COST_MATERIAL
-	main.farmer.position = Farm.center_of(Config.FORGE_RECT.position + Vector2i(1, Config.FORGE_RECT.size.y))
+	main.player.position = Farm.center_of(Config.FORGE_RECT.position + Vector2i(1, Config.FORGE_RECT.size.y))
 	main.interact()
 	_check(main.menu_open and main.menu_kind == &"forge", "대장간 터에서 F → 복구 창")
 	main.menu_confirm()
@@ -1712,11 +1692,12 @@ func _ready() -> void:
 	bc.queue_free()
 	_check(main.smith.visible and main.scrap_heap != null and GameState.scrap_pile == Config.SCRAP_PER_DAY, "대장장이와 고물 더미가 생김")
 	_check(CreatureJobs.SCRAP in CreatureJobs.jobs(), "R 일 목록에 고철 줍기")
-	main.switch_character()
-	main.switch_character()
-	_check(main.active == main.smith, "Tab: 농부 → 사냥꾼 → 대장장이")
-	main.switch_character()
-	_check(main.active == main.farmer, "대장장이 다음은 농부")
+	_check(main.smith.npc and main.player.active and not main.smith.active, "대장장이는 말 거는 마을 사람 (조작 안 함)")
+	main.player.position = Farm.center_of(Config.SMITH_CELL) + Vector2(0, 10)
+	_check(main.nearby_villager() == main.smith, "대장장이 옆에 서면 말 걸 사람")
+	main.interact()
+	_check(main.menu_open and main.menu_kind == &"craft", "대장장이에게 F → 제작 창")
+	main.close_menu()
 	# 크리처 고철 줍기: 땅속성이 빠르다
 	var fs: Creature = main._hatch(CreatureCatalog.SLIME, Config.FORAGE_CELLS[2])
 	fs.data.set_element(load("res://data/creatures/elements/earth.tres"))
@@ -1740,16 +1721,14 @@ func _ready() -> void:
 	_check(not fs.work_once(), "제자리에서 쉼")
 	main.next_day()
 	_check(GameState.scrap_pile == Config.SCRAP_PER_DAY, "아침마다 고물 더미가 다시 쌓임")
-	main.farmer.position = Farm.center_of(Config.SCRAP_RECT.position + Vector2i(Config.SCRAP_RECT.size.x, 0))
+	main.player.position = Farm.center_of(Config.SCRAP_RECT.position + Vector2i(Config.SCRAP_RECT.size.x, 0))
 	main.interact()
 	_check(GameState.scrap == 2, "농부가 F로 고철을 손으로 주움")
-	# 제작: 대장장이만 모루에서
+	# 제작: 주인공이 대장간 모루에서 F → 대장장이 제작 창
 	GameState.scrap = 20
 	GameState.money = 1000
-	forge_f(main, main.farmer)
-	_check(not main.menu_open, "농부는 모루를 못 씀")
-	forge_f(main, main.smith)
-	_check(main.menu_open and main.menu_kind == &"craft", "대장장이가 모루에서 F → 제작 창")
+	forge_f(main, main.player)
+	_check(main.menu_open and main.menu_kind == &"craft", "대장간 모루에서 F → 대장장이 제작 창")
 	var f_cost: Array = Config.CRAFT_COSTS[&"work_cap"]
 	var f_serial := GameState.gear_serial
 	main.menu_confirm()
@@ -1791,13 +1770,11 @@ func _ready() -> void:
 	GameState.scrap = 0
 	_check(main.craft(&"hard_hat") == &"", "고철이 모자라면 못 만듦")
 	GameState.bag[&"farmer"].append(f_rid)
-	main._set_active(main.farmer)
 	_check(&"sell_gear" in main.supply_options(), "농부도 공급함에서 제작품을 팜")
 	GameState.bag[&"farmer"].erase(f_rid)
-	main._set_active(main.smith)
 	main.open_inventory()
-	_check(not main.inventory.visible, "대장장이는 가방이 없음")
-	main._set_active(main.farmer)
+	_check(main.inventory.visible and main.inventory.character == main.player, "가방은 주인공 것 하나")
+	main.close_inventory()
 
 	# 36) 광동리 (2026-09-29 사용자: "3구역은 광동리다", 후보 B. 동지벌 군량 벌판): 요괴 까마귀 떼 · 허수아비 장수 · 아기 까마귀
 	close_all(main)
@@ -1808,7 +1785,6 @@ func _ready() -> void:
 	if not 2 in GameState.waypoints:
 		GameState.waypoints.append(2)
 	HuntGround.loot_enabled = false
-	main._set_active(main.hunter)
 	_check(main.enter_hunt(null, 2) and main.hunt.zone == 2, "광동리 웨이포인트에서 시작")
 	var gh: HuntGround = main.hunt
 	gh.set_ai(false)
@@ -1820,13 +1796,13 @@ func _ready() -> void:
 			o.position = Vector2(40, 40)
 	sp_a.ai_enabled = true
 	sp_a._rest = 0.0
-	sp_a.position = main.hunter.feet() + Vector2(80, 0)
+	sp_a.position = main.player.feet() + Vector2(80, 0)
 	gh.life = 90
 	gh.tick(0.05)
 	_check(sp_a.in_air() and sp_a.airborne(), "사냥꾼이 다가오면 날아오름")
 
 	GameState.worn[&"hunter"].erase(&"weapon")  # 드롭으로 무기를 들었으면 사냥칼로 (이 아래는 칼 휘두르기 점검)
-	sp_a.position = main.hunter.feet() + Vector2(0, -8 - Config.SWING_REACH)
+	sp_a.position = main.player.feet() + Vector2(0, -8 - Config.SWING_REACH)
 	gh._cooldown = 0.0
 	_check(gh.swing(Vector2.UP) == 0 and sp_a.hp == sp_a.max_hp, "나는 까마귀는 칼에 안 맞음")
 	sp_a._fly = 0.0
@@ -1841,17 +1817,17 @@ func _ready() -> void:
 	_check(gh.life == g_h0 - sp_a.damage, "원 안에 있으면 내려꽂기에 체력 -%d" % sp_a.damage)
 	_check(not sp_a.in_air() and sp_a._rest > 0.0, "내려앉아 낟알을 쫌 (칠 틈)")
 	gh._cooldown = 0.0
-	sp_a.position = main.hunter.feet() + Vector2(0, -8 - Config.SWING_REACH)
+	sp_a.position = main.player.feet() + Vector2(0, -8 - Config.SWING_REACH)
 	_check(gh.swing(Vector2.UP) == 1 and sp_a.hp == sp_a.max_hp - HunterClass.hunter_damage(1, &"melee"), "앉은 까마귀는 칼에 맞음")
 	_check(sp_a._rest <= Config.SWOOP_HIT_RECOVER, "맞으면 곧 다시 날아오름")
 	# 내려꽂기 원 밖이면 안 다침
 	sp_a._rest = 0.0
-	sp_a.position = main.hunter.feet() + Vector2(60, 0)
+	sp_a.position = main.player.feet() + Vector2(60, 0)
 	gh._invulnerable = 0.0
 	gh.tick(0.05)
 	sp_a._fly = 0.0
 	gh.tick(0.05)
-	main.hunter.position += Vector2(0, 60)
+	main.player.position += Vector2(0, 60)
 	var g_h1 := gh.life
 	for i in 40:
 		gh.tick(0.05)
@@ -1864,7 +1840,7 @@ func _ready() -> void:
 	_check(g_b.title == "허수아비 장수" and g_b.hp == HunterSkills.monster_hp(2, g_z.boss_hp) and not g_b.flyer, "대장 허수아비 장수 체력 %d" % g_b.hp)
 	g_b.ai_enabled = true
 	g_b._pattern_cd = 0.0
-	g_b.position = main.hunter.feet() + Vector2(0, -100)
+	g_b.position = main.player.feet() + Vector2(0, -100)
 	gh.life = 90
 	gh._invulnerable = 0.0
 	gh.tick(0.05)
@@ -1896,7 +1872,7 @@ func _ready() -> void:
 	GameState.worn[&"hunter"].erase(&"weapon")  # 드롭으로 무기를 들었으면 사냥칼로 (이 아래는 칼 휘두르기 점검)
 	var g_s: WildSlime = gh.slimes[0]
 	g_s.hp = 1
-	g_s.position = main.hunter.feet() + Vector2(0, -8 - Config.SWING_REACH)
+	g_s.position = main.player.feet() + Vector2(0, -8 - Config.SWING_REACH)
 	gh.swing(Vector2.UP)
 	_check(gh.drops.size() == 1 and gh.drops[0].species == CreatureCatalog.SPARROW, "광동리 알 = 아기 까마귀")
 	HuntGround.egg_roll = -1.0
@@ -1964,7 +1940,7 @@ func _ready() -> void:
 	_check(dh.zone == d_zi and dh.slimes.size() == d_z.count, "도마리에 들어옴 (고목 그루터기 %d)" % d_z.count)
 	var d_s: WildSlime = dh.slimes[0]
 	_check(d_s.buried and d_s.disguise and d_s.hp == HunterSkills.monster_hp(3, d_z.hp), "고목 그루터기는 그루터기인 척 숨어 있음 (체력 %d)" % d_s.hp)
-	d_s.position = main.hunter.feet() + Vector2(Config.WILD_BURROW_POP_DISTANCE - 10, 0)
+	d_s.position = main.player.feet() + Vector2(Config.WILD_BURROW_POP_DISTANCE - 10, 0)
 	dh.tick(0.01)
 	_check(not d_s.buried, "가까이 가면 일어남")
 	# 덩굴 묶기: 잠깐 붙잡음
@@ -1985,8 +1961,8 @@ func _ready() -> void:
 	d_ji.position = Vector2(-500, -500)
 	d_ch.ai_enabled = true
 	d_ch._pattern_cd = 0.0
-	main.hunter.position = dh.map.pixel_size() / 2.0 + Vector2(0, 60)
-	d_ch.position = main.hunter.feet() + Vector2(0, -120)
+	main.player.position = dh.map.pixel_size() / 2.0 + Vector2(0, 60)
+	d_ch.position = main.player.feet() + Vector2(0, -120)
 	dh.life = 100
 	dh._invulnerable = 0.0
 	dh.tick(0.05)
@@ -2000,20 +1976,20 @@ func _ready() -> void:
 	dh.life = 100
 	dh._invulnerable = 0.0
 	dh.tick(0.05)
-	main.hunter.position += Vector2(60, 0)
+	main.player.position += Vector2(60, 0)
 	for i in 40:
 		dh.tick(0.05)
 	_check(dh.life == 100, "옆으로 비키면 통나무에 안 맞음")
 	d_ch.ai_enabled = false
 	# 대장은 몸에 닿기만 해선 안 다침 (예고 패턴으로만)
 	d_ch._recover = 1.0
-	d_ch.position = main.hunter.feet()
+	d_ch.position = main.player.feet()
 	dh.life = 100
 	dh._invulnerable = 0.0
 	for i in 5:
 		dh.tick(0.05)
 	_check(dh.life == 100, "대장 몸에 닿기만 해선 하트가 안 줆")
-	d_ch.position = main.hunter.feet() + Vector2(0, -120)
+	d_ch.position = main.player.feet() + Vector2(0, -120)
 	# 하나만 쓰러뜨리면 보상 없음, 둘 다 쓰러뜨리면 대장 알 (확률 고정)
 	HuntGround.egg_roll = 0.0
 	dh.drops.clear()
@@ -2055,7 +2031,6 @@ func _ready() -> void:
 	GameState.hunter_unlocked = true
 	GameState.first_egg_done = true
 	GameState.waypoints = [0, 1, 2, 3]
-	main._set_active(main.hunter)
 	var wr := RandomNumberGenerator.new()
 	wr.seed = 5
 	_check(Wearables.weapon().kind == &"melee" and Wearables.weapon().name == "사냥칼", "무기 칸이 비면 사냥칼")
@@ -2084,12 +2059,12 @@ func _ready() -> void:
 	_check(w_bow_where == &"worn" and Wearables.weapon().kind == &"bow" and Wearables.weapon().range == 150.0, "처음 얻은 무기는 바로 듦 (활 사거리 150)")
 	# 활: 칼이 안 닿는 거리에서 화살 한 대
 	GameState.hunts_today = 0
-	main.hunter.position = main.hunt_gate.position
+	main.player.position = main.hunt_gate.position
 	main.enter_hunt(null, 0)
 	var wph: HuntGround = main.hunt
 	wph.set_ai(false)
 	wph.set_process(false)
-	var w_feet: Vector2 = main.hunter.feet()
+	var w_feet: Vector2 = main.player.feet()
 	for o: WildSlime in wph.slimes:
 		o.position = w_feet + Vector2(-300, 0)
 	var w_t: WildSlime = wph.slimes[0]
@@ -2138,12 +2113,12 @@ func _ready() -> void:
 	# 나는 까마귀도 화살엔 맞는다
 	GameState.worn[&"hunter"][&"weapon"] = &"gear_1"
 	GameState.hunts_today = 0
-	main.hunter.position = main.hunt_gate.position
+	main.player.position = main.hunt_gate.position
 	main.enter_hunt(null, 2)
 	var wpg: HuntGround = main.hunt
 	wpg.set_ai(false)
 	wpg.set_process(false)
-	var wg_feet: Vector2 = main.hunter.feet()
+	var wg_feet: Vector2 = main.player.feet()
 	for o: WildSlime in wpg.slimes:
 		o.position = wg_feet + Vector2(-300, 0)
 	var w_sp: WildSlime = wpg.slimes[0]
@@ -2192,7 +2167,7 @@ func _ready() -> void:
 	_check(bjh.strong and GameState.strength == 0 and bjh.power() == 2, "힘 물약: 이번 사냥 피해 +1")
 	bjh.strong = false
 	bjh.lamp_oil = false
-	var b_feet: Vector2 = main.hunter.feet()
+	var b_feet: Vector2 = main.player.feet()
 	var b_lamps := bjh.lamps.duplicate()
 	bjh.lamps.clear()
 	bjh.companion.position = b_feet + Vector2(0, -220)
@@ -2314,9 +2289,8 @@ func _ready() -> void:
 	_check(is_equal_approx(b_c._timer, y_t1 / Config.TONIC_SPEED_MULT), "보약 먹은 날 크리처 일 두 배 빠름")
 	GameState.junk = Config.JUNK_KEEP + 5
 	var y_m0 := GameState.money
-	main._set_active(main.hunter)
-	main.hunter.position = Farm.center_of(main.SUPPLY_RECT.position + Vector2i(1, 1))
-	main._hunter_interact()
+	main.player.position = Farm.center_of(main.SUPPLY_RECT.position + Vector2i(1, 1))
+	main._supply_interact()
 	main.close_menu()
 	_check(GameState.junk == Config.JUNK_KEEP and GameState.money == y_m0 + 5 * Config.JUNK_PRICE, "약방을 고친 뒤 공급함은 잡템 %d개를 약방 재료로 남기고 나머지만 팖" % Config.JUNK_KEEP)
 	main.next_day()
@@ -2343,7 +2317,7 @@ func _ready() -> void:
 	mh.set_process(false)
 	mh.companion_ai = false
 	_check(mh.zone == m_zi and not mh.is_night() and mh._night.size() == 1, "밀목에 들어옴: 그늘 (어둡기만, 불빛 규칙 없음)")
-	var m_feet: Vector2 = main.hunter.feet()
+	var m_feet: Vector2 = main.player.feet()
 	for o: WildSlime in mh.slimes:
 		o.position = m_feet + Vector2(-400, 0)
 	var m_a: WildSlime = mh.slimes[0]
@@ -2396,7 +2370,7 @@ func _ready() -> void:
 	for o: WildSlime in mh.slimes.duplicate():
 		mh.slimes.erase(o)
 		o.queue_free()
-	m_feet = main.hunter.feet()
+	m_feet = main.player.feet()
 	var m_boss: WildSlime = mh.spawn_boss()
 	_check(m_boss.pattern == &"tiger" and m_boss.hp == HunterSkills.monster_hp(5, m_z.boss_hp) and m_boss.title == "산군 백호", "산군 백호 (체력 %d)" % m_boss.hp)
 	m_boss.position = m_feet + Vector2(120, 0)
@@ -2411,22 +2385,22 @@ func _ready() -> void:
 	_check(mh.life == m_h0 - m_boss.damage and mh.slimes.size() == 1, "착지에 다침 (체력 -%d), 새끼는 안 나옴" % m_boss.damage)
 	m_boss._recover = 0.0
 	m_boss._pattern_cd = 0.0
-	m_boss.position = main.hunter.feet() + Vector2(60, 0)
+	m_boss.position = main.player.feet() + Vector2(60, 0)
 	mh.tick(0.02)
 	_check(m_boss._log_aim >= 0.0, "쓰러지는 나무 (띠 예고)")
 	m_boss._log_aim = -1.0
 	m_boss._recover = 0.0
 	m_boss._pattern_cd = 0.0
-	m_boss.position = main.hunter.feet() + Vector2(40, 0)
+	m_boss.position = main.player.feet() + Vector2(40, 0)
 	mh.tick(0.02)
 	_check(m_boss._roar >= 0.0 and m_boss.telegraph().get("roar", false), "포효 (둘레 원 예고)")
 	for i in int(Config.TIGER_ROAR_WINDUP * 30) + 3:
 		mh.tick(1.0 / 30.0)
 	mh._cooldown = 0.0
-	_check(mh.frozen > 0.0 and main.hunter.frozen and mh.swing(Vector2.RIGHT) == 0, "포효 원 안이면 잠깐 굳음 (못 휘두름)")
+	_check(mh.frozen > 0.0 and main.player.frozen and mh.swing(Vector2.RIGHT) == 0, "포효 원 안이면 잠깐 굳음 (못 휘두름)")
 	for i in int(Config.TIGER_ROAR_FREEZE * 30) + 3:
 		mh.tick(1.0 / 30.0)
-	_check(mh.frozen == 0.0 and not main.hunter.frozen, "굳음이 풀림")
+	_check(mh.frozen == 0.0 and not main.player.frozen, "굳음이 풀림")
 	m_boss.ai_enabled = false
 	# 대장을 잡으면 산군 발톱 + 다음 날 축사 터, 대장 알은 드물게 아기 백호
 	GameState.material3 = 0
@@ -2434,7 +2408,7 @@ func _ready() -> void:
 	HuntGround.egg_roll = 0.0
 	mh._defeat(m_boss)
 	_check(GameState.material3 == 1 and GameState.barn_boss_down and mh.path_open and mh.gate_closed() and mh.path_block().contains("축사"), "산군 백호를 쓰러뜨리면 산군 발톱 1, 역동 쪽 목책은 축사를 고쳐야 열림")
-	main.hunter.position = mh.next_area().get_center()
+	main.player.position = mh.next_area().get_center()
 	_check(not mh.advance() and mh.zone == m_zi, "목책이 닫혀 있으면 역동으로 못 감")
 	_check(mh.drops.size() == 1 and mh.drops[0].species == CreatureCatalog.WHITE_TIGER, "확률에 걸리면 대장 알이 아기 백호")
 	HuntGround.egg_roll = 0.15
@@ -2459,8 +2433,7 @@ func _ready() -> void:
 	_check(main.restore_barn() and GameState.barn_state == 2 and main.rancher.visible and GameState.hens == Config.START_HENS and GameState.money == 3 and GameState.crops == 4 and GameState.material3 == 0,
 		"축사 복구 (돈 %d · 무 %d · 산군 발톱 %d) → 목축인 · 암탉 %d" % [Config.BARN_COST_MONEY, Config.BARN_COST_CROPS, Config.BARN_COST_MATERIAL, Config.START_HENS])
 	_check(CreatureJobs.jobs().has(CreatureJobs.FEED), "모이 주기 일이 생김")
-	main._set_active(main.farmer)
-	_check(not main.coop_options().has(&"lunch") and main.coop_options().has(&"feed"), "농부는 모이 주기만 (도시락은 목축인)")
+	_check(main.coop_options().has(&"lunch") and main.coop_options().has(&"feed"), "닭장: 모이 주기 · 목축인에게 도시락 부탁")
 	_check(main.coop_action(&"feed") and GameState.fed == GameState.hens and GameState.crops == 3, "모이 주기 (무 %d)" % Config.FEED_CROP_COST)
 	var m_rng := RandomNumberGenerator.new()
 	m_rng.seed = 7
@@ -2501,10 +2474,8 @@ func _ready() -> void:
 	GameState.nest = 5
 	GameState.hen_eggs = 0
 	_check(main.coop_action(&"take_nest") and GameState.hen_eggs == 5 and GameState.nest == 0, "둥지 달걀 꺼내기")
-	main._set_active(main.rancher)
 	GameState.crops = 1
 	_check(main.coop_options().has(&"lunch") and main.coop_action(&"lunch") and GameState.lunches == 1 and GameState.hen_eggs == 3 and GameState.crops == 0, "목축인 사냥 도시락 (달걀 %d · 무 %d)" % [Config.LUNCH_EGGS, Config.LUNCH_CROPS])
-	main._set_active(main.farmer)
 	_check(main.supply_options().has(&"display_hen_eggs") and main.supply_action(&"display_hen_eggs") and GameState.displayed_hen_eggs == 3, "달걀 진열")
 	var m_m0 := GameState.money
 	main.next_day()
@@ -2561,10 +2532,13 @@ func _ready() -> void:
 	TestStarts.apply(ex, &"barn")
 	var ex_idle := Expedition.idle(ex)
 	_check(Expedition.zones() == range(6) and ex_idle.size() == 5, "원정: 대장 잡은 구역 %s · 쉬는 · 채집 %d마리" % [Expedition.zones(), ex_idle.size()])
-	ex.farmer.position = ex.hunt_gate.position + Vector2(0, 8)
-	ex._set_active(ex.farmer)
+	ex.player.position = ex.hunt_gate.position + Vector2(0, 8)
+	HunterClass.choose(&"archer")
 	ex.interact()
-	_check(ex.menu_open and ex.menu_kind == &"expedition" and ex._menu_options.size() == Expedition.zones().size() + 1, "농부가 사냥터 입구에서 F: 원정 선택창 (대장 잡은 구역 + 닫기)")
+	_check(ex.menu_open and ex.menu_kind == &"waypoint" and ex._menu_options.has(&"expedition"), "사냥터 입구에서 F: 웨이포인트 창에 크리처 원정대")
+	ex.menu_index = ex._menu_options.find(&"expedition")
+	ex.menu_confirm()
+	_check(ex.menu_open and ex.menu_kind == &"expedition" and ex._menu_options.size() == Expedition.zones().size() + 1, "원정대 → 원정 선택창 (대장 잡은 구역 + 닫기)")
 	ex.menu_index = 1
 	ex.menu_confirm()
 	var team1 := Expedition.team(ex, 1)
@@ -2574,7 +2548,7 @@ func _ready() -> void:
 		"원정 중인 크리처는 마을에서 사라지고 동행 · 채집에서 빠짐")
 	ex.close_menu()
 	_check(Expedition.send(ex, 2) == 0, "쉬는 크리처가 3마리보다 적으면 원정대를 못 보냄")
-	var ex_eggs_before := GameState.village_eggs.size() + GameState.farmer_eggs.size() + GameState.hunter_eggs.size()
+	var ex_eggs_before := GameState.village_eggs.size() + GameState.farmer_eggs.size()
 	var ex_m0 := GameState.money
 	var ex_j0 := GameState.junk
 	var ex_lines: Array[String] = ex.next_day()
@@ -2582,7 +2556,7 @@ func _ready() -> void:
 	for l in ex_lines:
 		if l.begins_with("원정대"):
 			ex_line = l
-	_check(ex_line != "" and GameState.money > ex_m0 and GameState.junk > ex_j0 and GameState.village_eggs.size() + GameState.farmer_eggs.size() + GameState.hunter_eggs.size() == ex_eggs_before,
+	_check(ex_line != "" and GameState.money > ex_m0 and GameState.junk > ex_j0 and GameState.village_eggs.size() + GameState.farmer_eggs.size() == ex_eggs_before,
 		"아침 카드: %s (알은 안 가져옴)" % ex_line)
 	_check(Expedition.team(ex, 1).size() == 5, "원정대는 불러들일 때까지 날마다 다시 감")
 	# 1/3 어림: 5마리 보통 팀이 100밤 가져온 돈 평균
@@ -2663,9 +2637,9 @@ func _save_load_checks() -> void:
 	await get_tree().process_frame
 	_check(a.save_slot == -1 and not a.autosave() and not SaveGame.exists(1), "테스트 장면은 슬롯이 없어 저절로 저장하지 않음")
 	TestStarts.apply(a, &"barn")
-	# 섞인 상태: 시각 · 알 세 군데 · 부화 중 · 가방 · 창고 장비 · 밭 물 · 풀밭 · 병아리 · 들고 있는 크리처 · 사냥꾼으로 전환
+	# 섞인 상태: 시각 · 알 두 군데 · 부화 중 · 가방 · 창고 장비 · 밭 물 · 풀밭 · 병아리 · 들고 있는 크리처
 	GameState.minutes = 14 * 60 + 30
-	GameState.hunter_eggs.append(load(TestStarts.SPECIES[&"tiger"]))
+	GameState.farmer_eggs.append(load(TestStarts.SPECIES[&"tiger"]))
 	GameState.village_eggs.append(load(TestStarts.SPECIES[&"slime"]))
 	GameState.farmer_eggs.append(load(TestStarts.SPECIES[&"gold_toad"]))
 	a.incubating_days = 2
@@ -2694,15 +2668,14 @@ func _save_load_checks() -> void:
 	a.farm.do_work(Farm.Work.WATER, fc(2, 2))
 	a.forage.water(Config.FORAGE_CELLS[7])
 	var carried: Creature = a.creatures[5]
-	a.farmer.position = Farm.center_of(fc(9, 9))
-	carried.pick_up(a.farmer)
+	a.player.position = Farm.center_of(fc(9, 9))
+	carried.pick_up(a.player)
 	a.creatures[0].data.radius_level = 3
 	# 원정 · 입양 (42): 하나는 대장장이에게 입양, 남은 쉬는 크리처는 금사리 원정
 	Expedition.adopt(a, Expedition.idle(a)[-1])
 	Expedition.send(a, 1)
-	a._set_active(a.hunter)
-	a.hunter.position = Farm.center_of(Config.HUNTER_START)
-	a.hunter.facing = Vector2i.LEFT
+	a.player.position = Farm.center_of(Config.HUNTER_CELL)
+	a.player.facing = Vector2i.LEFT
 	a.tool_index = 2
 	a.save_slot = 2
 	var before: Dictionary = SaveGame.snapshot(a)
@@ -2733,18 +2706,18 @@ func _save_load_checks() -> void:
 	_check(b.adoptees.size() == 1 and Expedition.team(b, 1).size() == 3 and Expedition.team(b, 1).all(func(x: Creature) -> bool: return not x.visible), "입양된 크리처 · 원정 중인 크리처 그대로")
 	_check(diff.is_empty(), "저장 전과 불러온 뒤 전체 상태가 같음 %s" % (diff if not diff.is_empty() else ""))
 	_check(GameState.gear == gear_before and b.creatures.map(func(c: Creature) -> String: return c.describe()) == creatures_before, "장비 옵션 · 크리처 능력치 · 일 · 훈련이 그대로 (%d개 · %d마리)" % [GameState.gear.size(), b.creatures.size()])
-	_check(GameState.bag.hunter is Array and GameState.bag.hunter.get_typed_builtin() == TYPE_STRING_NAME and GameState.hunter_eggs.get_typed_class_name() == &"Resource" or GameState.hunter_eggs[0] is CreatureSpecies, "가방 · 알 목록 타입이 그대로")
-	_check(GameState.hunter_eggs.size() == 1 and GameState.hunter_eggs[0].id == &"tiger" and GameState.farmer_eggs.back().id == &"gold_toad" and b.incubating_days == 2 and b.incubating_species.id == &"will_o", "알 (사냥꾼 · 공급함 · 농부) · 부화기 그대로")
+	_check(GameState.bag.hunter is Array and GameState.bag.hunter.get_typed_builtin() == TYPE_STRING_NAME and GameState.farmer_eggs.get_typed_class_name() == &"Resource" or GameState.farmer_eggs[0] is CreatureSpecies, "가방 · 알 목록 타입이 그대로")
+	_check(GameState.farmer_eggs.size() >= 2 and GameState.farmer_eggs[-2].id == &"tiger" and GameState.farmer_eggs.back().id == &"gold_toad" and GameState.village_eggs.back().id == &"slime" and b.incubating_days == 2 and b.incubating_species.id == &"will_o", "알 (주인공 · 공급함) · 부화기 그대로")
 	_check(b.forge.label == "대장간" and b.scrap_heap != null and b.smith.visible and b.yak.label == "약방" and b.herb_bed != null and b.alchemist.visible and b.barn.label == "축사" and b.rancher.visible, "대장간 · 약방 · 축사 고친 모습 · 일꾼 셋 (값을 다시 치르지 않음)")
 	_check(GameState.hens == 3 and GameState.chicks == [2, 1] and GameState.nest == 3, "닭장 (암탉 · 병아리 · 둥지) 그대로")
 	_check(b.farm.get_cell(fc(2, 2)).watered and b.farm.get_cell(fc(7, 6)) != null and b.forage.watered.has(Config.FORAGE_CELLS[7]), "밭 네 구역 · 물 준 칸 · 물 준 풀밭")
-	_check(b.active == b.hunter and b.hunter.facing == Vector2i.LEFT and b.creatures[5].carried_by == null and b.creatures[5].home == fc(9, 9), "사냥꾼으로 이어 함 · 들고 있던 크리처는 농부 발밑에 놓임")
+	_check(b.player.position == Farm.center_of(Config.HUNTER_CELL) and b.player.facing == Vector2i.LEFT and b.creatures[5].carried_by == null and b.creatures[5].home == Config.HUNTER_CELL, "주인공 자리 · 방향 그대로 · 들고 있던 크리처는 주인공 발밑에 놓임")
 	_check(is_equal_approx(GameState.minutes, 14 * 60 + 30) and b.save_slot == -1, "시각 오후 2:30 그대로")
 	# 불러온 뒤에도 게임이 이어진다: 하루 넘기기 · 사냥
-	var eggs_n := GameState.hunter_eggs.size()
+	var eggs_n := GameState.farmer_eggs.size()
 	b.next_day()
 	_check(GameState.day == 71 and b.incubating_days == 1, "불러온 뒤 하루 넘기기")
-	b.hunter.position = b.hunt_gate.position
+	b.player.position = b.hunt_gate.position
 	_check(b.enter_hunt(null, 5) and b.hunt != null, "불러온 뒤 밀목 웨이포인트로 사냥")
 
 	# 사냥터 안에서 저장하고 나가기: 마을로 돌아온 채로 저장
@@ -2753,7 +2726,7 @@ func _save_load_checks() -> void:
 	_check(b.hunt.process_mode == Node.PROCESS_MODE_DISABLED and b._menu_options == [&"resume", &"music_volume", &"sfx_volume", &"save_quit"], "사냥 중 Esc: 사냥터가 멈추고 계속하기 · 소리 크기 · 저장하고 나가기")
 	b.close_menu()
 	b.leave_hunt()
-	_check(SaveGame.exists(3) and SaveGame.read(3).gs.hunts_today == 1 and SaveGame.read(3).gs.hunter_eggs.size() == eggs_n, "사냥터에서 돌아오면 저절로 저장")
+	_check(SaveGame.exists(3) and SaveGame.read(3).gs.hunts_today == 1 and SaveGame.read(3).gs.farmer_eggs.size() == eggs_n, "사냥터에서 돌아오면 저절로 저장")
 
 	# 처음 화면: 슬롯 셋 + 지우기, 지우기는 두 번 눌러야
 	b.open_menu(&"title")
@@ -2790,6 +2763,7 @@ func _save_load_checks() -> void:
 	v1.creatures[1].home = SaveGame.V1_SCRAP_SPOT
 	v1.creatures[2].home = Vector2i(25, 1)
 	v1.people = {&"farmer": [Vector2(600, 20), Vector2i.UP]}
+	v1.erase("player")
 	GameState.reset()
 	c = load("res://scenes/main.tscn").instantiate()
 	add_child(c)
@@ -2800,7 +2774,29 @@ func _save_load_checks() -> void:
 	_check(c.farm.get_cell(p0.position).planted and c.farm.get_cell(p0.position).growth == 2 and c.farm.get_cell(p3.end - Vector2i.ONE).tilled, "옛 마을 저장: 밭 칸은 같은 구역 같은 자리로")
 	_check(c.creatures[0].home == p0.position + Vector2i(2, 1) and c.creatures[1].home == Creature.scrap_spot() and c.creatures[2].home in Config.FORAGE_CELLS, "옛 마을 저장: 밭 · 고물 더미 앞 크리처는 새 자리로, 풀밭 크리처는 공급함 옆으로")
 	_check(not c.forage.herbs.is_empty() and c.forage.herbs.keys().all(func(h: Vector2i) -> bool: return h in Config.HERB_SPOTS), "옛 마을 저장: 들나물은 새 풀밭에 다시 돋음")
-	_check(c.farmer.position == Farm.center_of(Config.FARMER_START), "옛 마을 저장: 사람은 새 마을 처음 자리")
+	_check(c.player.position == Farm.center_of(Config.PLAYER_START), "옛 마을 저장: 주인공은 새 마을 처음 자리")
+	c.queue_free()
+	await get_tree().process_frame
+
+	# 주인공 하나 전 (VERSION 2) 저장 파일: 조작하던 사람 자리에 주인공, 사냥꾼이 든 알은 주인공 손으로,
+	# 사냥꾼 레벨 · 직업 · 장비 · 농부 장비는 그대로 (2026-10-03)
+	var v2 := SaveGame.read(2)
+	v2.version = 2
+	v2.erase("player")
+	v2.people = {&"farmer": [Vector2(100, 100), Vector2i.UP], &"hunter": [Vector2(700, 150), Vector2i.RIGHT], &"smith": [Vector2(300, 400), Vector2i.DOWN]}
+	v2.active = &"hunter"
+	var eggs_v2: int = v2.gs.farmer_eggs.size()
+	v2.gs.hunter_eggs = [{res = TestStarts.SPECIES[&"foal"]}]
+	var lv_v2: int = v2.gs.hunter_level
+	GameState.reset()
+	c = load("res://scenes/main.tscn").instantiate()
+	add_child(c)
+	await get_tree().process_frame
+	SaveGame.apply(c, v2)
+	_check(c.player.position == Vector2(700, 150) and c.player.facing == Vector2i.RIGHT, "옛 저장 (일곱 사람): 주인공은 조작하던 사냥꾼 자리에")
+	_check(c.smith.position == Farm.center_of(Config.SMITH_CELL) and c.farmer.position == Farm.center_of(Config.FARMER_CELL), "옛 저장: 마을 사람은 제자리")
+	_check(GameState.farmer_eggs.size() == eggs_v2 + 1 and GameState.farmer_eggs.back().id == &"foal", "옛 저장: 사냥꾼이 든 알은 주인공 손으로")
+	_check(GameState.hunter_level == lv_v2 and GameState.gear == gear_before and c.player.outfit == &"farmer", "옛 저장: 레벨 · 장비 그대로, 마을에서는 밭 옷")
 	c.queue_free()
 	await get_tree().process_frame
 	for i in range(1, SaveGame.SLOTS + 1):
@@ -2815,7 +2811,6 @@ func fc(x: int, y: int) -> Vector2i:
 
 ## c 로 대장간 앞에 서서 F
 func forge_f(main: Node2D, c: Character) -> void:
-	main._set_active(c)
 	c.position = Farm.center_of(Config.FORGE_RECT.position + Vector2i(1, Config.FORGE_RECT.size.y))
 	main.interact()
 
@@ -2879,7 +2874,6 @@ func _pace_checks() -> void:
 	GameState.reset()
 	GameState.hunter_unlocked = true
 	GameState.first_egg_done = true
-	m._set_active(m.hunter)
 	m.enter_hunt(null, 0)
 	var h: HuntGround = m.hunt
 	h.set_process(false)
@@ -2895,27 +2889,27 @@ func _pace_checks() -> void:
 			got += 1
 	_check(got == 0, "드롭 몫 0 이면 아무것도 안 떨어짐")
 	# 구르기
-	var feet: Vector2 = m.hunter.feet()
+	var feet: Vector2 = m.player.feet()
 	for o: WildSlime in h.slimes:
 		o.position = feet + Vector2(0, 300)
-	var p0: Vector2 = m.hunter.position
+	var p0: Vector2 = m.player.position
 	_check(h.dash(Vector2.UP), "Space 구르기")
 	_check(not h.dash(Vector2.UP), "구르는 중에는 다시 못 구름")
 	for i in 10:
 		h.tick(1.0 / 30.0)
-	_check(m.hunter.position.distance_to(p0) >= Config.DASH_DISTANCE * 0.8 and not m.hunter.dashing, "구르면 휙 움직임 (%.0fpx)" % m.hunter.position.distance_to(p0))
+	_check(m.player.position.distance_to(p0) >= Config.DASH_DISTANCE * 0.8 and not m.player.dashing, "구르면 휙 움직임 (%.0fpx)" % m.player.position.distance_to(p0))
 	# 구르는 동안은 몸에 부딪혀도 안 다침
 	h.dash_cd = 0.0
 	var hearts0 := h.life
 	h.dash(Vector2.RIGHT)
-	h.slimes[0].position = m.hunter.feet()
+	h.slimes[0].position = m.player.feet()
 	h.tick(1.0 / 30.0)
 	_check(h.life == hearts0, "구르는 동안은 안 맞음")
 	for i in 40:
 		h.tick(1.0 / 30.0)
 	h.slimes[0].position = feet + Vector2(0, 300)
 	# 연속 베기 3타: 3타째는 넓고 피해 +1
-	feet = m.hunter.feet()
+	feet = m.player.feet()
 	var hand: Vector2 = feet + Vector2(0, -8)
 	var w := Wearables.weapon()
 	var far: Vector2 = hand + Vector2(w.reach + w.radius * 1.3, 0)
@@ -2942,8 +2936,8 @@ func _pace_checks() -> void:
 				break
 			h.tick(1.0 / 30.0)
 			h._hitstop = 0.0
-		a.position = m.hunter.feet() + Vector2(0, -8) + Vector2(w.reach + w.radius * 1.3 - (Config.COMBO_FINISH_STEP if k == 1 else 0.0), 0)
-		b.position = m.hunter.feet() + Vector2(0, -8) + Vector2(w.reach, 0)
+		a.position = m.player.feet() + Vector2(0, -8) + Vector2(w.reach + w.radius * 1.3 - (Config.COMBO_FINISH_STEP if k == 1 else 0.0), 0)
+		b.position = m.player.feet() + Vector2(0, -8) + Vector2(w.reach, 0)
 		h.swing(Vector2.RIGHT)
 	_check(h.combo == 2 and a.hp == 5 * U - d2 and b.hp == 5 * U - 2 * d1 - d2, "3타째는 넓게 베고 피해 +1 (멀리 %d · 가까이 %d)" % [a.hp, b.hp])
 	_check(h._hitstop > 0.0, "맞히면 잠깐 멈춤 (타격 멈춤)")
@@ -2951,7 +2945,7 @@ func _pace_checks() -> void:
 	h.set_ai(true)
 	h._hitstop = 0.0
 	h._invulnerable = 99.0
-	feet = m.hunter.feet()
+	feet = m.player.feet()
 	var near: Array[WildSlime] = []
 	for i in 6:
 		var o: WildSlime = h.slimes[3 + i]
@@ -3007,7 +3001,6 @@ func _bow_style_checks() -> void:
 	GameState.hunter_unlocked = true
 	GameState.first_egg_done = true
 	GameState.worn[&"hunter"][&"weapon"] = &"hunting_bow"
-	m._set_active(m.hunter)
 	var kills := {}
 	for style: StringName in [&"", &"pierce", &"spread", &"volley"]:
 		# 구역마다 몬스터를 새로 (앞 방식이 잡은 수만큼 줄어서)
@@ -3016,7 +3009,7 @@ func _bow_style_checks() -> void:
 		var h: HuntGround = m.hunt
 		h.set_process(false)
 		h.set_ai(false)
-		var feet: Vector2 = m.hunter.feet()
+		var feet: Vector2 = m.player.feet()
 		HuntGround.bow_style = style
 		h.shots.clear()
 		h._cooldown = 0.0
@@ -3063,9 +3056,8 @@ func _hunter_class_checks() -> void:
 	GameState.skills = {&"whirl": 2, &"pierce": 3, &"fight_together": 1}
 	GameState.skill_points = 4
 	_check(not HunterClass.chosen() and HunterClass.weapon_mult(&"bow") == 1.0, "직업 전: 피해 배율 그대로")
-	m._set_active(m.hunter)
-	m.hunter.position = m.hunt_gate.position
-	m._hunter_interact()
+	m.player.position = m.hunt_gate.position
+	m._gate_interact()
 	_check(m.menu_open and m.menu_kind == &"class", "직업 없으면 입구에서 직업 고르기 창")
 	m.menu_index = 1
 	m.menu_confirm()
@@ -3147,7 +3139,6 @@ func _hunter_skill_checks() -> void:
 	HunterSkills.learn(&"spread")
 	_check(HunterSkills.left_mode(&"bow") == &"spread" and HunterSkills.cycle_mode(&"bow") == &"" and HunterSkills.cycle_mode(&"bow") == &"pierce" and HunterSkills.cycle_mode(&"bow", -1) == &"", "Q/E 로 기본 · 관통 · 부채살을 돌려 고름")
 	# 스킬 창 (T)
-	m._set_active(m.hunter)
 	m._unhandled_input(_action(&"skills"))
 	_check(m.skill_panel.visible, "T 로 스킬 창이 열림")
 	m.skill_panel.cursor = Vector2i(3, 0)
@@ -3184,7 +3175,7 @@ func _hunter_skill_checks() -> void:
 	h.shots.clear()
 	GameState.skills[&"spread"] = 5
 	# 화살비: 원 안 몬스터가 세 번 맞음
-	var feet: Vector2 = m.hunter.feet()
+	var feet: Vector2 = m.player.feet()
 	for o: WildSlime in h.slimes:
 		o.position = feet + Vector2(-400, 0)
 	var rain_t: WildSlime = h.slimes[0]
@@ -3206,7 +3197,7 @@ func _hunter_skill_checks() -> void:
 	h = m.hunt
 	h.set_process(false)
 	h.set_ai(false)
-	feet = m.hunter.feet()
+	feet = m.player.feet()
 	for o: WildSlime in h.slimes:
 		o.position = feet + Vector2(-400, 0)
 	var behind: WildSlime = h.slimes[0]
@@ -3221,11 +3212,11 @@ func _hunter_skill_checks() -> void:
 	var ahead: WildSlime = h.slimes[0]
 	ahead.hp = 1
 	# 구르기가 끝날 때 부르는 돌진 베기 (구르기 길이는 맵 막힘에 따라 달라서 끝난 자리에서 바로 본다)
-	ahead.position = m.hunter.feet() + Vector2(24, 0)
+	ahead.position = m.player.feet() + Vector2(24, 0)
 	h._dash_dir = Vector2.RIGHT
 	h._dash_slash()
 	_check(not ahead in h.slimes, "돌진 베기: 구르기가 끝난 자리 앞을 벰")
-	feet = m.hunter.feet()
+	feet = m.player.feet()
 	var line: Array = []
 	for k in 3:
 		var o: WildSlime = h.slimes[k]
@@ -3250,14 +3241,14 @@ func _hunter_skill_checks() -> void:
 	h.swing(Vector2.RIGHT)
 	_check(h.shots.size() == 1 and h.shots[0].get("chain", 0) == 2, "연쇄 구슬: 작은 구슬 2개를 품음")
 	for o: WildSlime in h.slimes:
-		o.position = m.hunter.feet() + Vector2(-400, 0)
+		o.position = m.player.feet() + Vector2(-400, 0)
 	for i in 60:
 		h.tick(1.0 / 30.0)
 		h._hitstop = 0.0
 		if h.shots.any(func(sh) -> bool: return sh.get("small", false)):
 			break
 	_check(h.shots.filter(func(sh) -> bool: return sh.get("small", false)).size() == 2, "연쇄 구슬이 터지면 작은 구슬 2개가 튐")
-	feet = m.hunter.feet()
+	feet = m.player.feet()
 	var storm_t: WildSlime = h.slimes[0]
 	storm_t.hp = 1
 	storm_t.position = feet + Vector2(70, 10)
@@ -3277,12 +3268,12 @@ func _hunter_skill_checks() -> void:
 	_check(h.companion != null and h.companion2 != null and c2.process_mode == Node.PROCESS_MODE_DISABLED, "둘이 함께: 동행 둘")
 	var hearts: int = h.life
 	h._invulnerable = 0.0
-	h._hurt(m.hunter.feet() + Vector2(10, 0))
+	h._hurt(m.player.feet() + Vector2(10, 0))
 	_check(h.life == hearts and h.guard_cd > 0.0, "크리처 방패: 첫 한 번은 동행이 대신 맞음")
 	h._invulnerable = 0.0
-	h._hurt(m.hunter.feet() + Vector2(10, 0))
+	h._hurt(m.player.feet() + Vector2(10, 0))
 	_check(h.life == hearts - 1, "방패 쿨 동안엔 그대로 맞음")
-	feet = m.hunter.feet()
+	feet = m.player.feet()
 	for o: WildSlime in h.slimes:
 		o.position = feet + Vector2(-400, 0)
 	var ct: WildSlime = h.slimes[0]
@@ -3320,7 +3311,7 @@ func _yeokdong_checks() -> void:
 	mh.set_ai(false)
 	mh.set_process(false)
 	mh.path_open = true
-	m.hunter.position = mh.next_area().get_center()
+	m.player.position = mh.next_area().get_center()
 	_check(not mh.gate_closed() and mh.advance() and mh.zone == zi, "축사를 고쳤으면 밀목 윗길로 역동에 감")
 	m.leave_hunt()
 	# 아기 망아지
@@ -3351,8 +3342,8 @@ func _yeokdong_checks() -> void:
 	h.companion_ai = false
 	_check(h.zone == zi and h.slimes.size() == z.count * h.swarm_size() and h.slimes.all(func(o: WildSlime) -> bool: return o.lancer), "역동에 들어옴: 창기병 %d마리 (자리마다 %d)" % [h.slimes.size(), h.swarm_size()])
 	# 넓은 들판 가운데로 (입구는 숲 사이라 돌격 띠가 짧다)
-	m.hunter.position = Vector2(30, 11) * Config.TILE
-	var feet: Vector2 = m.hunter.feet()
+	m.player.position = Vector2(30, 11) * Config.TILE
+	var feet: Vector2 = m.player.feet()
 	for o: WildSlime in h.slimes:
 		o.position = feet + Vector2(-600, 0)
 		o.ai_enabled = false
@@ -3378,10 +3369,10 @@ func _yeokdong_checks() -> void:
 	var b: WildSlime = h.spawn_boss()
 	_check(b.boss and b.pattern == &"general" and b.title == "역마 장군" and is_equal_approx(b._sprite.scale.x * b.scale.x, 2.0), "역마 장군 (32칸 시트를 정수 2배로)")
 	h._invulnerable = 0.0
-	b.position = m.hunter.feet() + Vector2(120, 0)
+	b.position = m.player.feet() + Vector2(120, 0)
 	b.ai_enabled = true
 	b._pattern_cd = 0.0
-	b.tick(1.0 / 30.0, m.hunter.feet())
+	b.tick(1.0 / 30.0, m.player.feet())
 	_check(b._charges_left == Config.GENERAL_CHARGES and b._bus_aim > 0.0 and not b.telegraph().is_empty(), "역마 장군: 창 돌격 %d번 예고" % Config.GENERAL_CHARGES)
 	h.life = 200  # 돌격 여러 번에 받혀도 쓰러지지 않게
 	var hearts1 := h.life
@@ -3406,7 +3397,7 @@ func _yeokdong_checks() -> void:
 	b._bus_aim = -1.0
 	b._bus_t = -1.0
 	b.hp = b.max_hp / 2 - 1
-	b.tick(1.0 / 30.0, m.hunter.feet())
+	b.tick(1.0 / 30.0, m.player.feet())
 	_check(b._air_t >= 0.0 and b._stomped, "체력 절반 아래: 돌격 앞에 말발굽 쿵")
 	var n0 := h.slimes.size()
 	h._on_slammed(b.position, b)
@@ -3446,7 +3437,7 @@ func _gonjiam_checks() -> void:
 	yh.set_ai(false)
 	yh.set_process(false)
 	yh.path_open = true
-	m.hunter.position = yh.next_area().get_center()
+	m.player.position = yh.next_area().get_center()
 	_check(yh.path_block() == "" and yh.advance() and yh.zone == zi, "역마 장군을 잡으면 역동 윗길로 곤지암에 감")
 	m.leave_hunt()
 	# 아기 악귀: 불 · 겁주기 · 밤일
@@ -3474,9 +3465,9 @@ func _gonjiam_checks() -> void:
 	h.companion_ai = false
 	_check(h.zone == zi and h.slimes.size() == z.count * h.swarm_size() and h.slimes.all(func(o: WildSlime) -> bool: return o.demon), "곤지암에 들어옴: 뿔 악귀 %d마리 (자리마다 %d)" % [h.slimes.size(), h.swarm_size()])
 	_check(h.slimes[0]._frame == 48 and is_equal_approx(h.slimes[0]._sprite.scale.x * h.slimes[0].scale.x, 1.0), "뿔 악귀 48칸 시트를 늘이지 않고 그림")
-	m.hunter.position = Vector2(25, 10) * Config.TILE
-	m.hunter.facing = Vector2i.RIGHT
-	var feet: Vector2 = m.hunter.feet()
+	m.player.position = Vector2(25, 10) * Config.TILE
+	m.player.facing = Vector2i.RIGHT
+	var feet: Vector2 = m.player.feet()
 	for o: WildSlime in h.slimes:
 		o.position = feet + Vector2(-900, 0)
 		o.ai_enabled = false
@@ -3579,12 +3570,10 @@ func _naru_checks() -> void:
 	_check(m.restore_naru() and GameState.naru_state == 2 and m.ferryman.visible and GameState.material4 == 0, "돈 · 무 · 마왕 뿔로 한 번에 고침 → 뱃사공")
 	_check(CreatureJobs.FISH in CreatureJobs.jobs(), "고치면 크리처 일에 물고기 몰기")
 	GameState.hunter_unlocked = true
-	m._set_active(m.hunter)
-	for i in 6:
-		if m.active == m.ferryman:
-			break
-		m.switch_character()
-	_check(m.active == m.ferryman, "Tab 으로 뱃사공")
+	m.player.position = Farm.center_of(Config.FERRYMAN_CELL) + Vector2(10, 0)
+	m.interact()
+	_check(m.menu_open and m.menu_kind == &"dock" and m.dock_options().has(&"stew"), "뱃사공에게 F → 나루터 창 (매운탕도)")
+	m.close_menu()
 	# 통발
 	var crops0 := GameState.crops
 	_check(m.dock_action(&"set_traps") and GameState.traps == Config.TRAP_MAX and GameState.crops == crops0 - Config.TRAP_MAX * Config.TRAP_BAIT, "통발 놓기: 미끼 무 하나씩 %d개" % Config.TRAP_MAX)
@@ -3609,8 +3598,7 @@ func _naru_checks() -> void:
 	GameState.fish = maxi(GameState.fish, Config.STEW_FISH + 1)
 	var fish0 := GameState.fish
 	_check(m.dock_action(&"stew") and GameState.stews == 1 and GameState.fish == fish0 - Config.STEW_FISH, "뱃사공 매운탕 (물고기 %d · 무 %d)" % [Config.STEW_FISH, Config.STEW_CROPS])
-	m._set_active(m.farmer)
-	_check(not m.dock_action(&"stew") and not (&"stew" in m.dock_options()), "매운탕은 뱃사공만")
+	_check(&"stew" in m.dock_options(), "매운탕은 나루터 창에서 뱃사공에게 부탁")
 	var money0 := GameState.money
 	var sell := GameState.fish
 	m.supply_action(&"display_fish")
@@ -3687,7 +3675,6 @@ func _sonae_checks() -> void:
 	GameState.reset()
 	TestStarts.apply(m, &"guiyeo")
 	_check(m.waypoint_options().has(&"zone_8") and not m.waypoint_options().has(&"zone_9"), "시작 지점 귀여리 앞: 입구에 귀여리 (섬은 입구 목록에 없음)")
-	m._set_active(m.hunter)
 	m._pending_zone = 0
 	GameState.hunts_today = 0
 	m._ferry_interact()
@@ -3701,13 +3688,13 @@ func _sonae_checks() -> void:
 	TestStarts.apply(m, &"sonae")
 	_check(gi in GameState.bosses_beaten and not zi in GameState.bosses_beaten and GameState.naru_state == 2, "시작 지점 소내섬 앞: 귀여리 대장 처치 · 나루터")
 	_check(not m.waypoint_options().has(&"zone_9"), "섬은 사냥터 입구 웨이포인트 목록에 없음")
-	m._set_active(m.hunter)
+	_check(m.dock_options().has(&"ferry") and m.dock_option_text(&"ferry").contains("소내섬"), "나루터 창에 나룻배 타기 (소내섬)")
 	GameState.hunts_today = 0
 	m._ferry_interact()
 	if m.hunt == null:
 		m.enter_hunt(null, m._pending_zone)
 	var h: HuntGround = m.hunt
-	_check(h != null and h.zone == zi and zi in GameState.waypoints, "나루터에서 사냥꾼 F → 나룻배로 소내섬")
+	_check(h != null and h.zone == zi and zi in GameState.waypoints, "나루터 나룻배 타기 → 소내섬")
 	h.set_ai(false)
 	h.set_process(false)
 	h.companion_ai = false
@@ -3735,8 +3722,8 @@ func _sonae_checks() -> void:
 			seen[v.id] = true
 	_check(rare > 200 and rare < 400 and seen.size() == 3, "잡은 뒤엔 희귀 용 셋이 드물게 (2000번에 %d, 기대 300)" % rare)
 	# 일반 용: 물어뜯기 돌진 → 날개 바람
-	m.hunter.position = Vector2(25, 16) * Config.TILE
-	var feet: Vector2 = m.hunter.feet()
+	m.player.position = Vector2(25, 16) * Config.TILE
+	var feet: Vector2 = m.player.feet()
 	b.position = feet + Vector2(150, 0)
 	b.ai_enabled = true
 	b._pattern_cd = 0.0
@@ -3762,12 +3749,12 @@ func _sonae_checks() -> void:
 	_check(b.telegraphs().any(func(t: Dictionary) -> bool: return t.get("gust", false)), "다음 차례: 날개 바람 (둘레 원)")
 	h._invulnerable = 0.0
 	life0 = h.life
-	var at0: Vector2 = m.hunter.feet()
+	var at0: Vector2 = m.player.feet()
 	for i in 60:
 		h.tick(1.0 / 30.0)
 		if h.life < life0:
 			break
-	_check(h.life < life0 and m.hunter.feet().distance_to(b.position) > at0.distance_to(b.position), "날개 바람에 맞으면 다치고 밀려남")
+	_check(h.life < life0 and m.player.feet().distance_to(b.position) > at0.distance_to(b.position), "날개 바람에 맞으면 다치고 밀려남")
 	for o: WildSlime in h.slimes.duplicate():
 		o.queue_free()
 	h.slimes.clear()
@@ -3860,18 +3847,18 @@ func _guiyeo_checks() -> void:
 	# 냄비뚜껑: 한 번 대신 막고, 쿨 동안은 맞음
 	h.life = 200
 	h._invulnerable = 0.0
-	h._hurt(m.hunter.feet() + Vector2(10, 0), 5)
+	h._hurt(m.player.feet() + Vector2(10, 0), 5)
 	_check(h.life == 200 and h.lid_cd > 0.0, "아기 도마뱀 냄비뚜껑이 한 번 막음")
 	h._invulnerable = 0.0
-	h._hurt(m.hunter.feet() + Vector2(10, 0), 5)
+	h._hurt(m.player.feet() + Vector2(10, 0), 5)
 	_check(h.life == 195, "뚜껑 쿨 동안은 맞음")
 	var l: WildSlime = h.slimes[0]
 	for o: WildSlime in h.slimes.duplicate():
 		if o != l:
 			h.slimes.erase(o)
 			o.queue_free()
-	m.hunter.position = Vector2(25, 14) * Config.TILE
-	var feet: Vector2 = m.hunter.feet()
+	m.player.position = Vector2(25, 14) * Config.TILE
+	var feet: Vector2 = m.player.feet()
 	l.position = feet + Vector2(60, 0)
 	l.tick(1.0 / 30.0, feet)
 	var hp0 := l.hp
@@ -3970,12 +3957,10 @@ func _hall_checks() -> void:
 	SiteWork.fill(&"hall")
 	_check(VillageHall.restore(m) and GameState.hall_state == 2 and m.chief.visible and GameState.feast_state == 1 and m.feast_table != null, "돈 · 무 · 용 비늘로 고침 → 이장 · 잔치상")
 	_check(not GameState.hall_request.is_empty() and VillageHall.request_pool().has(&"fish"), "게시판 부탁이 붙음 (나루터를 고쳤으니 물고기 부탁도)")
-	m._set_active(m.farmer)
-	for i in 8:
-		m.switch_character()
-		if m.active == m.chief:
-			break
-	_check(m.active == m.chief, "Tab 으로 이장")
+	m.player.position = Farm.center_of(Config.CHIEF_CELL) + Vector2(10, 0)
+	m.interact()
+	_check(m.menu_open and m.menu_kind == &"board" and VillageHall.options(m, &"board").has(&"reroll"), "이장에게 F → 게시판 (부탁 바꾸기도)")
+	m.close_menu()
 	_check(CreatureJobs.jobs().has(CreatureJobs.ERRAND), "크리처 일에 심부름")
 	# 게시판: 무 부탁으로 고정해 보고 심부름 · 들어주기
 	GameState.hall_request = {id = &"crops", count = 20}
@@ -3991,14 +3976,13 @@ func _hall_checks() -> void:
 	var money0 := GameState.money
 	_check(VillageHall.turn_in(m) and GameState.crops == 20 - (20 - Config.ERRAND_CAP) and GameState.money == money0 + roundi(20 * Config.CROP_PRICE * Config.HALL_REWARD_MULT) and GameState.hall_request.is_empty(), "부탁 들어주기: 심부름 몫을 빼고 내고 보상")
 	GameState.hall_request = {id = &"crops", count = 20}
-	_check(VillageHall.reroll(m) and GameState.hall_request.id != &"crops" and not VillageHall.reroll(m), "이장은 하루 한 번 부탁 바꾸기")
+	_check(VillageHall.reroll(m) and GameState.hall_request.id != &"crops" and not VillageHall.reroll(m), "이장에게 하루 한 번 부탁 바꾸기")
 	var lines2: Array[String] = m.next_day()
 	_check(not GameState.hall_request.is_empty() and GameState.errands == 0 and not GameState.hall_rerolled and lines2.any(func(l: String) -> bool: return l.contains("게시판")), "아침마다 새 부탁 · 방송")
-	# 잔치상: 그 사람만 차림
+	# 잔치상: 주인공이 재료를 가져오면 그 사람이 차림
+	GameState.crops = 30
+	_check(not VillageHall.set_dish(m, &"greens") and GameState.feast_dishes.is_empty(), "재료가 모자라면 못 차림")
 	GameState.crops = 50
-	m._set_active(m.hunter)
-	_check(not VillageHall.set_dish(m, &"greens") and GameState.feast_dishes.is_empty(), "농부 상은 사냥꾼이 못 차림")
-	m._set_active(m.farmer)
 	_check(VillageHall.set_dish(m, &"greens") and GameState.crops == 10, "농부가 무생채 · 뭇국")
 	_check(not VillageHall.set_dish(m, &"greens"), "같은 상은 한 번")
 	_check(not VillageHall.options(m, &"feast").has(&"open_feast"), "다 안 찼으면 잔치 열기 없음")
@@ -4008,23 +3992,21 @@ func _hall_checks() -> void:
 	GameState.hen_eggs = 12
 	GameState.fish = 8
 	GameState.money += 3000
-	for w: Array in [[&"skewer", m.hunter], [&"cauldron", m.smith], [&"wine", m.alchemist], [&"eggs", m.rancher], [&"stew_pot", m.ferryman], [&"rice_cake", m.chief]]:
-		m._set_active(w[1])
-		VillageHall.set_dish(m, w[0])
+	for dish: StringName in [&"skewer", &"cauldron", &"wine", &"eggs", &"stew_pot", &"rice_cake"]:
+		VillageHall.set_dish(m, dish)
 	_check(VillageHall.feast_full() and VillageHall.options(m, &"feast").has(&"open_feast"), "일곱 상이 다 차면 잔치 열기")
 	var credits := FeastScene.credit_lines(m)
 	_check(credits.any(func(l: String) -> bool: return l.contains("이장")) and credits.any(func(l: String) -> bool: return l.contains("소내섬")), "크레딧: 사람 일곱 · 걸어온 길")
 	# 잔치 장면: 연 뒤 F 두 번 (넘기기 · 다음 날 아침)
 	var day0 := GameState.day
-	m._set_active(m.farmer)
 	_check(m.start_feast() and GameState.feast_state == 2 and m._feast_scene != null, "잔치 열기 → 잔치 장면")
 	await get_tree().process_frame
-	_check(m.farmer.position.distance_to(m.feast_table.position) < 120 and m.creatures.all(func(x: Creature) -> bool: return not x.visible), "사람은 잔치상 뒤, 크리처는 손님 그림으로")
+	_check(m.player.position.distance_to(m.feast_table.position) < 120 and m.creatures.all(func(x: Creature) -> bool: return not x.visible), "사람은 잔치상 뒤, 크리처는 손님 그림으로")
 	m._feast_scene.press()
 	m._feast_scene.press()
 	await get_tree().process_frame
 	_check(m._feast_scene == null and GameState.day == day0 + 1 and m.sleeping and m._morning_text.text.contains("잔치가 끝났다"), "F 로 다음 날 아침 (엔딩 카드)")
-	_check(m.creatures.all(func(x: Creature) -> bool: return x.visible or x.expedition_zone >= 0) and m.farmer.position.distance_to(m.feast_table.position) > 0, "잔치 뒤 크리처 · 사람 제자리")
+	_check(m.creatures.all(func(x: Creature) -> bool: return x.visible or x.expedition_zone >= 0) and m.player.position.distance_to(m.feast_table.position) > 0, "잔치 뒤 크리처 · 사람 제자리")
 	m.wake_up()
 	# 저장 → 불러오기
 	SaveGame.dir = "user://smoke_saves"

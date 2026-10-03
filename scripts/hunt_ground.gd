@@ -1353,7 +1353,7 @@ func _give_xp(base: int) -> void:
 	if ups > 0:
 		_level_banner = Config.LEVEL_UP_BANNER_TIME
 		_banner_text = "레벨 업!  Lv %d · 스킬 포인트 +%d  (T 스킬 창)" % [GameState.hunter_level, ups]
-		GameState.notify("사냥꾼 레벨이 올랐다! Lv %d · 남은 스킬 포인트 %d (T 스킬 창)" % [GameState.hunter_level, GameState.skill_points])
+		GameState.notify("레벨이 올랐다! Lv %d · 남은 스킬 포인트 %d (T 스킬 창)" % [GameState.hunter_level, GameState.skill_points])
 
 
 ## 야생 슬라임을 다 쓰러뜨리면 공터 가운데에 대장 슬라임이 나온다 (디아블로2 챔피언처럼).
@@ -1815,7 +1815,7 @@ func _hurt(from: Vector2, damage := 1, who := "야생 슬라임", what := "") ->
 	if life <= 0:
 		knocked = true
 		hunter.dashing = false
-		GameState.notify("사냥꾼이 쓰러졌다... 마을 입구로 돌아왔다. 주운 것은 그대로 있다.")
+		GameState.notify("쓰러졌다... 마을 입구로 돌아왔다. 주운 것은 그대로 있다.")
 		knocked_out.emit()
 	else:
 		GameState.notify("%s 체력 -%d, 남은 체력 %d." % [what if what != "" else "%s에게 부딪혔다!" % who, damage, life])

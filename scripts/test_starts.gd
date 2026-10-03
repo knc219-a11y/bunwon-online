@@ -14,7 +14,7 @@ const LEVELS := {&"hunter": 1, &"day5": 6, &"forge_ready": 9, &"forge_done": 11,
 const STARTS: Array[Dictionary] = [
 	{id = &"fresh", name = "처음부터", note = "지금과 똑같이 1일째"},
 	{
-		id = &"hunter", name = "사냥꾼 막 열림", note = "2일 · 물 슬라임 1 · 첫 사냥 전",
+		id = &"hunter", name = "사냥터 막 열림", note = "2일 · 물 슬라임 1 · 첫 사냥 전",
 		day = 2, money = 100, seeds = 4, plots = 1, planted = true,
 		creatures = [[&"slime", &"farm", &"water", 0, 0]],
 		waypoints = [0],
@@ -374,8 +374,7 @@ static func apply(main: Node2D, id: StringName) -> bool:
 		Wearables.gain_rolled(Wearables.roll_gear(rng, a[1], {}, a[0]))
 	for base: StringName in s.get("crafted", []):
 		Wearables.gain_rolled(Wearables.roll_crafted(rng, base))
-	main.farmer.refresh_wear()
-	main.hunter.refresh_wear()
+	main.player.refresh_wear()
 
 	main._refresh_props()
 	GameState.notify("테스트 시작: %s (%d일째). 개발용 빌드에서만 고를 수 있다." % [s.name, GameState.day])
