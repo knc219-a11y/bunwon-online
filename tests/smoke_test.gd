@@ -4328,19 +4328,24 @@ func _farm_level_checks() -> void:
 	var cell := fc(1, 2)
 	farm.do_work(Farm.Work.TILL, cell)
 	farm.do_work(Farm.Work.SOW, cell)
-	_check(GameState.farm_xp == 0, "크리처 · 다른 손 아닌 일은 농사 경험치 없음")
 	m.player.position = Farm.center_of(cell + Vector2i.UP)
 	m.player.facing = Vector2i.DOWN
 	m.tool_index = m.TOOLS.find(Farm.Work.WATER)
 	m.use_tool()
-	_check(GameState.farm_xp == Config.FARM_XP[&"water"], "손으로 물 주면 농사 경험치")
+	_check(GameState.farm_xp == 0, "갈기 · 심기 · 물은 농사 경험치 없음 (거둘 때만)")
 	for d in Config.CROP_GROW_DAYS:
 		farm.do_work(Farm.Work.WATER, cell)
 		farm.advance_day()
 	m.tool_index = m.TOOLS.find(Farm.Work.HARVEST)
-	var xp0 := GameState.farm_xp
 	m.use_tool()
-	_check(GameState.farm_xp - xp0 == Config.FARM_XP_HARVEST[farm.last_grade - 1], "손으로 거두면 ★ 만큼 경험치")
+	_check(GameState.farm_xp == Config.FARM_XP_HARVEST[farm.last_grade - 1], "손으로 거두면 ★ 만큼 경험치")
+	farm.do_work(Farm.Work.SOW, cell)
+	for d in Config.CROP_GROW_DAYS:
+		farm.do_work(Farm.Work.WATER, cell)
+		farm.advance_day()
+	var xp0 := GameState.farm_xp
+	farm.do_work(Farm.Work.HARVEST, cell, [&"water"] as Array[StringName])
+	_check(GameState.farm_xp - xp0 == Config.FARM_XP_HARVEST[farm.last_grade - 1], "크리처가 거둬도 ★ 만큼 경험치")
 	# 레벨업 → 포인트
 	_check(FarmSkills.gain(FarmSkills.xp_to_next(1)) >= 1 and GameState.farm_level >= 2 and GameState.farm_points >= 1, "경험치가 차면 농사 레벨업 + 포인트")
 	_check(FarmSkills.why_not(&"wide_hoe").contains("Lv"), "Lv 4 기술은 그 레벨부터")

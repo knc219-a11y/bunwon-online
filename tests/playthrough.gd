@@ -654,7 +654,6 @@ func forage() -> int:
 		# 크리처를 들지 않도록 들나물만 캔다
 		main.forage.pick(cell)
 		GameState.herbs += 1
-		FarmSkills.gain_for(&"herb")
 		n += 1
 	manual_actions += n
 	return n
@@ -686,10 +685,6 @@ func farm_by_hand() -> Dictionary:
 		for c in cells:
 			if farm.do_work(work, c, [], true):
 				n += 1
-				if work == Farm.Work.HARVEST:
-					FarmSkills.gain_harvest(farm.last_grade)
-				else:
-					FarmSkills.gain_for(main.FARM_XP_IDS[work])
 		var uses := ceili(float(n) / area)
 		manual_actions += uses
 		counts[main.TOOL_NAMES[work]] = uses
@@ -922,7 +917,6 @@ func fertilize_by_hand() -> int:
 	for c in cells:
 		if farm.fertilize(c):
 			n += 1
-			FarmSkills.gain_for(&"fert")
 	compost_used += n
 	return ceili(float(n) / Wearables.sow_reach(&"farmer"))
 

@@ -460,14 +460,10 @@ func use_tool() -> void:
 			done += 1
 			if work == Farm.Work.HARVEST:
 				grades.append(farm.last_grade)
-				FarmSkills.gain_harvest(farm.last_grade)
-			else:
-				FarmSkills.gain_for(FARM_XP_IDS[work])
 		elif work == Farm.Work.SOW and farm.fertilize(cell):
 			# 이미 심은 칸에 씨앗 주머니 = 퇴비 한 줌 (2026-10-03 작물 등급)
 			done += 1
 			fert += 1
-			FarmSkills.gain_for(&"fert")
 	if fert > 0:
 		GameState.notify("퇴비를 %d칸에 줬다 (남은 퇴비 %d). 거둘 때 ★ +1." % [fert, GameState.compost])
 	if not grades.is_empty():
@@ -490,10 +486,6 @@ func use_tool() -> void:
 			GameState.notify("%s 씨앗이 없다. (이 구역 작물은 공급함 \"밭 작물 · 씨앗 · 음식\" 에서 바꾼다)" % Crops.display_name(kind))
 		else:
 			GameState.notify("여기서는 %s을(를) 쓸 수 없다." % tool_name(work))
-
-
-## 손일 → 농사 경험치 id (Config.FARM_XP, 2026-10-03 농사 레벨)
-const FARM_XP_IDS := {Farm.Work.TILL: &"till", Farm.Work.SOW: &"sow", Farm.Work.WATER: &"water", Farm.Work.PLOW: &"plow", Farm.Work.HARVEST: &"harvest"}
 
 
 ## 도구가 닿는 칸. 강화한 도구는 바라보는 방향으로 앞 3칸 일자.
@@ -626,7 +618,6 @@ func _village_interact(villager: Character) -> void:
 	elif forage.nearest(player.feet()) != null:
 		var herb := forage.pick(forage.nearest(player.feet()))
 		GameState.herbs += 1
-		FarmSkills.gain_for(&"herb")
 		GameState.notify("%s%s 캤다! (들나물 %d) 공급함에 진열하면 밤사이 한 포기 %d원." % [herb, Forage.object_particle(herb), GameState.herbs, Config.HERB_PRICE])
 	elif forage.nearest_root(player.feet()) != null:
 		GameState.notify("땅속 깊이 %s 뿌리가 있다. 손으로는 못 캔다. 땅속성 크리처에게 채집(R)을 맡기면 캐 온다." % Config.ROOT_NAME)

@@ -2,7 +2,7 @@ class_name FarmSkills
 extends RefCounted
 ## 농사 레벨 · 기술 (2026-10-03 백로그 9, 후보 문서 design/farm-level-options.md). 사냥꾼 레벨 (HunterSkills) 과 같은 "직업 레벨" 틀:
 ## 경험치 → 레벨 → 포인트 → 트리에서 고르기. T 창 "농사" 탭.
-## 경험치는 주인공이 손으로 한 농사일에서만 (갈기 · 심기 · 물 · 거두기 · 퇴비 · 들나물 · 음식). 값은 Config.FARM_*.
+## 경험치는 밭에서 거둔 작물마다 ★ 만큼 (주인공 · 크리처 모두, 2026-10-03 사용자 선택 "거둔 작물 모두"). 값은 Config.FARM_*.
 ## 상태는 GameState (farm_level · farm_xp · farm_points · farm_skills) 라 저장 파일에 이름으로 담긴다.
 
 ## 갈래마다 위에서 아래로 Lv 1 · 4 · 8 · 12 에 열리고, 바로 위 기술을 1 이상 찍어야 다음을 찍는다. 기술마다 최대 3단계. 값은 전부 임시.
@@ -31,11 +31,6 @@ const TREES: Array[Dictionary] = [
 ## Lv 에서 다음 레벨까지 필요한 경험치
 static func xp_to_next(level: int) -> int:
 	return roundi(Config.FARM_XP_BASE * pow(level, Config.FARM_XP_EXP))
-
-
-## 손일 경험치를 더한다 (what = Config.FARM_XP 의 id). 오른 레벨 수.
-static func gain_for(what: StringName, times := 1) -> int:
-	return gain(int(Config.FARM_XP.get(what, 0)) * times)
 
 
 ## 거두기 경험치 (★ 등급마다)

@@ -322,7 +322,7 @@ func _draw_farm(font: Font) -> void:
 	draw_rect(bar, EDGE)
 	draw_rect(Rect2(bar.position + Vector2.ONE, Vector2((bar.size.x - 2) * FarmSkills.progress(), bar.size.y - 2)), Color(0.5, 0.72, 0.35))
 	var xp_text := "최대 레벨" if GameState.farm_level >= Config.FARM_LEVEL_CAP else "%d / %d" % [GameState.farm_xp, FarmSkills.xp_to_next(GameState.farm_level)]
-	draw_string(font, Vector2(12, bar.end.y + 11), "손일 경험치 %s · 갈기 · 심기 · 물 · 나물 1 · 퇴비 2 · 음식 3 · 거두기 2/3/5" % xp_text, HORIZONTAL_ALIGNMENT_CENTER, size.x - 24, 9, SUB)
+	draw_string(font, Vector2(12, bar.end.y + 11), "농사 경험치 %s · 주인공 · 크리처가 거둔 작물마다 ★1 %d · ★2 %d · ★3 %d" % [xp_text, Config.FARM_XP_HARVEST[0], Config.FARM_XP_HARVEST[1], Config.FARM_XP_HARVEST[2]], HORIZONTAL_ALIGNMENT_CENTER, size.x - 24, 9, SUB)
 	var cs := skill_at(cursor)
 	if cs.is_empty():
 		return

@@ -1241,13 +1241,13 @@ const FOODS := {
 const FOOD_ORDER: Array[StringName] = [&"steamed_potato", &"pepper_rice", &"kimchi"]
 
 ## 농사 레벨 (2026-10-03 백로그 9, 후보 문서 design/farm-level-options.md, 고르는 동안 Claude 추천 A 로 짬). 값은 모두 임시.
-## 주인공이 손으로 한 농사일마다 경험치. 다음 레벨까지 = FARM_XP_BASE x Lv^FARM_XP_EXP. 레벨업마다 농사 포인트 1.
+## 2026-10-03 사용자 선택 (카드): "거둔 작물 모두" — 주인공이든 크리처든 밭에서 거둔 작물마다 ★ 만큼 (FARM_XP_HARVEST).
+## 다음 레벨까지 = FARM_XP_BASE x Lv^FARM_XP_EXP. 레벨업마다 농사 포인트 1.
 const FARM_LEVEL_CAP := 20
 const FARM_XP_BASE := 20.0
-## 1.6 은 봇에서 크리처가 밭을 맡은 40일째쯤 Lv 10 에서 멈춰 Lv 12 기술에 못 닿아 1.3 으로 (2026-10-03)
-const FARM_XP_EXP := 1.3
-## 손일 경험치: 갈기 · 심기 · 물 · 깊이 갈기 · 퇴비 주기 · 들나물 캐기 · 음식 만들기, 거두기는 ★1 · ★2 · ★3
-const FARM_XP := {&"till": 1, &"sow": 1, &"water": 1, &"plow": 1, &"fert": 2, &"herb": 1, &"cook": 3}
+## 거둔 작물 모두 (사용자 선택) 로 바꾼 뒤 1.3 은 봇에서 75일쯤 Lv 20 이라 1.5 로 (2026-10-03)
+const FARM_XP_EXP := 1.5
+## 거둔 칸 하나마다 ★1 · ★2 · ★3
 const FARM_XP_HARVEST: Array[int] = [2, 3, 5]
 ## 큰 물뿌리개 · 큰 괭이: 단계마다 [옆으로 넓힐 줄 (한쪽), 앞으로 더 닿는 칸]
 const FARM_WIDE: Array[Vector2i] = [Vector2i(0, 0), Vector2i(1, 0), Vector2i(1, 2), Vector2i(2, 2)]

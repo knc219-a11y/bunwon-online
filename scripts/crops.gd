@@ -377,7 +377,6 @@ static func cook(id: StringName) -> int:
 	GameState.foods[id] = f
 	GameState.touch()
 	GameState.notify("%s ★%d 을(를) 만들었다 (%s). 다음 사냥에 들어갈 때 먹는다: %s." % [d.name, grade, food_text(id), food_effect_text(id, grade)])
-	FarmSkills.gain_for(&"cook")
 	return grade
 
 

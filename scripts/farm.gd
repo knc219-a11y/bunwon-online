@@ -172,6 +172,8 @@ func do_work(work: Work, cell: Vector2i, elements: Array[StringName] = [], hand 
 			var bonus := 1 if _grade_rng.randf() < FarmSkills.bounty_chance() else 0
 			Crops.add_graded(c.kind, int(d.amount) + (Config.PLOW_BONUS if c.plowed else 0) + bonus, grade)
 			last_grade = grade
+			# 농사 경험치 (2026-10-03 사용자 선택 "거둔 작물 모두"): 주인공 · 크리처 누가 거둬도 ★ 만큼
+			FarmSkills.gain_harvest(grade)
 			c.plowed = false
 			c.watered = false
 			c.missed = false
