@@ -35,6 +35,7 @@
   연금술사 (2026-10-04): villagers/ai/alchemist.png --name alchemist --height 46 --width 20 --tall --keep-hue --hair-span 0.2 --front-hair 0.2
   목축인 (2026-10-04): villagers/ai/rancher.png --name rancher --height 46 --width 18 --tall --keep-hue --hair-span 0.45 --front-hair 0.3
   뱃사공 (2026-10-04): villagers/ai/ferryman.png --name ferryman --height 46 --width 20 --tall --keep-hue --hair-span 0.2 --front-hair 0.2
+  이장 (2026-10-04): villagers/ai/chief.png --name chief --height 46 --width 18 --tall --keep-hue --sat 1.2 --colors 32 --hair-span 0.2 --front-hair 0.2 --patch tools/char_parts/chief_patch.json
   확인: python3 tools/people_lineup.py 비교.png (모두 한 줄로 세운 4배 그림)
 """
 import argparse
@@ -310,10 +311,10 @@ def apply_patch(views, patch):
     rows 의 글자 하나가 픽셀 하나, '.' 는 그대로 둔다."""
     cols = {k: tuple(v) + (255,) for k, v in patch.get("colors", {}).items()}
     for view, img in views.items():
-        for h0, h1, dh, smul in patch.get("hue_shift", []):
-            # [시작 색상각, 끝 색상각, 옮길 각도, 채도 배율]: P1 보정에서 누렇게 뜬 옷 색을 제 색으로 (예: 쑥색 두루마기)
+        for h0, h1, dh, smul, *ymax in patch.get("hue_shift", []):
+            # [시작 색상각, 끝 색상각, 옮길 각도, 채도 배율, (이 높이 비율 위만)]: P1 보정에서 누렇게 뜬 옷 색을 제 색으로 (예: 쑥색 두루마기)
             px = img.load()
-            for y in range(img.height):
+            for y in range(round(img.height * ymax[0]) if ymax else img.height):
                 for x in range(img.width):
                     r, g, b, a = px[x, y]
                     hh, ss, vv = colorsys.rgb_to_hsv(r / 255, g / 255, b / 255)
