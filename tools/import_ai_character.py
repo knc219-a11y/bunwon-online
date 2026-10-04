@@ -23,6 +23,20 @@
   A 돌아온 젊은이 (흰 티): ai_a_tee.png --name protagonist --height 46 --width 18 --tall --keep-hue --hair-span 0.2 --front-hair 0.2
   B 개척단 단원 (갈색 반팔): ai_b_tee.png --name protagonist_b 같은 옵션 + --dark-pants --clear-pockets
   그 다음 python3 tools/make_wear_sheets.py (장비를 두 몸에 맞춤, B 는 assets/wear/b/. 모자는 머리 폭에 맞춰 줄어든다)
+
+마을 사람 일곱 (6~7등신으로 다시 그리기, 프롬프트 /mnt/project-files/design/new-art-ai/people.md, 원본은 design/villagers/ai/)
+  주인공과 같은 키 46px · --tall. 예전 얼굴 손질 JSON (*_patch.json) 은 2.5등신용이라 쓰지 않는다.
+  시작 옵션: --height 46 --width 18 --tall --hair-span 0.2 --front-hair 0.2 (+ 그림에 맞춰 --keep-hue · --dark-pants · --sleeves)
+  이름: 농부 player · 사냥꾼 hunter (포니테일이면 --hair-span 0.6) · 대장장이 smith · 연금술사 alchemist · 목축인 rancher
+        · 뱃사공 ferryman · 이장 chief. 뱃사공 · 이장은 부위 지도가 생기면 make_naru_sheets / make_hall_sheets 가 덮어쓰지 않는다.
+  농부 (2026-10-04): villagers/ai/farmer.png --name player --height 46 --width 18 --tall --bare --clear-pockets --keep-hue --sat 1.0 --hair-span 0.2 --front-hair 0.2
+  사냥꾼 (2026-10-04): villagers/ai/hunter.png --name hunter --height 46 --width 18 --tall --keep-hue --sleeves --hair-span 0.55 --front-hair 0.3 --dark-hair 0.3
+  대장장이 (2026-10-04): villagers/ai/smith.png --name smith --height 46 --width 20 --tall --keep-hue --dark-pants --hair-span 0.2 --front-hair 0.2
+  연금술사 (2026-10-04): villagers/ai/alchemist.png --name alchemist --height 46 --width 20 --tall --keep-hue --hair-span 0.2 --front-hair 0.2
+  목축인 (2026-10-04): villagers/ai/rancher.png --name rancher --height 46 --width 18 --tall --keep-hue --hair-span 0.45 --front-hair 0.3
+  뱃사공 (2026-10-04): villagers/ai/ferryman.png --name ferryman --height 46 --width 20 --tall --keep-hue --hair-span 0.2 --front-hair 0.2
+  이장 (2026-10-04): villagers/ai/chief.png --name chief --height 46 --width 18 --tall --keep-hue --sat 1.2 --colors 32 --hair-span 0.2 --front-hair 0.2 --patch tools/char_parts/chief_patch.json
+  확인: python3 tools/people_lineup.py 비교.png (모두 한 줄로 세운 4배 그림)
 """
 import argparse
 import colorsys
@@ -297,10 +311,10 @@ def apply_patch(views, patch):
     rows 의 글자 하나가 픽셀 하나, '.' 는 그대로 둔다."""
     cols = {k: tuple(v) + (255,) for k, v in patch.get("colors", {}).items()}
     for view, img in views.items():
-        for h0, h1, dh, smul in patch.get("hue_shift", []):
-            # [시작 색상각, 끝 색상각, 옮길 각도, 채도 배율]: P1 보정에서 누렇게 뜬 옷 색을 제 색으로 (예: 쑥색 두루마기)
+        for h0, h1, dh, smul, *ymax in patch.get("hue_shift", []):
+            # [시작 색상각, 끝 색상각, 옮길 각도, 채도 배율, (이 높이 비율 위만)]: P1 보정에서 누렇게 뜬 옷 색을 제 색으로 (예: 쑥색 두루마기)
             px = img.load()
-            for y in range(img.height):
+            for y in range(round(img.height * ymax[0]) if ymax else img.height):
                 for x in range(img.width):
                     r, g, b, a = px[x, y]
                     hh, ss, vv = colorsys.rgb_to_hsv(r / 255, g / 255, b / 255)
@@ -496,6 +510,7 @@ def main():
     ap.add_argument("--dark-hair", type=float, default=1.0, help="이 높이 아래 어두운 선은 머리카락이 아니다 (체크무늬 셔츠면 0.42 쯤)")
     ap.add_argument("--sleeves", action="store_true", help="윗도리 색을 소매(팔 윗쪽)에서도 뽑는다. 멜빵바지처럼 가슴을 다른 옷이 덮을 때")
     ap.add_argument("--tall", action="store_true", help="6~7등신 실제 비율 그림 (부위 높이를 작은 머리에 맞춤). --hair-span 은 0.2 쯤")
+    ap.add_argument("--bare", action="store_true", help="민소매 · 반바지: 팔 · 정강이에서도 살색을 뽑는다 (얼굴이 작아 살색이 옷으로 잡힐 때)")
     ap.add_argument("--clear-pockets", action="store_true", help="팔 · 몸 사이에 갇힌 흰 바탕도 지운다 (흰 옷 없는 그림)")
     ap.add_argument("--keep-hue", action="store_true", help="짙은 색을 보랏빛으로 돌리지 않는다 (짙은 갈색 머리)")
     ap.add_argument("--dark-pants", action="store_true", help="검은 바지: 어두운 색도 바지로 친다")
@@ -512,6 +527,8 @@ def main():
         PROBES.clear()
         PROBES.update(TALL_PROBES)
         SPAN.update(TALL_SPAN)
+    if a.bare:
+        PROBES["skin"] = PROBES["skin"] + [(0.0, 0.2, 0.28, 0.45), (0.8, 1.0, 0.28, 0.45), (0.2, 0.8, 0.78, 0.85)]
     if a.sleeves:
         PROBES["top"] = PROBES["top"] + [(0.08, 0.22, 0.44, 0.54), (0.78, 0.92, 0.44, 0.54)]
     figs = split_figures(white_to_alpha(Image.open(a.src)))
