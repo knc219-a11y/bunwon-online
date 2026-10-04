@@ -148,6 +148,8 @@ var radish_short_days := 0
 var total_human_sec := 0.0
 var feast_human_sec := -1.0
 var final_human_sec := -1.0
+## 막별 (2026-10-04 전체 시간 재기): 막 대장 구역(1 · 3 · 5 · 7 · 9)을 처음 깬 날 끝의 [날, 사람 어림 초]
+var act_human := {}
 var gj_day := -1
 var gj_hunts := 0
 var gj_hurt := 0
@@ -198,6 +200,9 @@ func _ready() -> void:
 	_log("# 자동 플레이 seed=%d" % rng_seed)
 	for d in days:
 		await play_day()
+		# FEAST_STOP=1 (2026-10-04 전체 시간 재기): 잔치를 열면 거기서 멈춘다
+		if OS.get_environment("FEAST_STOP") == "1" and GameState.feast_day > 0:
+			break
 	var trained := 0
 	for s: Creature in main.creatures:
 		trained += s.data.train_total()
@@ -264,6 +269,8 @@ func _ready() -> void:
 		"%d일" % hall_restore_day if hall_restore_day > 0 else "없음", GameState.requests_done, GameState.material5,
 		GameState.feast_dishes.size(), Config.FEAST_DISHES.size(), "%d일" % GameState.feast_day if GameState.feast_day > 0 else "없음",
 		_hours(feast_human_sec), errand_creature.describe() if errand_creature else "없음"])
+	_log("막별 사람 어림 (막 대장 첫 처치 날 끝): %s · 잔치 %s" % [" · ".join(act_human.keys().map(func(a: int) -> String: return "%d막 %d일 %s" % [a, act_human[a][0], _hours(act_human[a][1])])),
+		"%d일 %s" % [GameState.feast_day, _hours(feast_human_sec)] if GameState.feast_day > 0 else "없음"])
 	_log("1일째부터 사람 어림 시간 합: %s (%d일)" % [_hours(total_human_sec), GameState.day - 1])
 	_log("\n밭 작물: 구역에 심기 시작한 날 %s · 판 수 %s · 구역 작물 %s · 남은 씨앗 무 %d 감자 %d 고추 %d 배추 %d" % [crop_open_day, crops_sold,
 		range(GameState.open_plots).map(func(i: int) -> String: return Crops.display_name(Crops.plot_kind(i))), GameState.seeds, GameState.potato_seeds, GameState.pepper_seeds, GameState.cabbage_seeds])
@@ -400,6 +407,9 @@ func play_day() -> void:
 	if GameState.final_boss_down and final_day < 0:
 		final_day = GameState.day
 		final_human_sec = total_human_sec
+	for act in 5:
+		if not act_human.has(act + 1) and cleared_day.has(Config.HUNT_ZONES[act * 2 + 1].name):
+			act_human[act + 1] = [GameState.day, total_human_sec]
 	main.advance_clock(bot_sec * Config.CLOCK_MINUTES_PER_SECOND)
 	var bot_end := GameState.clock_text(Config.DAY_START_MINUTE + bot_sec * Config.CLOCK_MINUTES_PER_SECOND)
 	var human_end := GameState.clock_text(minf(Config.DAY_START_MINUTE + human_sec * Config.CLOCK_MINUTES_PER_SECOND, Config.CLOCK_MAX_MINUTE))
