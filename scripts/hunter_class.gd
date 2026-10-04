@@ -99,6 +99,14 @@ static func spend(id: StringName) -> bool:
 	return true
 
 
+## 최대 n 점을 한꺼번에 (남은 점만큼만). 찍은 수를 돌려준다.
+static func spend_many(id: StringName, n: int) -> int:
+	var done := 0
+	while done < n and spend(id):
+		done += 1
+	return done
+
+
 ## 다음 초기화 값 (첫 번은 공짜)
 static func respec_price() -> int:
 	return 0 if not GameState.free_respec_used else GameState.hunter_level * Config.RESPEC_PRICE_PER_LV

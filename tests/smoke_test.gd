@@ -3159,6 +3159,26 @@ func _hunter_class_checks() -> void:
 	var sp0 := GameState.stat_points
 	HunterSkills.gain(HunterSkills.xp_to_next(GameState.hunter_level))
 	_check(GameState.stat_points == sp0 + Config.STAT_POINTS_PER_LEVEL, "레벨업마다 스탯 %d점" % Config.STAT_POINTS_PER_LEVEL)
+	# Ctrl+클릭: 한 번에 5점 (2026-10-04 백로그 12), 남은 점이 적으면 있는 만큼
+	var wis0 := HunterClass.stat(&"wis")
+	var sp1 := GameState.stat_points
+	var cc := InputEventMouseButton.new()
+	cc.button_index = MOUSE_BUTTON_LEFT
+	cc.pressed = true
+	cc.ctrl_pressed = true
+	cc.position = m.skill_panel.cell_rect(Vector2i(2, SkillPanel.rows())).get_center()
+	m.skill_panel._gui_input(cc)
+	_check(HunterClass.stat(&"wis") == wis0 + Config.STAT_BULK and GameState.stat_points == sp1 - Config.STAT_BULK, "Ctrl+클릭으로 지혜 %d점 한꺼번에" % Config.STAT_BULK)
+	cc.ctrl_pressed = false
+	m.skill_panel._gui_input(cc)
+	_check(HunterClass.stat(&"wis") == wis0 + Config.STAT_BULK + 1, "그냥 클릭은 1점")
+	var keep_sp := GameState.stat_points
+	GameState.stat_points = 2
+	cc.ctrl_pressed = true
+	m.skill_panel._gui_input(cc)
+	_check(HunterClass.stat(&"wis") == wis0 + Config.STAT_BULK + 3 and GameState.stat_points == 0, "남은 점이 2면 Ctrl+클릭도 2점만")
+	GameState.stats[&"wis"] = wis0
+	GameState.stat_points = keep_sp + Config.STAT_BULK + 1
 	# 초기화: 첫 번 공짜, 그 뒤 Lv x 값
 	HunterSkills.learn(&"pierce")
 	GameState.money = 0
@@ -3257,6 +3277,14 @@ func _hunter_skill_checks() -> void:
 		h._hitstop = 0.0
 	_check(not rain_t in h.slimes, "화살비가 세 번 쏟아져 체력 3 몬스터를 쓰러뜨림")
 	_check(not h.skill_right(feet) and h.right_cd > 0.0, "오른클릭 스킬은 쿨이 있음")
+	# 단축키 바 (2026-10-04 백로그 11): 오른클릭 칸 쿨이 어둡게 돌고, 다 돌면 반짝
+	var bar_ids := Hotbar.slots(h).map(func(sl: Dictionary) -> StringName: return sl.id)
+	_check(bar_ids.has(&"right") and bar_ids.has(&"left") and bar_ids.has(&"potion"), "단축키 바: 왼클릭 · 오른클릭 · 물약 칸 (%s)" % [bar_ids])
+	_check(h.hotbar.frac(&"right", h.right_cd) > 0.0 and h.hotbar._deny.has(&"right"), "쿨 중인 오른클릭 칸은 어둡고, 쿨 중에 누르면 붉게 깜빡")
+	for i in ceili(h.right_cd * 30.0) + 1:
+		h.tick(1.0 / 30.0)
+		h._hitstop = 0.0
+	_check(h.right_cd == 0.0 and h.hotbar.frac(&"right", 0.0) == 0.0 and h.hotbar._ready.has(&"right"), "쿨이 다 돌면 칸 테두리가 반짝")
 	m.leave_hunt()
 	await get_tree().process_frame
 	# 검: 회전 베기 (등 뒤도 벰) · 돌진 베기 · 대지 가르기

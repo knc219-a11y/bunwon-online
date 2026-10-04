@@ -108,6 +108,8 @@ var guard_blocks := 0
 var blocked_hits := 0
 ## 아기 도마뱀 냄비뚜껑 방패 쿨 (초)
 var lid_cd := 0.0
+## 아래 가운데 단축키 바 (쿨타임 표시, 2026-10-04)
+var hotbar := Hotbar.new()
 ## 화살비: {at, radius, waves, t} · 대지 가르기 그림: {from, to, t} · 돌격 중인 동행: {c, target}
 var _rains: Array[Dictionary] = []
 var _splits: Array[Dictionary] = []
@@ -556,6 +558,7 @@ func drink_potion() -> bool:
 	if knocked:
 		return false
 	if GameState.potions <= 0:
+		hotbar.deny(&"potion")
 		GameState.notify("빨간 물약이 없다.")
 		return false
 	if life >= max_life():
@@ -682,6 +685,7 @@ func tick(delta: float) -> void:
 	order_cd = maxf(order_cd - delta, 0.0)
 	guard_cd = maxf(guard_cd - delta, 0.0)
 	lid_cd = maxf(lid_cd - delta, 0.0)
+	hotbar.tick(delta, self)
 	_tick_dash(delta)
 	if blackout_t > 0.0:
 		blackout_t = maxf(blackout_t - delta, 0.0)
@@ -768,6 +772,8 @@ func _touch(s: WildSlime, feet: Vector2) -> void:
 
 ## 구른다 (Space, 2026-10-02 손맛): dir 쪽으로 (비어 있으면 바라보는 쪽) 휙. 구르는 동안과 조금 뒤까지 안 맞는다.
 func dash(dir := Vector2.ZERO) -> bool:
+	if feel and dash_cd > 0.0 and dash_t < 0.0:
+		hotbar.deny(&"dash")
 	if not feel or knocked or frozen > 0.0 or dash_cd > 0.0 or dash_t >= 0.0:
 		return false
 	if dir == Vector2.ZERO:
@@ -1145,6 +1151,8 @@ func _dash_slash() -> void:
 
 ## 오른클릭 큰 스킬 (든 무기의 트리): 대지 가르기 · 화살비 · 원소 폭풍. at = 가리킨 곳 (월드). 썼으면 true.
 func skill_right(at: Vector2) -> bool:
+	if right_cd > 0.0:
+		hotbar.deny(&"right")
 	if knocked or frozen > 0.0 or dash_t >= 0.0 or right_cd > 0.0:
 		return false
 	var w := Wearables.weapon()
@@ -1191,6 +1199,8 @@ func skill_right(at: Vector2) -> bool:
 ## R 돌격 명령 (조련): 동행이 at 가까운 몬스터에 달려가 들이받는다. 썼으면 true.
 func order_charge(at: Vector2) -> bool:
 	var r := HunterSkills.rank(&"charge_order")
+	if r > 0 and order_cd > 0.0:
+		hotbar.deny(&"order")
 	if r <= 0 or companion == null or order_cd > 0.0 or knocked or not _charge.is_empty():
 		return false
 	var target: WildSlime = null
@@ -2266,18 +2276,8 @@ func _draw_hud() -> void:
 	_hud.draw_rect(Rect2(39, 54, 80 * HunterSkills.progress(), 4), Color(0.95, 0.75, 0.2))
 	if GameState.skill_points > 0:
 		UiSkin.draw_chip(_hud, Vector2(127, 48), -1, "스킬 +%d (T)" % GameState.skill_points, 16)
-	# 찍은 스킬이 있으면 지금 왼클릭 방식 · 오른클릭 스킬 (쿨이면 남은 초)
-	var wk: StringName = Wearables.weapon().kind
-	var parts: Array[String] = []
-	if HunterSkills.modes_for(wk).size() > 1:
-		parts.append("왼 %s (Q/E)" % HunterSkills.skill_name(HunterSkills.left_mode(wk)))
-	var rs := HunterSkills.right_skill(wk)
-	if rs != &"":
-		parts.append("오른 %s%s" % [HunterSkills.skill_name(rs), " %.0f" % ceilf(right_cd) if right_cd > 0.0 else ""])
-	if HunterSkills.rank(&"charge_order") > 0 and companion:
-		parts.append("R 돌격%s" % (" %.0f" % ceilf(order_cd) if order_cd > 0.0 else ""))
-	if not parts.is_empty():
-		UiSkin.draw_chip(_hud, Vector2(4, 66), -1, " · ".join(parts), 15)
+	# 왼클릭 방식 · 오른클릭 스킬 · 구르기 · 돌격 · 물약 칸과 쿨 (아래 가운데 단축키 바)
+	hotbar.draw(_hud, self)
 	if _level_banner > 0.0:
 		var bw := font.get_string_size(_banner_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x + 20
 		var a := clampf(_level_banner / 0.4, 0.0, 1.0)
