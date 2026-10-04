@@ -337,6 +337,8 @@ func _register_inputs() -> void:
 		"menu_close": [KEY_ESCAPE],
 		"use_potion": [KEY_1],
 		"inventory": [KEY_I],
+		## 가방 창에서 고른 칸 버리기 (2026-10-04 백로그 7). 두 번 눌러야 버린다, Shift+X 는 일반 장비 한꺼번에
+		"discard": [KEY_X, KEY_DELETE],
 		## 사냥꾼 스킬 창 (2026-10-02, 디아2처럼 T)
 		"skills": [KEY_T],
 		## 사냥터 구르기 (2026-10-02). Space 는 마을에선 도구질, 사냥터에선 구르기 (J 는 그대로 휘두르기)

@@ -1268,6 +1268,7 @@ func open_inventory(stash := false, sell := false, salvage := false) -> void:
 		hunt.set_process(false)
 	# 장비 팔기 · 갈기는 그런 장비가 있는 벌부터 (사냥터 등급 장비는 사냥 옷 가방에 쌓인다)
 	var which := &"hunter" if (sell or salvage) and Wearables.rolled_in_bag(&"hunter") > 0 else &""
+	inventory.in_hunt = hunt != null
 	inventory.open(player, stash, sell, which, salvage)
 
 
