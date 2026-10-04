@@ -12,6 +12,8 @@ const FRAME_SIZE := 32
 const IDLE_COLUMNS: Array[int] = [0, 1]
 const HOP_COLUMNS: Array[int] = [2, 3, 4, 5]
 const BOTTOM_Y := 8
+## 새 크기 시트 (2026-10-04 "섞어서", 사람 키 46px 에 맞춘 몬스터: 늑대 48칸 · 백호 96칸). 발밑 그림자를 몸 크기에 맞춰 넓힌다
+const TALL_CELLS: Array[int] = [48, 96]
 
 var hp := Config.WILD_SLIME_HP * Config.DMG_UNIT
 var max_hp := Config.WILD_SLIME_HP * Config.DMG_UNIT
@@ -1159,7 +1161,7 @@ func _start_hop(target: Vector2) -> void:
 
 func _draw() -> void:
 	draw_set_transform(Vector2(0, BOTTOM_Y - 1), 0.0, Vector2(1.0, 0.35))
-	draw_circle(Vector2.ZERO, 10.0, Color(0.27, 0.16, 0.33, 0.25))
+	draw_circle(Vector2.ZERO, _frame * _px * 0.4 if _frame in TALL_CELLS else 10.0, Color(0.27, 0.16, 0.33, 0.25))
 	draw_set_transform(Vector2.ZERO)
 	# 남은 체력 (맞은 뒤에만 보임)
 	var top := -boss_frame.y + 4.0 if boss_frame != Vector2i.ZERO else 0.0

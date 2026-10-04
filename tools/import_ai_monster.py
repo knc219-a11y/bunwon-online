@@ -66,6 +66,9 @@
   ai_will_o.png --kind will_o --colors 28 --skull 0.49,0.72   (불꽃 속 해골은 뭉개져서 7x7 해골을 다시 찍음)
   ai_bus.png --kind bus --flip --colors 32                    (AI 그림이 앞-왼쪽이라 뒤집음)
   ai_baby.png --kind will_o_baby --colors 24 --eyes 0.33,0.58,0.67,0.58 --cheeks 0.25,0.68,0.75,0.68
+밀목 (그림 원본: /mnt/project-files/design/milmok-tall/ai/ai_*.png, 사용자 AI 그림 2026-10-04, 새 크기)
+  ai_white_tiger.png --kind tiger --backdrop --smooth --colors 32 --eyes 0.938,0.398 --eye-color 150,235,255
+    (초록 바탕. 줄무늬가 칸마다 고르면 점으로 깨져서 --smooth, 빛나는 눈은 줄이면 사라져서 다시 찍음)
 """
 import argparse
 import os
@@ -366,6 +369,16 @@ def clear_backdrop(im, tol=48):
 
 
 BACKDROP = False
+SMOOTH = False
+
+
+def smooth_pixelize(fig, pal_img, w, h):
+    """잔무늬 (백호 줄무늬)가 많은 큰 그림은 칸마다 고르는 pixelize 가 얼룩덜룩한 점이 된다 (--smooth).
+    부드럽게 줄인 뒤 팔레트로 맞춰 무늬가 색 덩어리로 남게 (build_bus 와 같은 방식)."""
+    small = fig.resize((w, h), Image.LANCZOS)
+    body = small.convert("RGB").quantize(palette=pal_img, dither=Image.Dither.NONE).convert("RGBA")
+    body.putalpha(small.getchannel("A").point(lambda v: 255 if v > 128 else 0))
+    return body
 
 
 def load_figure(src, flip=False, mist=False, parts=0.0, work_w=None):
@@ -530,7 +543,7 @@ def build(src, kind, width=None, colors=20, redraw_eyes=False, sand_src=None, mo
             f = dict(f, sx=1.0, sy=1.0 if f["sy"] >= 1.0 else 0.94)
         W = max(8, round(bw * f["sx"]))
         H = max(8, min(CELL - f["lift"], round(bh * f["sy"])))
-        body = pixelize(src_fig, src_pal, src_pal.getpalette(), W, H)
+        body = smooth_pixelize(src_fig, src_pal, W, H) if SMOOTH else pixelize(src_fig, src_pal, src_pal.getpalette(), W, H)
         had_line = soften_edges(body) and had_line
         if f.get("step"):
             body = shove_legs(body, f["step"])
@@ -699,10 +712,12 @@ def main():
     ap.add_argument("--preview", help="4배 확대 미리보기 PNG")
     ap.add_argument("--hd", action="store_true", help="대장용 1.8배 (58칸) 시트 <이름>_hd.png. 게임은 늘리지 않고 그린다")
     ap.add_argument("--mini", action="store_true", help="새끼용 0.65배 (21칸) 시트 <이름>_mini.png. 게임은 줄이지 않고 그린다")
+    ap.add_argument("--smooth", action="store_true", help="부드럽게 줄인 뒤 팔레트로 (잔무늬가 점으로 깨질 때)")
     ap.add_argument("--backdrop", action="store_true", help="흰 바탕 대신 귀퉁이 색 (초록 바탕 등) 을 지운다. 흰 몸 (백호) 용")
     a = ap.parse_args()
-    global BACKDROP
+    global BACKDROP, SMOOTH
     BACKDROP = a.backdrop
+    SMOOTH = a.smooth
     if KINDS.get(a.kind, {}).get("cell"):
         # 밀목부터는 종류마다 칸 크기가 다르다 (늑대 48 · 백호 96 · 아기 32)
         global CELL
