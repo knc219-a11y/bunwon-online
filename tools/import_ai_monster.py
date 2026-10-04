@@ -45,7 +45,7 @@
 
 역동 세트 (2026-10-04, 새 크기): 프롬프트는 /mnt/project-files/design/new-art-ai/yeokdong.md. 옆모습, 앞이 오른쪽.
   general → assets/creatures/wild_post_general.png (768x96, 96칸): 키 약 80px (사람의 1.7배), 말 몸 길이 약 70px. 게임은 1:1
-  lancer  → assets/creatures/wild_lancer.png (512x64, 64칸): 키 약 58px, 말 몸 길이 약 50px
+  lancer  → assets/creatures/wild_lancer.png (640x80, 80칸): 키 약 56px, 말 몸 길이 약 45px (앞으로 뻗은 창 때문에 칸이 넓다)
   foal    → assets/creatures/baby_foal.png (320x32): 키 · 길이 약 24px. 흰 발 · 흰 이마라 초록 바탕 + --backdrop
   장군 · 창기병 칸: 0-1 대기, 2-5 달리기, 6 앞발 들기 (돌격 예고), 7 돌아섬. 망아지: 0-1 대기, 2-5 걷기, 6-9 앞발 들기 · 뒷발차기.
   --rear 앞발 든 그림이 있으면 6열 (망아지 6-7열) 에 쓰고, 없으면 한 장을 머리 쪽이 위로 가게 기울인다.
@@ -82,6 +82,8 @@
 역동 (그림 원본: /mnt/project-files/design/yeokdong-tall/ai/ai_*.png, 사용자 AI 그림 2026-10-04, 새 크기)
   ai_post_general.png --kind general --colors 32 --keep-hue --clear-pockets --eyes 0.528,0.215,0.57,0.215 --eye-size 1 --eye-color 255,48,40 --angry
     (밤색 말이 보랏빛으로 돌지 않게 --keep-hue, 팔 · 창 사이 갇힌 흰 바탕은 --clear-pockets)
+  ai_lancer.png --kind lancer --colors 24 --smooth --keep-hue --clear-pockets --eyes 0.414,0.145,0.447,0.145 --eye-size 1 --eye-color 255,48,40 --angry
+    (칸마다 고르면 말 털이 얼룩덜룩해서 --smooth)
 """
 import argparse
 import os
@@ -210,6 +212,7 @@ KINDS["baby_tiger"] = dict(out="baby_tiger", cell=32, width=26, max_h=22, frames
 KINDS["baby_white_tiger"] = dict(KINDS["baby_tiger"], out="baby_white_tiger")
 # 역동 세트 (2026-10-04, 새 크기): 켄타우로스는 말 등 위에 사람 윗몸이 있어서 사람 (46px) 보다 크다. 옆모습, 앞이 오른쪽.
 #   rear: 앞발 들고 발 구름 (돌격 예고). --rear 그림이 있으면 그걸, 없으면 한 장을 뒤로 (머리 위로) 기울인다.
+#   창기병은 창을 앞으로 길게 뻗어서 80칸 (키는 56). 게임은 발 가운데를 노드 자리에 맞춘다 (WildSlime._feet_dx)
 #   장군 · 창기병: 0-1 대기, 2-5 달리기, 6 앞발 들기 (예고), 7 돌격 뒤 돌아섬 (때릴 틈)
 #   아기 망아지: 0-1 대기, 2-5 걷기, 6-9 일 (앞발 들기 · 뒷발차기)
 RIDER = [
@@ -219,7 +222,7 @@ RIDER = [
     dict(sx=1.0, sy=1.0, lift=0, rot=10, rear=True), dict(sx=0.97, sy=0.96, lift=0, rot=-3),
 ]
 KINDS["general"] = dict(out="wild_post_general", cell=96, width=84, max_h=80, work_w=480, frames=RIDER)
-KINDS["lancer"] = dict(out="wild_lancer", cell=64, width=58, max_h=56, work_w=360, frames=RIDER)
+KINDS["lancer"] = dict(out="wild_lancer", cell=80, width=78, max_h=56, work_w=420, frames=RIDER)
 KINDS["foal"] = dict(out="baby_foal", cell=32, width=24, max_h=24, frames=[
     dict(sx=1.0, sy=1.0, lift=0), dict(sx=1.0, sy=0.97, lift=0),
     dict(sx=1.0, sy=1.0, lift=1, stride=1), dict(sx=1.02, sy=0.96, lift=0, stride=-1),
