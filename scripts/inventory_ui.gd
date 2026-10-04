@@ -7,6 +7,8 @@ extends Control
 ## 주인공 하나 (2026-10-03): 장비는 밭 옷 · 사냥 옷 두 벌 (Wearables.OUTFIT_NAMES). 열면 지금 입은 벌부터 보인다.
 ## 장비 등급 (2026-09-28 사용자 선택 A): 칸 테두리와 설명 줄이 등급색 (일반 · 마법 파랑 · 레어 노랑 · 세트 초록).
 ## 공급함 "가방에서 장비 팔기"로 열면 가방 칸 클릭 = 팔기 (사냥터에서 굴린 장비만).
+## 버리기 (2026-10-04 백로그 7): 가방 · 창고 칸에서 X (Delete) 를 두 번 누르면 버린다. 한 번 누르면 칸이 빨개지고 다른 걸 하면 풀린다.
+## Shift+X 두 번 = 지금 벌 가방의 일반 장비 한꺼번에. 돈 · 고철이 없으니 마을에서는 팔거나 가는 쪽이 낫다고 알려 준다.
 
 signal wear_changed
 
@@ -22,6 +24,8 @@ const SET_GREEN := Color(0.2, 0.6, 0.25)
 ## 종이 바탕 위에서 보이도록 조금 진하게 한 등급색
 const RARITY_EDGE := {&"magic": Color(0.25, 0.4, 0.9), &"rare": Color(0.82, 0.6, 0.05), &"set": SET_GREEN, &"crafted": Color(0.85, 0.42, 0.1)}
 const SUB := Color(0.5, 0.4, 0.32)
+## 버리기 표시 (X 한 번 누른 칸)
+const DISCARD_RED := Color(0.85, 0.2, 0.15)
 ## 덧그림(48x48 칸)에서 칸별 아이콘으로 잘라 쓸 부분
 const ICON_SRC := {&"hat": Rect2(12, 2, 24, 18), &"clothes": Rect2(10, 16, 28, 22), &"shoes": Rect2(12, 32, 24, 14)}
 
@@ -42,6 +46,10 @@ var sell_mode := false
 var salvage_mode := false
 ## 고른 칸: {kind = &"equip"/&"bag"/&"stash", index}
 var cursor := {kind = &"bag", index = 0}
+## X 를 한 번 누른 칸 (한 번 더 누르면 버림). 한꺼번에는 {kind = &"all"}. 비었으면 없음
+var discard_armed := {}
+## 사냥터에서 열었는지 (main 이 정해 준다)
+var in_hunt := false
 
 
 func _init() -> void:
@@ -56,6 +64,7 @@ func open(c: Character, stash := false, sell := false, which := &"", salvage := 
 	sell_mode = sell and not stash
 	salvage_mode = salvage and not stash and not sell
 	cursor = {kind = &"bag", index = 0}
+	discard_armed = {}
 	size = Vector2(STASH_AT.x + Config.STASH_COLUMNS * (CELL + GAP) + 8 if stash else BAG_AT.x + Config.BAG_COLUMNS * (CELL + GAP) + 8, 240)
 	position = ((Vector2(640, 360) - size) / 2).round()
 	visible = true
@@ -70,6 +79,7 @@ func close() -> void:
 func swap_outfit() -> void:
 	outfit = &"hunter" if outfit == &"farmer" else &"farmer"
 	cursor = {kind = &"bag", index = 0}
+	discard_armed = {}
 	queue_redraw()
 
 
@@ -125,6 +135,7 @@ func item_in(kind: StringName, i: int) -> StringName:
 
 ## 왼쪽 클릭 (F): 가방 → 입기 (창고가 열려 있으면 창고로), 입은 칸 → 벗기, 창고 → 가방
 func primary(kind: StringName, i: int) -> bool:
+	discard_armed = {}
 	var who := outfit
 	var ok := false
 	match kind:
@@ -169,6 +180,7 @@ func primary(kind: StringName, i: int) -> bool:
 func secondary(kind: StringName, i: int) -> bool:
 	if kind != &"bag":
 		return primary(kind, i)
+	discard_armed = {}
 	var ok := _wear(i)
 	_after(ok)
 	return ok
@@ -185,6 +197,82 @@ func _wear(i: int) -> bool:
 	return Wearables.wear_from_bag(outfit, i)
 
 
+## X (Delete): 고른 칸을 버린다. 처음 누르면 표시만 하고, 같은 칸에서 한 번 더 누르면 버린다.
+func discard(kind: StringName, i: int) -> bool:
+	var id := item_in(kind, i)
+	if kind == &"equip":
+		discard_armed = {}
+		if id != &"":
+			GameState.notify("입은 장비는 벗은 뒤에 버릴 수 있다.")
+		queue_redraw()
+		return false
+	if id == &"":
+		discard_armed = {}
+		queue_redraw()
+		return false
+	var what := _full_name(id)
+	if discard_armed != {kind = kind, index = i}:
+		discard_armed = {kind = kind, index = i}
+		GameState.notify("X 를 한 번 더 누르면 %s을(를) 버린다.%s" % [what, _better_than_discard(id)])
+		queue_redraw()
+		return false
+	discard_armed = {}
+	var ok := Wearables.discard(outfit, kind, i) != &""
+	if ok:
+		GameState.notify("%s을(를) 버렸다." % what)
+	_after(ok)
+	return ok
+
+
+## Shift+X: 지금 벌 가방의 일반 장비를 한꺼번에 버린다 (두 번 눌러야)
+func discard_normal() -> int:
+	var n := Wearables.normal_in_bag(outfit)
+	if n == 0:
+		discard_armed = {}
+		GameState.notify("%s 가방에 버릴 일반 장비가 없다." % Wearables.OUTFIT_NAMES[outfit])
+		queue_redraw()
+		return 0
+	if discard_armed != {kind = &"all"}:
+		discard_armed = {kind = &"all"}
+		var tip := " (공급함에서 한꺼번에 팔면 %d원)" % (n * Config.GEAR_SELL_PRICES[&"normal"]) if _in_village() else ""
+		GameState.notify("Shift+X 를 한 번 더 누르면 %s 가방의 일반 장비 %d개를 모두 버린다.%s" % [Wearables.OUTFIT_NAMES[outfit], n, tip])
+		queue_redraw()
+		return 0
+	discard_armed = {}
+	var done := Wearables.discard_all_normal(outfit)
+	GameState.notify("일반 장비 %d개를 버렸다." % done)
+	_after(done > 0)
+	return done
+
+
+func _full_name(id: StringName) -> String:
+	var r := Wearables.rarity(id)
+	return "%s %s" % [Wearables.RARITY_NAMES[r], Wearables.item(id).name] if Wearables.RARITY_NAMES.has(r) else Wearables.item(id).name
+
+
+## 마을에서 버리려 하면 팔기 · 갈기를 알려 준다 (사냥터에서는 가방을 비우는 게 먼저라 말하지 않는다)
+func _better_than_discard(id: StringName) -> String:
+	if not _in_village() or not Wearables.is_rolled(id):
+		return ""
+	var tips: Array[String] = []
+	if GameState.forge_state >= 2:
+		tips.append("대장간에서 갈면 고철 %d" % Wearables.salvage_scrap(id))
+	if Wearables.rarity(id) in Config.GEAR_SELL_PRICES:
+		tips.append("공급함에서 팔면 %d원" % Wearables.sell_price(id))
+	return " (%s)" % " · ".join(tips) if not tips.is_empty() else ""
+
+
+func _in_village() -> bool:
+	return not in_hunt
+
+
+## 버리기 표시를 할 칸인지 (한 칸 또는 한꺼번에 버릴 일반 장비)
+func _armed_cell(kind: StringName, i: int, id: StringName) -> bool:
+	if discard_armed.get("kind", &"") == &"all":
+		return kind == &"bag" and Wearables.is_rolled(id) and Wearables.rarity(id) == &"normal"
+	return discard_armed == {kind = kind, index = i}
+
+
 func _after(ok: bool) -> void:
 	if ok:
 		wear_changed.emit()
@@ -198,6 +286,8 @@ func _gui_input(event: InputEvent) -> void:
 		var c := _cell_at(event.position)
 		if not c.is_empty() and c != cursor:
 			cursor = c
+			if not discard_armed.is_empty():
+				discard_armed = {}
 			queue_redraw()
 	elif event is InputEventMouseButton and event.pressed:
 		var c := _cell_at(event.position)
@@ -213,6 +303,12 @@ func _gui_input(event: InputEvent) -> void:
 
 ## 키보드 입력 (main 이 넘겨준다)
 func handle_key(event: InputEvent) -> void:
+	if event.is_action_pressed("discard"):
+		if event is InputEventWithModifiers and event.shift_pressed:
+			discard_normal()
+		else:
+			discard(cursor.kind, cursor.index)
+		return
 	if event.is_action_pressed("move_up"):
 		move_cursor(Vector2.UP)
 	elif event.is_action_pressed("move_down"):
@@ -245,6 +341,7 @@ func move_cursor(dir: Vector2) -> void:
 			best = c
 	if not best.is_empty():
 		cursor = best
+		discard_armed = {}
 		queue_redraw()
 
 
@@ -323,6 +420,11 @@ func _draw() -> void:
 				draw_rect(r, Color(0.9, 0.85, 0.75, 0.55))
 		elif c.kind == &"equip":
 			_text(r.position + Vector2(3, 17), Wearables.SLOT_NAMES[Wearables.SLOTS[c.index]], 8, SUB)
+		if id != &"" and _armed_cell(c.kind, c.index, id):
+			draw_rect(r, Color(DISCARD_RED, 0.3))
+			draw_rect(r.grow(-1), DISCARD_RED, false, 1.5)
+			draw_line(r.position + Vector2(4, 4), r.end - Vector2(4, 4), DISCARD_RED, 2.0)
+			draw_line(Vector2(r.end.x - 4, r.position.y + 4), Vector2(r.position.x + 4, r.end.y - 4), DISCARD_RED, 2.0)
 	var cr := cell_rect(cursor.kind, cursor.index)
 	draw_rect(cr.grow(1), CURSOR, false, 2.0)
 	# 세트 (입은 조각이 하나라도 있을 때)
@@ -344,6 +446,12 @@ func _draw() -> void:
 		picked_text += " · %d원" % Wearables.sell_price(picked)
 	if salvage_mode and picked != &"" and Wearables.is_rolled(picked) and cursor.kind == &"bag":
 		picked_text += " · 고철 %d" % Wearables.salvage_scrap(picked)
+	if discard_armed.get("kind", &"") == &"all":
+		picked_text = "Shift+X 한 번 더: 빨간 칸 일반 장비 %d개 버리기" % Wearables.normal_in_bag(outfit)
+		picked_col = DISCARD_RED
+	elif picked != &"" and _armed_cell(cursor.kind, cursor.index, picked):
+		picked_text = "X 한 번 더: 버리기 · " + picked_text
+		picked_col = DISCARD_RED
 	# 옵션이 많아 창보다 길면 이름과 효과를 두 줄로 나눈다
 	# 옵션이 많아 창보다 길면 이름과 효과를 나누고, 효과도 " · " 마디로 줄을 바꾼다 (무기는 옵션 줄이 길다)
 	var cut := picked_text.find(") · ")
@@ -373,7 +481,7 @@ func _draw() -> void:
 	if not foods.is_empty():
 		y += 11
 		_text(Vector2(10, y), "사냥 음식: " + " · ".join(foods), 8, SUB)
-	var help := "클릭: 창고로 넣기/꺼내기 · 오른쪽 클릭(R): 입기 · 입은 칸 클릭: 벗기 · I 닫기" if with_stash else "클릭(F): 입기/벗기 · WASD 칸 고르기 · I 닫기"
+	var help := "클릭: 창고로 넣기/꺼내기 · 오른쪽 클릭(R): 입기 · 입은 칸 클릭: 벗기 · X 두 번: 버리기" if with_stash else "클릭(F): 입기/벗기 · WASD 칸 고르기 · X 두 번: 버리기 · I 닫기"
 	if sell_mode:
 		help = "클릭(F): 팔기 (사냥터 등급 장비만) · 오른쪽 클릭(R): 입기 · I 닫기"
 	if salvage_mode:

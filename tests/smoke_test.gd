@@ -2679,6 +2679,8 @@ func _ready() -> void:
 	await _farm_level_checks()
 	# 55) 대장장이 레벨 · 단계 장비 · 대장 기술 (2026-10-03 백로그 10)
 	await _smith_level_checks()
+	# 56) 장비 버리기 (2026-10-04 백로그 7): X 두 번, Shift+X 일반 한꺼번에
+	await _discard_checks()
 
 	# 41) 저장/불러오기 (2026-09-30 사용자 선택 C 디아2식): 저장 → 장면을 버리고 → 새 장면에 불러오면 모든 상태가 같다
 	await _save_load_checks()
@@ -4532,5 +4534,68 @@ func _smith_level_checks() -> void:
 	panel.cursor = Vector2i(1, 1)
 	_check(panel.learn_cursor() and SmithSkills.rank(&"salvage_hand") == 1, "T 창 대장 쪽에서 찍기")
 	m.close_skills()
+	m.queue_free()
+	await get_tree().process_frame
+
+
+## 56) 장비 버리기. 가방 · 창고 칸에서 X 두 번, 입은 칸은 못 버림, Shift+X 두 번 = 일반 장비 한꺼번에.
+func _discard_checks() -> void:
+	var m: Node2D = load("res://scenes/main.tscn").instantiate()
+	add_child(m)
+	await get_tree().process_frame
+	GameState.reset()
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7
+	var hb: Array[StringName] = GameState.bag[&"hunter"]
+	# 모자 칸을 채워 둬서 굴린 모자가 가방으로 간다
+	GameState.worn[&"hunter"][&"hat"] = &"ball_cap"
+	GameState.owned_wear.append(&"ball_cap")
+	Wearables.gain_rolled(Wearables.roll_gear(rng, &"rare", {}, &"leather_hood"))
+	var rare_id: StringName = hb.back()
+	for i in 3:
+		Wearables.gain_rolled(Wearables.roll_gear(rng, &"normal", {}, &"leather_hood"))
+	_check(hb.size() == 4 and Wearables.normal_in_bag(&"hunter") == 3, "가방에 레어 1 · 일반 3")
+	m.open_inventory()
+	var inv: InventoryUI = m.inventory
+	if inv.outfit != &"hunter":
+		inv.swap_outfit()
+	inv.cursor = {kind = &"bag", index = 0}
+	m._unhandled_input(_action(&"discard"))
+	_check(inv.visible and hb.size() == 4 and inv.discard_armed == {kind = &"bag", index = 0}, "X 한 번: 표시만, 아직 안 버림")
+	inv.move_cursor(Vector2.RIGHT)
+	_check(inv.discard_armed.is_empty(), "칸을 옮기면 버리기 표시가 풀림")
+	inv.cursor = {kind = &"bag", index = 0}
+	m._unhandled_input(_action(&"discard"))
+	m._unhandled_input(_action(&"discard"))
+	_check(hb.size() == 3 and not (rare_id in hb) and not GameState.gear.has(rare_id), "X 두 번: 레어 장비를 버림 (장비 기록도 지움)")
+	_check(inv.visible, "버려도 가방 창은 그대로")
+	# 입은 칸은 못 버림
+	inv.cursor = {kind = &"equip", index = 0}
+	_check(not inv.discard(&"equip", 0) and not inv.discard(&"equip", 0) and GameState.worn[&"hunter"][&"hat"] == &"ball_cap", "입은 장비는 X 두 번에도 안 버려짐")
+	# 가게 장비는 버리면 다시 살 수 있음 (가진 장비 목록에서 빠짐)
+	inv.primary(&"equip", 0)
+	var cap_i := hb.find(&"ball_cap")
+	inv.discard(&"bag", cap_i)
+	_check(inv.discard(&"bag", cap_i) and not Wearables.is_owned(&"ball_cap"), "가게 장비를 버리면 다시 살 수 있음")
+	# 창고 칸도 버림
+	GameState.stash.append(&"straw_hat")
+	GameState.owned_wear.append(&"straw_hat")
+	inv.with_stash = true
+	inv.discard(&"stash", 0)
+	_check(inv.discard(&"stash", 0) and GameState.stash.is_empty() and not Wearables.is_owned(&"straw_hat"), "창고 칸도 X 두 번으로 버림")
+	inv.with_stash = false
+	# Shift+X 두 번 = 일반 한꺼번에 (레어 · 마법은 남음)
+	Wearables.gain_rolled(Wearables.roll_gear(rng, &"magic", {}, &"leather_hood"))
+	var magic_id := StringName("gear_%d" % GameState.gear_serial)
+	var shift_x := InputEventKey.new()
+	shift_x.physical_keycode = KEY_X
+	shift_x.shift_pressed = true
+	shift_x.pressed = true
+	m._unhandled_input(shift_x)
+	_check(Wearables.normal_in_bag(&"hunter") == 3 and inv.discard_armed == {kind = &"all"}, "Shift+X 한 번: 표시만")
+	m._unhandled_input(shift_x)
+	_check(Wearables.normal_in_bag(&"hunter") == 0 and GameState.gear.has(magic_id), "Shift+X 두 번: 일반 3개만 버리고 마법은 남김")
+	_check(inv.discard_normal() == 0 and inv.discard_armed.is_empty(), "버릴 일반 장비가 없으면 아무것도 안 함")
+	m.close_inventory()
 	m.queue_free()
 	await get_tree().process_frame

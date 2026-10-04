@@ -415,6 +415,42 @@ static func sell_all_normal(who: StringName) -> Array[int]:
 	return [n, total]
 
 
+## 가방 (&"bag") 또는 공용 창고 (&"stash") i 번째 장비를 버린다 (2026-10-04 백로그 7). 돈 · 고철 없이 칸만 빈다.
+## 버린 장비 id, 못 버리면 &"". 가게 · 세트 장비는 남은 벌이 없으면 다시 사거나 다시 주울 수 있다.
+static func discard(who: StringName, kind: StringName, i: int) -> StringName:
+	var list: Array[StringName] = GameState.stash if kind == &"stash" else GameState.bag[who]
+	if i < 0 or i >= list.size():
+		return &""
+	var id := list[i]
+	list.remove_at(i)
+	if is_rolled(id):
+		GameState.gear.erase(id)
+	elif not _held_anywhere(id):
+		GameState.owned_wear.erase(id)
+	return id
+
+
+## 가방의 일반 장비를 한꺼번에 버린다. 버린 개수
+static func discard_all_normal(who: StringName) -> int:
+	var b: Array[StringName] = GameState.bag[who]
+	var n := 0
+	for i in range(b.size() - 1, -1, -1):
+		if is_rolled(b[i]) and rarity(b[i]) == &"normal":
+			discard(who, &"bag", i)
+			n += 1
+	return n
+
+
+## 입었거나 가방 · 창고 어딘가에 같은 장비가 남았는지
+static func _held_anywhere(id: StringName) -> bool:
+	if id in GameState.stash:
+		return true
+	for who: StringName in OUTFIT_NAMES:
+		if id in GameState.bag[who] or id in worn_by(who):
+			return true
+	return false
+
+
 static func normal_in_bag(who: StringName) -> int:
 	var n := 0
 	for id in GameState.bag[who]:
