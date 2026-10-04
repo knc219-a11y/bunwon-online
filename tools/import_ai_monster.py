@@ -50,7 +50,14 @@
   장군 · 창기병 칸: 0-1 대기, 2-5 달리기, 6 앞발 들기 (돌격 예고), 7 돌아섬. 망아지: 0-1 대기, 2-5 걷기, 6-9 앞발 들기 · 뒷발차기.
   --rear 앞발 든 그림이 있으면 6열 (망아지 6-7열) 에 쓰고, 없으면 한 장을 머리 쪽이 위로 가게 기울인다.
 
-실행: python3 tools/import_ai_monster.py 그림.png --kind crab|boss|baby|wolf|tiger|baby_tiger|baby_white_tiger|general|lancer|foal|sparrow|scarecrow|baby_sparrow|stump|cheonha|jiha|tree_spirit|will_o|will_o_baby|bus [--width 24] [--colors 20] [--preview 미리보기.png]
+곤지암 세트 (2026-10-04, 새 크기): 프롬프트는 /mnt/project-files/design/new-art-ai/gonjiam.md. 옆모습, 앞이 오른쪽.
+  archdemon  → assets/creatures/wild_archdemon.png (768x96, 96칸): 키 약 84px (사람의 1.8배). 게임은 1:1
+  horn_demon → assets/creatures/wild_horn_demon.png (512x64, 64칸): 구부정한 키 약 50px, 팔 들면 약 60px
+  imp        → assets/creatures/baby_imp.png (320x32): 키 약 22px
+  마왕 칸: 0-1 대기, 2-5 걷기, 6 등불 깜빡 (초록 불을 더 밝게), 7 등불 꺼진 채 숨 고름 (초록 불을 쇠 색으로).
+  뿔 악귀 칸: 0-1 대기, 2-5 걷기, 6 두 팔 치켜듦 (--raise 그림, 없으면 뒤로 젖힘), 7 숨 고름. 아기: 6-9 손에서 작은 불.
+
+실행: python3 tools/import_ai_monster.py 그림.png --kind crab|boss|baby|wolf|tiger|baby_tiger|baby_white_tiger|general|lancer|foal|archdemon|horn_demon|imp|sparrow|scarecrow|baby_sparrow|stump|cheonha|jiha|tree_spirit|will_o|will_o_baby|bus [--width 24] [--colors 20] [--preview 미리보기.png]
       (--sand 숨은그림.png: 모래에 파묻힌 게 그림이 따로 있으면 숨기 칸에 그걸 쓴다)
 
 지금 시트를 만든 명령 (그림 원본: /mnt/project-files/design/gumsa-ai/ai_*.png, 사용자 AI 그림 2026-09-30)
@@ -232,6 +239,29 @@ KINDS["foal"] = dict(out="baby_foal", cell=32, width=24, max_h=24, frames=[
     dict(sx=1.0, sy=1.0, lift=0, rot=8, rear=True), dict(sx=1.0, sy=1.0, lift=0, rot=12, rear=True),
     dict(sx=1.0, sy=1.0, lift=0, rot=-10), dict(sx=1.02, sy=0.97, lift=0),
 ])
+# 곤지암 세트 (2026-10-04, 새 크기): 악마 셋. 옆모습, 앞이 오른쪽 (왼쪽을 보고 나왔으면 --flip).
+#   마왕: 0-1 대기, 2-5 걷기 (긴 옷자락 끝을 번갈아 밀기), 6 등불 깜빡 (초록 불 밝게), 7 등불 꺼진 채 숨 고름 (lamp=-1)
+#   뿔 악귀: 0-1 대기, 2-5 걷기 (두 발), 6 두 팔 치켜듦 (예고, --raise 그림이 있으면 그걸), 7 내려찍은 뒤 숨 고름
+#   아기 악귀: 0-1 대기, 2-5 이동 (깡충), 6-9 일 (손에서 작은 불, hand=불 크기)
+KINDS["archdemon"] = dict(out="wild_archdemon", cell=96, width=70, max_h=84, work_w=480, frames=[
+    dict(sx=1.0, sy=1.0, lift=0), dict(sx=1.0, sy=0.98, lift=0),
+    dict(sx=1.0, sy=1.0, lift=1, step=1), dict(sx=1.01, sy=0.98, lift=0, step=-1),
+    dict(sx=1.0, sy=1.0, lift=1, step=1), dict(sx=1.01, sy=0.98, lift=0, step=-1),
+    dict(sx=1.0, sy=1.01, lift=0, lamp=1), dict(sx=0.98, sy=0.95, lift=0, rot=-4, lamp=-1),
+])
+KINDS["horn_demon"] = dict(out="wild_horn_demon", cell=64, width=46, max_h=50, work_w=360, rear_k=1.2, frames=[
+    dict(sx=1.0, sy=1.0, lift=0), dict(sx=1.02, sy=0.97, lift=0),
+    dict(sx=1.02, sy=0.97, lift=0, stride=1), dict(sx=1.0, sy=1.0, lift=1, stride=-1),
+    dict(sx=1.02, sy=0.97, lift=0, stride=1), dict(sx=1.0, sy=1.0, lift=1, stride=-1),
+    dict(sx=0.96, sy=1.08, lift=0, rot=8, rear=True), dict(sx=1.04, sy=0.9, lift=0, rot=-6),
+])
+KINDS["imp"] = dict(out="baby_imp", cell=32, width=20, max_h=22, frames=[
+    dict(sx=1.0, sy=1.0, lift=0), dict(sx=1.02, sy=0.96, lift=0),
+    dict(sx=1.0, sy=1.0, lift=2), dict(sx=1.02, sy=0.96, lift=0, step=1),
+    dict(sx=1.0, sy=1.0, lift=2), dict(sx=1.02, sy=0.96, lift=0, step=-1),
+    dict(sx=1.0, sy=1.0, lift=0, hand=1), dict(sx=1.0, sy=1.02, lift=0, hand=2),
+    dict(sx=1.0, sy=1.0, lift=0, hand=3), dict(sx=1.02, sy=0.97, lift=0, hand=1),
+])
 BUS_W, BUS_H, BUS_FLOOR = 96, 48, 46
 DROP = (150, 200, 240)
 BLUE_L, FIRE_C, FIRE_L = (210, 236, 255), (250, 150, 60), (255, 230, 130)
@@ -266,6 +296,30 @@ def burst_sparks(l, left, top, W, H):
     cx, cy = left + W / 2, top + H * 0.6
     for dx, dy in ((-W / 2 - 3, -2), (W / 2 + 2, -3), (-W / 2 - 1, 5), (W / 2 + 1, 6)):
         l.px(cx + dx, cy + dy, BLUE_L)
+
+
+def lamp(img, k):
+    """마왕 등불: 초록 불 픽셀 (초록이 붉은 · 푸른 기보다 센 밝은 색) 을 k=1 이면 더 밝게, k=-1 이면 꺼진 쇠 색으로."""
+    px = img.load()
+    for y in range(img.height):
+        for x in range(img.width):
+            r, g, b, a = px[x, y]
+            if a and g > 110 and g > r + 40 and g > b + 25:
+                px[x, y] = (min(255, r + 70), 255, min(255, b + 70), a) if k > 0 else (52, 56, 54, a)
+    return img
+
+
+def hand_fire(l, x, y, stage):
+    """아기 악귀 일 칸: 앞으로 내민 손 위에 작은 불 (stage 1 불씨 · 2 불꽃 · 3 크게)."""
+    l.px(x, y, FIRE_C)
+    if stage >= 2:
+        l.px(x, y - 1, FIRE_L)
+        l.px(x - 1, y, FIRE_C)
+        l.px(x + 1, y, FIRE_C)
+    if stage >= 3:
+        l.px(x, y - 2, FIRE_L)
+        l.px(x, y - 3, (255, 250, 220))
+        l.px(x + 1, y - 1, FIRE_C)
 
 
 def embers(l, cx, base, stage):
@@ -571,7 +625,8 @@ def build(src, kind, width=None, colors=20, redraw_eyes=False, sand_src=None, mo
         # 앞발 든 그림 (역동 --rear): 대기 그림과 같은 키로, 눈은 --fly-eyes 자리
         rear = load_figure(rear_src, flip, work_w=spec.get("work_w"))
         rear_pal = rear.convert("RGB").quantize(colors, method=Image.Quantize.FASTOCTREE)
-        rear_w = round(base_h * rear.width / rear.height)
+        rear_h = min(CELL, round(base_h * spec.get("rear_k", 1.0)))
+        rear_w = round(rear_h * rear.width / rear.height)
     frames = spec["frames"]
     bodies = Image.new("RGBA", (CELL * len(frames), CELL), (0, 0, 0, 0))
     over = Image.new("RGBA", bodies.size, (0, 0, 0, 0))
@@ -585,7 +640,7 @@ def build(src, kind, width=None, colors=20, redraw_eyes=False, sand_src=None, mo
         use_fly = f.get("fly") and fly is not None
         src_fig, src_pal, bw, bh = (fly, fly_pal, spec["fw"], fly_h) if use_fly else (fig, pal_img, width, base_h)
         if f.get("rear") and rear is not None:
-            src_fig, src_pal, bw, bh = rear, rear_pal, rear_w, base_h
+            src_fig, src_pal, bw, bh = rear, rear_pal, rear_w, rear_h
             f = dict(f, rot=0, fly=True)
         if f.get("fly") and fly is None:
             # 날개 편 그림이 없으면 앉은 그림을 위아래로만 흔든다
@@ -602,6 +657,8 @@ def build(src, kind, width=None, colors=20, redraw_eyes=False, sand_src=None, mo
             body = sway(body, f["sway"])
         if f.get("dim"):
             body = dim(body)
+        if f.get("lamp"):
+            body = lamp(body, f["lamp"])
         move = None
         if f.get("rot"):
             W0, H0 = W, H
@@ -711,6 +768,8 @@ def build(src, kind, width=None, colors=20, redraw_eyes=False, sand_src=None, mo
             burst_sparks(l, left, top, W, H)
         if f.get("ember"):
             embers(l, left + W // 2, top + H, f["ember"])
+        if f.get("hand"):
+            hand_fire(l, min(CELL - 2, left + W), top + round(H * 0.45), f["hand"])
         if "work" in f:
             draw_tongue(l, int(round(left + mouth[0] * W)), int(round(top + mouth[1] * H)), f["work"])
         sheet.alpha_composite(l.img, (i * CELL, 0))
@@ -760,7 +819,7 @@ def main():
     ap.add_argument("--fly-eyes", help="날개 편 그림의 눈 자리 (몸 비율 x,y, 옆모습이라 하나)")
     ap.add_argument("--eye-color", help="눈 색 r,g,b (요괴 까마귀 붉은 눈)")
     ap.add_argument("--flip", action="store_true", help="그림을 좌우로 뒤집는다 (참새가 오른쪽을 보고 나왔을 때)")
-    ap.add_argument("--rear", help="앞발 높이 든 그림 (general · lancer · foal 예고 · 일 칸). 눈 자리는 --fly-eyes")
+    ap.add_argument("--rear", "--raise", dest="rear", help="앞발 높이 든 그림 (general · lancer · foal 예고 · 일 칸) · 두 팔 치켜든 그림 (horn_demon). 눈 자리는 --fly-eyes")
     ap.add_argument("--hide", help="잠든 그루터기 그림 (stump 숨기 칸)")
     ap.add_argument("--hide-eyes", help="잠든 그루터기 그림에서 눈이 번쩍일 자리 (몸 비율 x1,y1,x2,y2)")
     ap.add_argument("--skull", help="will_o: 작은 해골을 찍을 자리 (몸 비율 x,y)")
