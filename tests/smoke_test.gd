@@ -2887,14 +2887,14 @@ func close_all(main: Node2D) -> void:
 func _sound_checks() -> void:
 	_check(AudioServer.get_bus_index(&"Music") > 0 and AudioServer.get_bus_index(&"SFX") > 0, "오디오 버스: Master · Music · SFX")
 	var missing: Array[String] = []
-	for id in [&"hoe", &"water", &"harvest", &"coin", &"hatch", &"hit", &"hurt"]:
+	for id in [&"hoe", &"water", &"harvest", &"coin", &"hatch", &"hit", &"hurt", &"swing", &"shoot", &"cast", &"kill"]:
 		if Sound._stream(Sound.SFX_DIR, id) == null:
 			missing.append(String(id))
 	for id in [&"village_day", &"village_night", &"hunt"]:
 		var st := Sound._stream(Sound.BGM_DIR, id)
 		if st == null or not (st as AudioStreamOggVorbis).loop:
 			missing.append(String(id))
-	_check(missing.is_empty(), "효과음 7개 · 배경음 3개(반복) 모두 있음 %s" % [missing])
+	_check(missing.is_empty(), "효과음 11개 · 배경음 3개(반복) 모두 있음 %s" % [missing])
 	var so: Node2D = load("res://scenes/main.tscn").instantiate()
 	add_child(so)
 	await get_tree().process_frame
@@ -3002,6 +3002,15 @@ func _pace_checks() -> void:
 		h.swing(Vector2.RIGHT)
 	_check(h.combo == 2 and a.hp == 5 * U - d2 and b.hp == 5 * U - 2 * d1 - d2, "3타째는 넓게 베고 피해 +1 (멀리 %d · 가까이 %d)" % [a.hp, b.hp])
 	_check(h._hitstop > 0.0, "맞히면 잠깐 멈춤 (타격 멈춤)")
+	# 타격감 (2026-10-03): 화면은 흔들지 않고, 하얀 번쩍임 · 납작 · 불꽃 · 공격 모션으로
+	_check(h.camera.offset == Vector2.ZERO, "맞혀도 화면은 흔들리지 않음")
+	_check(b._flash > 0.0 and (b._sprite.material as ShaderMaterial).get_shader_parameter(&"flash") == 1.0, "맞은 몬스터는 바로 하얗게 번쩍")
+	_check(b._squash > 0.0, "맞은 몬스터는 잠깐 납작")
+	_check(not h._sparks.is_empty(), "맞은 자리에 타격 불꽃")
+	_check(m.player.lunge_offset().x > 0.0 or m.player._lunge_t >= 0.0, "칠 때 치는 쪽으로 몸을 싣는 모션")
+	var held: float = m.player._lunge_t
+	h.tick(1.0 / 30.0)
+	_check(h._hitstop <= 0.0 or is_equal_approx(m.player._lunge_t, held), "타격 멈춤 동안은 공격 모션도 멈춤")
 	# 한꺼번에 덮치는 수
 	h.set_ai(true)
 	h._hitstop = 0.0

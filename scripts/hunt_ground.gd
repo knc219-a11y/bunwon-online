@@ -92,7 +92,8 @@ var _since_swing := 99.0
 var _finisher := false
 ## 타격 멈춤 남은 시간 · 화면 흔들림 남은 시간
 var _hitstop := 0.0
-var _shake := 0.0
+## 타격 불꽃: 맞은 자리에 튀는 빛줄기 {at, dir, t, big, kind}
+var _sparks: Array[Dictionary] = []
 ## 맞힌 자리에 뜨는 피해 숫자 {at, text, t}
 var _pops: Array[Dictionary] = []
 ## 레벨업 · 막 대장 띠 (남은 시간 · 글)
@@ -664,9 +665,8 @@ func _process(delta: float) -> void:
 func tick(delta: float) -> void:
 	if hunter == null or knocked:
 		return
-	_shake = maxf(_shake - delta, 0.0)
 	_level_banner = maxf(_level_banner - delta, 0.0)
-	camera.offset = Vector2(randf_range(-1, 1), randf_range(-1, 1)).round() * Config.SHAKE if _shake > 0.0 else Vector2.ZERO
+	hunter.hold = _hitstop > 0.0
 	if _hitstop > 0.0:
 		# 타격 멈춤: 맞은 순간 세상이 아주 잠깐 멈춘다 (손맛)
 		_hitstop -= delta
@@ -791,6 +791,10 @@ func _tick_dash(delta: float) -> void:
 		_pops[i].t -= delta
 		if _pops[i].t <= 0.0:
 			_pops.remove_at(i)
+	for i in range(_sparks.size() - 1, -1, -1):
+		_sparks[i].t -= delta
+		if _sparks[i].t <= 0.0:
+			_sparks.remove_at(i)
 	if dash_t < 0.0:
 		return
 	_trail.append({at = hunter.position, t = 0.18})
@@ -841,12 +845,17 @@ func swing(dir := Vector2.ZERO) -> int:
 				_cooldown *= Config.BOW_VOLLEY_COOLDOWN - 2 * Config.SKILL_COOLDOWN_STEP * (r - 1)
 			_:
 				shots.append({kind = &"arrow", at = hand, dir = _swing_dir, left = w.range})
+		# 활: 시위를 놓으며 살짝 뒤로 (반동)
+		hunter.lunge(-_swing_dir, Config.ATTACK_LUNGE_PX * 0.5)
+		Sound.sfx(&"shoot", -2.0)
 		return 1
 	if w.kind == &"staff":
 		var orb := {kind = &"orb", at = hand, dir = _swing_dir, left = w.range, blast = orb_blast(w.blast), element = w.element}
 		if mode == &"chain_orb":
 			orb.chain = 2 + (HunterSkills.rank(&"chain_orb") - 1) / 2
 		shots.append(orb)
+		hunter.lunge(_swing_dir, Config.ATTACK_LUNGE_PX * 0.5)
+		Sound.sfx(&"cast", -3.0)
 		return 1
 	_swing_time = 0.15
 	var radius: float = w.radius
@@ -869,6 +878,9 @@ func swing(dir := Vector2.ZERO) -> int:
 			hand = hunter.feet() + Vector2(0, -8)
 	# 검 숙련: 근거리 공격 빠르기
 	_cooldown /= 1.0 + Config.SWORD_MASTERY_SPEED * HunterSkills.rank(&"sword_mastery")
+	# 공격 모션 (2026-10-03 타격감): 치는 쪽으로 몸을 싣는다. 3타째는 두 배, 휘두르는 소리도 낮고 굵게.
+	hunter.lunge(_swing_dir, Config.ATTACK_LUNGE_PX * (2.0 if _finisher else 1.0))
+	Sound.sfx(&"swing", -2.0, 0.8 if _finisher else 1.0)
 	_swing_radius = radius
 	_whirl = whirl
 	var center: Vector2 = hand + _swing_dir * w.reach
@@ -885,8 +897,8 @@ func swing(dir := Vector2.ZERO) -> int:
 			if _strike(s, hunter.feet(), power() + bonus):
 				kills += 1
 	if feel and hits > 0:
-		_hitstop = Config.HITSTOP_KILL if kills > 0 else Config.HITSTOP
-		_shake = 0.12 if kills > 1 or _finisher else (0.06 if kills > 0 else 0.0)
+		# 화면은 흔들지 않는다 (2026-10-03 사용자: 머리가 아픔). 대신 3타째 · 여럿 쓰러뜨리면 더 오래 멈춘다.
+		_hitstop = Config.HITSTOP_HEAVY if _finisher or kills > 1 else (Config.HITSTOP_KILL if kills > 0 else Config.HITSTOP)
 	return hits
 
 
@@ -899,6 +911,7 @@ func _strike(s: WildSlime, from: Vector2, units: int, by_companion := false) -> 
 		blocked_hits += 1
 		if feel:
 			_pops.append({at = s.position + Vector2(randf_range(-4, 4), -18 * s.scale.y), text = "막힘", t = 0.5, big = false})
+			_spark(s, origin, &"block")
 		Sound.sfx(&"hit", 0.0, 1.7)
 		return false
 	var amount := HunterClass.companion_damage(units) if by_companion else HunterClass.hunter_damage(units, Wearables.weapon().kind)
@@ -907,9 +920,22 @@ func _strike(s: WildSlime, from: Vector2, units: int, by_companion := false) -> 
 	if feel:
 		_pops.append({at = s.position + Vector2(randf_range(-4, 4), -18 * s.scale.y), text = str(amount), t = 0.5, big = units > 1})
 	if s.hit(from, amount):
+		if feel:
+			_spark(s, from, &"kill")
 		_defeat(s)
 		return true
+	if feel:
+		_spark(s, from, &"big" if units > 1 else &"hit")
 	return false
+
+
+## 타격 불꽃 하나 (맞은 몸 가운데, 맞은 쪽으로 튄다). kind: hit · big (센 한 방) · kill · block (방패에 막힘)
+func _spark(s: WildSlime, from: Vector2, kind: StringName) -> void:
+	var at := s.position + Vector2(0, -8 * s.scale.y)
+	var dir := (at - from).normalized()
+	if dir == Vector2.ZERO:
+		dir = Vector2.UP
+	_sparks.append({at = at, dir = dir, t = Config.HIT_SPARK, kind = kind, size = s.scale.x, seed = randi()})
 
 
 ## 화살 · 구슬을 날리고 맞힌다. 화살은 첫 몬스터에 박히고 (나는 까마귀도 맞힘, 모래에 숨은 모래게는 지나감.
@@ -1112,6 +1138,8 @@ func _dash_slash() -> void:
 	_swing_radius = radius
 	_finisher = true
 	_whirl = false
+	hunter.lunge(_dash_dir, Config.ATTACK_LUNGE_PX * 2.0)
+	Sound.sfx(&"swing", -2.0, 0.8)
 	_area_hit(hunter.feet() + Vector2(0, -8) + _dash_dir * w.reach, radius, power() + (1 if r >= 3 else 0) + (1 if r >= 5 else 0))
 
 
@@ -1145,9 +1173,8 @@ func skill_right(at: Vector2) -> bool:
 					hits += 1
 					if not _strike(s, hand, power() + 1) and not s.boss:
 						s.stun(Config.EARTH_SPLIT_STUN)
-			_shake = 0.15
 			if hits > 0 and feel:
-				_hitstop = Config.HITSTOP_KILL
+				_hitstop = Config.HITSTOP_HEAVY
 		&"arrow_rain":
 			right_cd = Config.ARROW_RAIN_COOLDOWN - 0.4 * (r - 1)
 			var p := hand + (at - hand).limit_length(w.range)
@@ -1156,7 +1183,7 @@ func skill_right(at: Vector2) -> bool:
 			right_cd = Config.ELEMENT_STORM_COOLDOWN - 0.5 * (r - 1)
 			var p := hand + (at - hand).limit_length(w.range)
 			_burst(p, orb_blast(Config.ELEMENT_STORM_RADIUS + 6.0 * (r - 1)), w.element)
-			_shake = 0.12
+	hunter.lunge(dir, Config.ATTACK_LUNGE_PX * 2.0)
 	Sound.sfx(&"swing", 0.0, 0.7)
 	return true
 
@@ -1194,7 +1221,6 @@ func _tick_charge(delta: float) -> void:
 	_charge = {}
 	var r := HunterSkills.rank(&"charge_order")
 	c.play_attack(target.position)
-	_shake = 0.08
 	if _strike(target, c.position, 1 + (1 if r >= 3 else 0) + (1 if r >= 5 else 0), true):
 		return
 	if not target.boss:
@@ -1233,6 +1259,8 @@ func _nearest_slime(from: Vector2, only_hittable := false) -> WildSlime:
 
 func _defeat(s: WildSlime) -> void:
 	slimes.erase(s)
+	# 쓰러뜨린 한 방: 묵직한 소리 (대장은 더 낮게)
+	Sound.sfx(&"kill", 0.0, 0.8 if s.boss else 1.0)
 	var z: Dictionary = Config.HUNT_ZONES[zone]
 	# 짝 대장 (도마리 장승 한 쌍): 둘 다 쓰러뜨려야 대장 보상 · 길 · 알. 먼저 쓰러진 쪽은 대장 드롭만.
 	var boss_left := s.boss and slimes.any(func(o: WildSlime) -> bool: return o.boss)
@@ -1836,6 +1864,10 @@ func _hurt(from: Vector2, damage := 1, who := "야생 슬라임", what := "") ->
 	life -= damage
 	_invulnerable = Config.HURT_INVULNERABLE_TIME
 	Sound.sfx(&"hurt")
+	# 다침도 화면을 흔들지 않고 붉게 번쩍 + 아주 잠깐 멈춤
+	hunter.hurt_flash()
+	if feel:
+		_hitstop = maxf(_hitstop, Config.HITSTOP)
 	var away := (hunter.feet() - from).normalized()
 	if away == Vector2.ZERO:
 		away = Vector2.DOWN
@@ -1986,6 +2018,35 @@ func _draw() -> void:
 			draw_arc(c, _swing_radius + 2.0, a - 1.0 + tilt, a + 1.0 + tilt, 10, Color(1, 1, 1, 0.85), 2.5)
 
 
+## 타격 불꽃 그리기: 맞은 쪽으로 퍼지는 짧은 빛줄기 + 가운데 번쩍 (쓰러뜨리면 크게 · 금빛 고리)
+func _draw_sparks() -> void:
+	for sp in _sparks:
+		var k: float = 1.0 - sp.t / Config.HIT_SPARK
+		var big: bool = sp.kind == &"kill" or sp.kind == &"big"
+		var col := Color(0.75, 0.8, 0.9) if sp.kind == &"block" else (Color(1.0, 0.85, 0.4) if big else Color(1, 1, 0.9))
+		var a := 1.0 - k * k
+		var n := 7 if sp.kind == &"kill" else (5 if big else 4)
+		var reach: float = (16.0 if sp.kind == &"kill" else (12.0 if big else 9.0)) * clampf(sp.size, 1.0, 2.0)
+		var rng := RandomNumberGenerator.new()
+		rng.seed = sp.seed
+		var base: float = sp.dir.angle()
+		for j in n:
+			# 맞은 쪽 (뒤로) 부채꼴로 튄다. 쓰러뜨리면 사방으로.
+			var spread := PI if sp.kind == &"kill" else 0.9
+			var ang := base + rng.randf_range(-spread, spread)
+			var d := Vector2.from_angle(ang)
+			var ln := reach * rng.randf_range(0.55, 1.0)
+			var p0: Vector2 = sp.at + d * ln * (0.15 + 0.6 * k)
+			var p1: Vector2 = sp.at + d * ln * (0.45 + 0.55 * k)
+			_fx.draw_line(p0, p1, Color(col, a), 2.0 if big else 1.0)
+		if k < 0.5:
+			# 가운데 번쩍 (처음 반만)
+			var r := (5.0 if big else 3.5) * clampf(sp.size, 1.0, 2.0) * (1.0 - k)
+			_fx.draw_circle(sp.at, r, Color(1, 1, 1, 0.9 * a))
+		if sp.kind == &"kill":
+			_fx.draw_arc(sp.at, reach * (0.4 + 0.8 * k), 0, TAU, 20, Color(1.0, 0.85, 0.4, 0.8 * a), 1.5)
+
+
 const SHOT_BLOCK := "THGP"
 const ELEMENT_COLORS := {&"water": Color(0.4, 0.65, 1.0), &"earth": Color(0.7, 0.5, 0.25), &"fire": Color(1.0, 0.5, 0.2)}
 
@@ -2000,6 +2061,7 @@ func _draw_fx() -> void:
 			var at: Vector2 = tr.at + Vector2(-size.x / 2.0, Character.FEET_Y - size.y)
 			var rect := Rect2(at + Vector2(size.x, 0), Vector2(-size.x, size.y)) if f.z == 1 else Rect2(at, size)
 			_fx.draw_texture_rect_region(hunter.sheet, rect, Rect2(Vector2(f.x, f.y) * size, size), Color(0.6, 0.85, 1.0, 0.45 * tr.t / 0.18))
+	_draw_sparks()
 	# 피해 숫자 (위로 떠오르며 사라짐)
 	var font := ThemeDB.fallback_font
 	for pp in _pops:
