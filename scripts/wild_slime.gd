@@ -151,6 +151,8 @@ var _fig_h := 0.0
 ## 큰 칸 시트: 발 (아래 15% 줄) 가운데가 칸 가운데에서 벗어난 만큼 (텍스처 px). 창을 앞으로 뻗은 창기병은 말이 뒤쪽에 있어서
 ## 그림을 이만큼 밀어 발이 노드 자리 (그림자 · 맞는 자리) 에 오게 한다
 var _feet_dx := 0.0
+## 마왕 등불 자리 (노드 좌표, 오른쪽을 볼 때). 새 그림은 _find_lamp 가 시트에서 찾는다
+var _lamp := Vector2.INF
 var _px := 1.0
 ## 허수아비 장수 짚단 던지기: 떨어질 짚단들 {at, t = 남은 시간}, 던진 횟수 (두 번에 한 번 까마귀 부르기)
 var _bales: Array[Dictionary] = []
@@ -301,9 +303,26 @@ func _apply_sheet() -> void:
 						sum += x
 						n += 1
 			_feet_dx = sum / n - _frame / 2.0 if n > 0 else 0.0
+			if pattern == &"archdemon":
+				_find_lamp(img)
 		else:
 			_feet_dx = 0.0
 		_sprite.offset.x = 0.0
+
+
+## 마왕 새 그림 (96칸): 첫 칸의 초록 등불 픽셀 가운데를 찾아 깜빡임 빛 자리로 (노드 좌표, 오른쪽을 볼 때)
+func _find_lamp(img: Image) -> void:
+	var sum := Vector2.ZERO
+	var n := 0
+	for y in _frame:
+		for x in _frame:
+			var c := img.get_pixel(x, y)
+			if c.a > 0.5 and c.g > 0.43 and c.g >= c.r + 0.1 and c.g > c.b + 0.27:
+				sum += Vector2(x, y)
+				n += 1
+	if n > 0:
+		var at := sum / n
+		_lamp = Vector2((at.x - _frame / 2.0 - _feet_dx) * _px, BOTTOM_Y + (at.y - _frame) * _px)
 
 
 ## 짝 대장으로 바꾼다 (도마리 지하여장군: 구역 데이터 partner = {name, sheet, pattern}). make_boss 뒤에 부른다.
@@ -1208,12 +1227,15 @@ func _draw() -> void:
 	if _dim >= 0.0:
 		# 마왕 등불 깜빡임: 손에 든 등불 자리에 초록 불이 꺼졌다 켜졌다
 		var fw := -1.0 if _sprite.flip_h else 1.0
-		draw_circle(Vector2(fw * 18.0, -22.0) / scale.x, (7.0 if int(_anim_time * 12.0) % 2 == 0 else 3.0) / scale.x, Color(0.5, 1.0, 0.55, 0.45))
+		var at := Vector2(fw * _lamp.x, _lamp.y) if _lamp != Vector2.INF else Vector2(fw * 18.0, -22.0) / scale.x
+		draw_circle(at, (7.0 if int(_anim_time * 12.0) % 2 == 0 else 3.0) / scale.x, Color(0.5, 1.0, 0.55, 0.45))
 	if _windup >= 0.0 or _aim >= 0.0 or _log_aim >= 0.0 or _dim >= 0.0:
 		# 큰 칸 (켄타우로스) 은 top 만큼 머리 위로
-		draw_circle(Vector2(0, -30 + top), 6.0, Color(1.0, 0.92, 0.5))
-		draw_arc(Vector2(0, -30 + top), 6.0, 0, TAU, 16, Color(0.6, 0.15, 0.1), 1.0)
-		draw_string(ThemeDB.fallback_font, Vector2(-2.5, -25 + top), "!", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.85, 0.15, 0.1))
+		# 대장은 이름표 자리라서 그 위로 (예전엔 느낌표가 이름표 글씨를 가렸다)
+		var ey := top - (16.0 / scale.x if boss else 0.0)
+		draw_circle(Vector2(0, -30 + ey), 6.0, Color(1.0, 0.92, 0.5))
+		draw_arc(Vector2(0, -30 + ey), 6.0, 0, TAU, 16, Color(0.6, 0.15, 0.1), 1.0)
+		draw_string(ThemeDB.fallback_font, Vector2(-2.5, -25 + ey), "!", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.85, 0.15, 0.1))
 	# 혀 채찍: 뻗은 혀 (입 → 혀끝, 크기 배율을 되돌려 월드 길이로)
 	if _lash > 0.0:
 		var tip := (_tongue_to - position) / scale.x

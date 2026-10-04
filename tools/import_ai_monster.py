@@ -50,7 +50,15 @@
   장군 · 창기병 칸: 0-1 대기, 2-5 달리기, 6 앞발 들기 (돌격 예고), 7 돌아섬. 망아지: 0-1 대기, 2-5 걷기, 6-9 앞발 들기 · 뒷발차기.
   --rear 앞발 든 그림이 있으면 6열 (망아지 6-7열) 에 쓰고, 없으면 한 장을 머리 쪽이 위로 가게 기울인다.
 
-실행: python3 tools/import_ai_monster.py 그림.png --kind crab|boss|baby|wolf|tiger|baby_tiger|baby_white_tiger|general|lancer|foal|sparrow|scarecrow|baby_sparrow|stump|cheonha|jiha|tree_spirit|will_o|will_o_baby|bus [--width 24] [--colors 20] [--preview 미리보기.png]
+곤지암 세트 (2026-10-04, 새 크기): 프롬프트는 /mnt/project-files/design/new-art-ai/gonjiam.md. 옆모습, 앞이 오른쪽.
+  archdemon  → assets/creatures/wild_archdemon.png (768x96, 96칸): 키 약 84px (사람의 1.8배). 게임은 1:1
+  horn_demon → assets/creatures/wild_horn_demon.png (768x96, 96칸): 구부정한 키 약 48px, 팔을 옆으로 넓게 벌려 가로 약 90px
+               (처음엔 64칸이었는데 AI 그림이 팔을 넓게 벌려서 96칸으로)
+  imp        → assets/creatures/baby_imp.png (320x32): 키 약 22px
+  마왕 칸: 0-1 대기, 2-5 걷기, 6 등불 깜빡 (초록 불을 더 밝게), 7 등불 꺼진 채 숨 고름 (초록 불을 쇠 색으로).
+  뿔 악귀 칸: 0-1 대기, 2-5 걷기, 6 두 팔 치켜듦 (--raise 그림, 없으면 뒤로 젖힘), 7 숨 고름. 아기: 6-9 손에서 작은 불.
+
+실행: python3 tools/import_ai_monster.py 그림.png --kind crab|boss|baby|wolf|tiger|baby_tiger|baby_white_tiger|general|lancer|foal|archdemon|horn_demon|imp|sparrow|scarecrow|baby_sparrow|stump|cheonha|jiha|tree_spirit|will_o|will_o_baby|bus [--width 24] [--colors 20] [--preview 미리보기.png]
       (--sand 숨은그림.png: 모래에 파묻힌 게 그림이 따로 있으면 숨기 칸에 그걸 쓴다)
 
 지금 시트를 만든 명령 (그림 원본: /mnt/project-files/design/gumsa-ai/ai_*.png, 사용자 AI 그림 2026-09-30)
@@ -86,6 +94,15 @@
     (칸마다 고르면 말 털이 얼룩덜룩해서 --smooth)
   ai_foal.png --kind foal --backdrop --smooth --colors 24 --keep-hue
     (초록 바탕. 흰 발 · 흰 이마가 흰 바탕과 함께 지워지지 않게)
+곤지암 (그림 원본: /mnt/project-files/design/gonjiam-tall/ai/ai_*.png, 사용자 AI 그림 2026-10-04, 새 크기)
+  ai_archdemon.png --kind archdemon --colors 32 --keep-hue --clear-pockets --smooth --calm 9 --eyes 0.721,0.248 --eye-size 2 --eye-color 255,224,64 --angry
+    (옷자락 밝은 주름이 얼룩이 되어서 --calm 9, 날개 사이 흰 바탕은 --clear-pockets)
+  ai_horn_demon.png --kind horn_demon --raise ai_horn_demon_raise_fixed.png --colors 32 --keep-hue --smooth --calm 13 --clear-pockets
+      --eyes 0.681,0.38,0.751,0.384 --fly-eyes 0.699,0.476,0.764,0.48 --eye-size 1 --eye-color 255,230,60 --angry
+    (원본 오른쪽 아래 AI 워터마크 별은 지움. 팔 든 그림은 뿔 모양이 달라서 design/gonjiam-tall/fix_raise_horns.py 로
+     대기 그림의 숫양 뿔로 바꾼 _fixed 를 쓴다. 근육 잔무늬가 붉은 점이 되어서 --calm 13)
+  ai_imp.png --kind imp --colors 24 --keep-hue --eyes 0.706,0.32,0.922,0.321 --eye-size 1 --eye-color 255,214,60
+    (노란 눈이 줄이면 사라져서 다시 찍음)
 """
 import argparse
 import os
@@ -93,7 +110,7 @@ import os
 import import_ai_character
 import make_slime_sheet
 
-from PIL import Image
+from PIL import Image, ImageFilter
 
 from import_ai_character import pixelize, white_to_alpha
 from import_ai_slime import draw_face, find_face, inpaint, largest_blob, peel_halo, soften_edges
@@ -232,6 +249,29 @@ KINDS["foal"] = dict(out="baby_foal", cell=32, width=24, max_h=24, frames=[
     dict(sx=1.0, sy=1.0, lift=0, rot=8, rear=True), dict(sx=1.0, sy=1.0, lift=0, rot=12, rear=True),
     dict(sx=1.0, sy=1.0, lift=0, rot=-10), dict(sx=1.02, sy=0.97, lift=0),
 ])
+# 곤지암 세트 (2026-10-04, 새 크기): 악마 셋. 옆모습, 앞이 오른쪽 (왼쪽을 보고 나왔으면 --flip).
+#   마왕: 0-1 대기, 2-5 걷기 (긴 옷자락 끝을 번갈아 밀기), 6 등불 깜빡 (초록 불 밝게), 7 등불 꺼진 채 숨 고름 (lamp=-1)
+#   뿔 악귀 (96칸: 팔을 옆으로 넓게 벌린 그림이라): 0-1 대기, 2-5 걷기 (두 발), 6 두 팔 치켜듦 (예고, --raise 그림이 있으면 그걸), 7 내려찍은 뒤 숨 고름
+#   아기 악귀: 0-1 대기, 2-5 이동 (깡충), 6-9 일 (손에서 작은 불, hand=불 크기)
+KINDS["archdemon"] = dict(out="wild_archdemon", cell=96, width=70, max_h=84, work_w=480, frames=[
+    dict(sx=1.0, sy=1.0, lift=0), dict(sx=1.0, sy=0.98, lift=0),
+    dict(sx=1.0, sy=1.0, lift=1, step=1), dict(sx=1.01, sy=0.98, lift=0, step=-1),
+    dict(sx=1.0, sy=1.0, lift=1, step=1), dict(sx=1.01, sy=0.98, lift=0, step=-1),
+    dict(sx=1.0, sy=1.01, lift=0, lamp=1), dict(sx=0.98, sy=0.95, lift=0, rot=-4, lamp=-1),
+])
+KINDS["horn_demon"] = dict(out="wild_horn_demon", cell=96, width=90, max_h=56, work_w=480, rear_k=1.45, frames=[
+    dict(sx=1.0, sy=1.0, lift=0), dict(sx=1.02, sy=0.97, lift=0),
+    dict(sx=1.02, sy=0.97, lift=0, stride=1), dict(sx=1.0, sy=1.0, lift=1, stride=-1),
+    dict(sx=1.02, sy=0.97, lift=0, stride=1), dict(sx=1.0, sy=1.0, lift=1, stride=-1),
+    dict(sx=0.96, sy=1.08, lift=0, rot=8, rear=True), dict(sx=1.04, sy=0.9, lift=0, rot=-6),
+])
+KINDS["imp"] = dict(out="baby_imp", cell=32, width=20, max_h=22, frames=[
+    dict(sx=1.0, sy=1.0, lift=0), dict(sx=1.02, sy=0.96, lift=0),
+    dict(sx=1.0, sy=1.0, lift=2), dict(sx=1.02, sy=0.96, lift=0, step=1),
+    dict(sx=1.0, sy=1.0, lift=2), dict(sx=1.02, sy=0.96, lift=0, step=-1),
+    dict(sx=1.0, sy=1.0, lift=0, hand=1), dict(sx=1.0, sy=1.02, lift=0, hand=2),
+    dict(sx=1.0, sy=1.0, lift=0, hand=3), dict(sx=1.02, sy=0.97, lift=0, hand=1),
+])
 BUS_W, BUS_H, BUS_FLOOR = 96, 48, 46
 DROP = (150, 200, 240)
 BLUE_L, FIRE_C, FIRE_L = (210, 236, 255), (250, 150, 60), (255, 230, 130)
@@ -266,6 +306,30 @@ def burst_sparks(l, left, top, W, H):
     cx, cy = left + W / 2, top + H * 0.6
     for dx, dy in ((-W / 2 - 3, -2), (W / 2 + 2, -3), (-W / 2 - 1, 5), (W / 2 + 1, 6)):
         l.px(cx + dx, cy + dy, BLUE_L)
+
+
+def lamp(img, k):
+    """마왕 등불: 초록 불 픽셀 (초록이 붉은 · 푸른 기보다 센 밝은 색) 을 k=1 이면 더 밝게, k=-1 이면 꺼진 쇠 색으로."""
+    px = img.load()
+    for y in range(img.height):
+        for x in range(img.width):
+            r, g, b, a = px[x, y]
+            if a and g > 110 and g >= r + 25 and g > b + 70:
+                px[x, y] = (min(255, r + 70), 255, min(255, b + 70), a) if k > 0 else (52, 56, 54, a)
+    return img
+
+
+def hand_fire(l, x, y, stage):
+    """아기 악귀 일 칸: 앞으로 내민 손 위에 작은 불 (stage 1 불씨 · 2 불꽃 · 3 크게)."""
+    l.px(x, y, FIRE_C)
+    if stage >= 2:
+        l.px(x, y - 1, FIRE_L)
+        l.px(x - 1, y, FIRE_C)
+        l.px(x + 1, y, FIRE_C)
+    if stage >= 3:
+        l.px(x, y - 2, FIRE_L)
+        l.px(x, y - 3, (255, 250, 220))
+        l.px(x + 1, y - 1, FIRE_C)
 
 
 def embers(l, cx, base, stage):
@@ -408,6 +472,7 @@ def clear_backdrop(im, tol=48):
 
 BACKDROP = False
 SMOOTH = 0
+CALM = 0
 
 
 def smooth_pixelize(fig, pal_img, w, h):
@@ -422,7 +487,11 @@ def smooth_pixelize(fig, pal_img, w, h):
 
 
 def load_figure(src, flip=False, mist=False, parts=0.0, work_w=None):
-    im = clear_backdrop(Image.open(src)) if BACKDROP else white_to_alpha(Image.open(src))
+    im = Image.open(src)
+    if CALM:
+        # --calm: 옷자락 잔무늬 (밝은 갈색 주름) 가 큰 칸에서 얼룩 덩어리가 되지 않게 미리 중앙값으로 누그러뜨린다 (마왕)
+        im = im.convert("RGB").filter(ImageFilter.MedianFilter(CALM))
+    im = clear_backdrop(im) if BACKDROP else white_to_alpha(im)
     im = clear_mist(im) if mist else im
     # parts: 떨어진 조각을 남기려고 peel_halo (끝에 가장 큰 덩어리만 남김) 는 건너뛴다
     fig = big_blobs(im, parts) if parts else peel_halo(largest_blob(im))
@@ -571,7 +640,8 @@ def build(src, kind, width=None, colors=20, redraw_eyes=False, sand_src=None, mo
         # 앞발 든 그림 (역동 --rear): 대기 그림과 같은 키로, 눈은 --fly-eyes 자리
         rear = load_figure(rear_src, flip, work_w=spec.get("work_w"))
         rear_pal = rear.convert("RGB").quantize(colors, method=Image.Quantize.FASTOCTREE)
-        rear_w = round(base_h * rear.width / rear.height)
+        rear_h = min(CELL, round(base_h * spec.get("rear_k", 1.0)))
+        rear_w = round(rear_h * rear.width / rear.height)
     frames = spec["frames"]
     bodies = Image.new("RGBA", (CELL * len(frames), CELL), (0, 0, 0, 0))
     over = Image.new("RGBA", bodies.size, (0, 0, 0, 0))
@@ -585,7 +655,7 @@ def build(src, kind, width=None, colors=20, redraw_eyes=False, sand_src=None, mo
         use_fly = f.get("fly") and fly is not None
         src_fig, src_pal, bw, bh = (fly, fly_pal, spec["fw"], fly_h) if use_fly else (fig, pal_img, width, base_h)
         if f.get("rear") and rear is not None:
-            src_fig, src_pal, bw, bh = rear, rear_pal, rear_w, base_h
+            src_fig, src_pal, bw, bh = rear, rear_pal, rear_w, rear_h
             f = dict(f, rot=0, fly=True)
         if f.get("fly") and fly is None:
             # 날개 편 그림이 없으면 앉은 그림을 위아래로만 흔든다
@@ -602,6 +672,8 @@ def build(src, kind, width=None, colors=20, redraw_eyes=False, sand_src=None, mo
             body = sway(body, f["sway"])
         if f.get("dim"):
             body = dim(body)
+        if f.get("lamp"):
+            body = lamp(body, f["lamp"])
         move = None
         if f.get("rot"):
             W0, H0 = W, H
@@ -711,6 +783,8 @@ def build(src, kind, width=None, colors=20, redraw_eyes=False, sand_src=None, mo
             burst_sparks(l, left, top, W, H)
         if f.get("ember"):
             embers(l, left + W // 2, top + H, f["ember"])
+        if f.get("hand"):
+            hand_fire(l, min(CELL - 2, left + W), top + round(H * 0.62), f["hand"])
         if "work" in f:
             draw_tongue(l, int(round(left + mouth[0] * W)), int(round(top + mouth[1] * H)), f["work"])
         sheet.alpha_composite(l.img, (i * CELL, 0))
@@ -760,7 +834,7 @@ def main():
     ap.add_argument("--fly-eyes", help="날개 편 그림의 눈 자리 (몸 비율 x,y, 옆모습이라 하나)")
     ap.add_argument("--eye-color", help="눈 색 r,g,b (요괴 까마귀 붉은 눈)")
     ap.add_argument("--flip", action="store_true", help="그림을 좌우로 뒤집는다 (참새가 오른쪽을 보고 나왔을 때)")
-    ap.add_argument("--rear", help="앞발 높이 든 그림 (general · lancer · foal 예고 · 일 칸). 눈 자리는 --fly-eyes")
+    ap.add_argument("--rear", "--raise", dest="rear", help="앞발 높이 든 그림 (general · lancer · foal 예고 · 일 칸) · 두 팔 치켜든 그림 (horn_demon). 눈 자리는 --fly-eyes")
     ap.add_argument("--hide", help="잠든 그루터기 그림 (stump 숨기 칸)")
     ap.add_argument("--hide-eyes", help="잠든 그루터기 그림에서 눈이 번쩍일 자리 (몸 비율 x1,y1,x2,y2)")
     ap.add_argument("--skull", help="will_o: 작은 해골을 찍을 자리 (몸 비율 x,y)")
@@ -772,10 +846,11 @@ def main():
     ap.add_argument("--smooth", action="store_true", help="부드럽게 줄인 뒤 팔레트로 (잔무늬가 점으로 깨질 때)")
     ap.add_argument("--keep-hue", action="store_true", help="짙은 색을 보랏빛으로 돌리지 않는다 (밤색 말 · 역마 장군)")
     ap.add_argument("--clear-pockets", action="store_true", help="팔 · 창 사이에 갇힌 흰 바탕도 지운다 (흰 무늬 없는 그림만)")
+    ap.add_argument("--calm", type=int, default=0, help="줄이기 전에 중앙값 필터 (홀수 px). 잔주름이 얼룩이 될 때 (마왕 9)")
     ap.add_argument("--backdrop", action="store_true", help="흰 바탕 대신 귀퉁이 색 (초록 바탕 등) 을 지운다. 흰 몸 (백호) 용")
     a = ap.parse_args()
-    global BACKDROP, SMOOTH
-    BACKDROP = a.backdrop
+    global BACKDROP, SMOOTH, CALM
+    BACKDROP, CALM = a.backdrop, a.calm
     import_ai_character.KEEP_HUE, import_ai_character.CLEAR_POCKETS = a.keep_hue, a.clear_pockets
     SMOOTH = a.colors if a.smooth else 0
     if KINDS.get(a.kind, {}).get("cell"):
