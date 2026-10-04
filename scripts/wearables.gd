@@ -115,6 +115,14 @@ const SETS := {
 
 ## 장비 한 개의 정보. 정해진 장비(마을 · 세트)는 ITEMS 그대로, 사냥터에서 굴린 장비는
 ## 기본 장비에 등급 · 이름 · 옵션 효과를 얹어 돌려준다.
+## 이 장비의 덧그림 (주인공 모습마다 몸이 달라 폴더가 다르다: Config.LOOKS wear)
+static func sheet_of(id: StringName, wear_dir: String) -> Texture2D:
+	var s: Texture2D = item(id).sheet
+	if wear_dir == "":
+		return s
+	return load(s.resource_path.replace("/wear/", "/wear/%s/" % wear_dir))
+
+
 static func item(id: StringName) -> Dictionary:
 	if ITEMS.has(id):
 		return ITEMS[id]

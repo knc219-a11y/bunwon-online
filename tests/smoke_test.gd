@@ -2743,6 +2743,11 @@ func _save_load_checks() -> void:
 	a.player.facing = Vector2i.LEFT
 	a.tool_index = 2
 	a.save_slot = 2
+	# 주인공 모습 B (2026-10-04 캐릭터 선택): 몸 시트 · 장비 덧그림 폴더가 바뀌고 저장된다
+	GameState.look = &"b"
+	a.apply_look()
+	_check(a.player.sheet.resource_path.ends_with("protagonist_b.png") and a.player.wear_dir == "b", "주인공 모습 B: 몸 시트 · 장비 폴더 b")
+	_check(Wearables.sheet_of(&"straw_hat", "b").resource_path.ends_with("wear/b/straw_hat.png"), "모습 B 장비 덧그림은 assets/wear/b")
 	var before: Dictionary = SaveGame.snapshot(a)
 	_check(a.autosave() and SaveGame.exists(2) and not SaveGame.exists(1), "슬롯 2에 저장 (다른 슬롯은 그대로 비어 있음)")
 	var sum := SaveGame.summary(2)
@@ -2759,6 +2764,7 @@ func _save_load_checks() -> void:
 	await get_tree().process_frame
 	_check(GameState.day == 1 and b.creatures.is_empty(), "새 장면은 1일째 빈 마을")
 	_check(SaveGame.load_into(b, 2), "슬롯 2 불러오기")
+	_check(GameState.look == &"b" and b.player.sheet.resource_path.ends_with("protagonist_b.png"), "불러오면 주인공 모습 B 그대로")
 	var after: Dictionary = SaveGame.snapshot(b)
 	var diff: Array[String] = []
 	for k: String in before:
@@ -2853,7 +2859,10 @@ func _save_load_checks() -> void:
 	var eggs_v2: int = v2.gs.farmer_eggs.size()
 	v2.gs.hunter_eggs = [{res = TestStarts.SPECIES[&"foal"]}]
 	var lv_v2: int = v2.gs.hunter_level
+	# 옛 저장 파일엔 주인공 모습이 없다 (2026-10-04 캐릭터 선택 전)
+	v2.gs.erase("look")
 	GameState.reset()
+	GameState.look = &"b"
 	c = load("res://scenes/main.tscn").instantiate()
 	add_child(c)
 	await get_tree().process_frame
@@ -2862,6 +2871,7 @@ func _save_load_checks() -> void:
 	_check(c.smith.position == Farm.center_of(Config.SMITH_CELL) and c.farmer.position == Farm.center_of(Config.FARMER_CELL), "옛 저장: 마을 사람은 제자리")
 	_check(GameState.farmer_eggs.size() == eggs_v2 + 1 and GameState.farmer_eggs.back().id == &"foal", "옛 저장: 사냥꾼이 든 알은 주인공 손으로")
 	_check(GameState.hunter_level == lv_v2 and GameState.gear == gear_before and c.player.outfit == &"farmer", "옛 저장: 레벨 · 장비 그대로, 마을에서는 밭 옷")
+	_check(GameState.look == &"a" and c.player.wear_dir == "", "옛 저장: 주인공 모습은 A")
 	c.queue_free()
 	await get_tree().process_frame
 	for i in range(1, SaveGame.SLOTS + 1):
