@@ -235,6 +235,8 @@ const DMG_UNIT := 10
 const CLASS_WEAPON_BONUS := 0.2
 ## 레벨업마다 스탯 포인트
 const STAT_POINTS_PER_LEVEL := 3
+## Ctrl+클릭 (T 창 스탯 줄) 로 한 번에 찍는 점 수 (2026-10-04 백로그 12, 사용자: "한 번에 5점씩")
+const STAT_BULK := 5
 ## 스탯 1점: 힘 근거리 피해 + · 최대 체력 + / 솜씨 활 피해 + · 걷기 · 구르기 + / 지혜 지팡이 피해 + · 속성 효과 시간 + / 교감 동행 피해 · 공격 빠르기 +
 const STAT_DMG := 0.02
 const STR_HP := 2

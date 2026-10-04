@@ -129,7 +129,8 @@ func cell_rect(c: Vector2i) -> Rect2:
 
 
 ## 고른 칸을 한 단계 찍는다. 못 찍으면 까닭을 알린다.
-func learn_cursor() -> bool:
+## many = Ctrl 을 누른 채: 스탯은 한 번에 STAT_BULK 점까지 (2026-10-04 백로그 12, 남은 점이 적으면 있는 만큼)
+func learn_cursor(many := false) -> bool:
 	if farm_page():
 		var fs := skill_at(cursor)
 		if fs.is_empty():
@@ -145,11 +146,12 @@ func learn_cursor() -> bool:
 		return true
 	if on_stat_row():
 		var st: Dictionary = HunterClass.STATS[cursor.x]
-		if not HunterClass.spend(st.id):
+		var n := HunterClass.spend_many(st.id, Config.STAT_BULK if many else 1)
+		if n <= 0:
 			GameState.notify("%s: 스탯 포인트 없음" % st.name)
 			return false
 		Sound.sfx(&"hatch", 0.0, 1.3)
-		GameState.notify("%s %d (남은 스탯 포인트 %d). %s." % [st.name, HunterClass.stat(st.id), GameState.stat_points, st.desc])
+		GameState.notify("%s%s %d (남은 스탯 포인트 %d). %s." % [st.name, " +%d" % n if n > 1 else "", HunterClass.stat(st.id), GameState.stat_points, st.desc])
 		queue_redraw()
 		return true
 	var s := skill_at(cursor)
@@ -184,7 +186,7 @@ func handle_key(event: InputEvent) -> void:
 		else:
 			cursor.y = rows() if cursor.y >= ts[cursor.x].skills.size() - 1 else cursor.y + 1
 	elif event.is_action_pressed("interact") or event.is_action_pressed("use_tool"):
-		learn_cursor()
+		learn_cursor(event is InputEventWithModifiers and event.ctrl_pressed)
 	if not farm_page() and on_stat_row():
 		cursor.x = mini(cursor.x, HunterClass.STATS.size() - 1)
 	elif event.is_action_pressed("move_up") and cursor.y >= ts[cursor.x].skills.size():
@@ -219,7 +221,7 @@ func _gui_input(event: InputEvent) -> void:
 		var c := cell_at(event.position)
 		if c.x >= 0:
 			cursor = c
-			learn_cursor()
+			learn_cursor(event.ctrl_pressed)
 			accept_event()
 	elif event is InputEventMouseMotion:
 		var c := cell_at(event.position)
@@ -285,7 +287,7 @@ func _draw() -> void:
 		var st: Dictionary = HunterClass.STATS[cursor.x]
 		var y := size.y - 48
 		draw_rect(Rect2(8, y, size.x - 16, 42), SLOT_BG)
-		draw_string(font, Vector2(12, y + 12), "%s %d · 스탯 (레벨업마다 %d점)" % [st.name, HunterClass.stat(st.id), Config.STAT_POINTS_PER_LEVEL], HORIZONTAL_ALIGNMENT_LEFT, size.x - 24, 10, INK)
+		draw_string(font, Vector2(12, y + 12), "%s %d · 스탯 (레벨업마다 %d점) · Ctrl+클릭: %d점씩" % [st.name, HunterClass.stat(st.id), Config.STAT_POINTS_PER_LEVEL, Config.STAT_BULK], HORIZONTAL_ALIGNMENT_LEFT, size.x - 24, 10, INK)
 		draw_string(font, Vector2(12, y + 25), "1점마다: %s" % st.desc, HORIZONTAL_ALIGNMENT_LEFT, size.x - 24, 9, SUB)
 		draw_string(font, Vector2(12, y + 37), "초기화 · 직업 바꾸기: 사냥터 입구 (첫 번 공짜, 그 뒤 Lv x %d원)" % Config.RESPEC_PRICE_PER_LV, HORIZONTAL_ALIGNMENT_LEFT, size.x - 24, 9, SUB)
 		return
