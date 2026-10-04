@@ -101,6 +101,8 @@
       --eyes 0.681,0.38,0.751,0.384 --fly-eyes 0.699,0.476,0.764,0.48 --eye-size 1 --eye-color 255,230,60 --angry
     (원본 오른쪽 아래 AI 워터마크 별은 지움. 팔 든 그림은 뿔 모양이 달라서 design/gonjiam-tall/fix_raise_horns.py 로
      대기 그림의 숫양 뿔로 바꾼 _fixed 를 쓴다. 근육 잔무늬가 붉은 점이 되어서 --calm 13)
+  ai_imp.png --kind imp --colors 24 --keep-hue --eyes 0.706,0.32,0.922,0.321 --eye-size 1 --eye-color 255,214,60
+    (노란 눈이 줄이면 사라져서 다시 찍음)
 """
 import argparse
 import os
@@ -782,7 +784,7 @@ def build(src, kind, width=None, colors=20, redraw_eyes=False, sand_src=None, mo
         if f.get("ember"):
             embers(l, left + W // 2, top + H, f["ember"])
         if f.get("hand"):
-            hand_fire(l, min(CELL - 2, left + W), top + round(H * 0.45), f["hand"])
+            hand_fire(l, min(CELL - 2, left + W), top + round(H * 0.62), f["hand"])
         if "work" in f:
             draw_tongue(l, int(round(left + mouth[0] * W)), int(round(top + mouth[1] * H)), f["work"])
         sheet.alpha_composite(l.img, (i * CELL, 0))
