@@ -138,6 +138,7 @@ var _hud_bar: HudBar
 ## 하루 빛 · 불빛 · 구름 그림자 · 날리는 잎 (그래픽 시범 C)
 var ambience: Ambience
 var _message: Label
+var village_map: VillageMap
 ## 마을 카메라 (2026-10-01 마을 넓히기): 맵이 화면보다 크면 주인공을 따라간다. 사냥터에서는 사냥터 카메라가 켜진다.
 var camera: Camera2D
 
@@ -398,6 +399,13 @@ func _unhandled_input(event: InputEvent) -> void:
 				open_menu(&"title")
 			elif menu_kind != &"title":
 				close_menu()
+		return
+	# M: 마을 큰 지도 열기 · 닫기 (Esc 로도 닫힘)
+	if hunt == null and event.is_action_pressed("map"):
+		village_map.toggle_big()
+		return
+	if village_map.big and event.is_action_pressed("menu_close"):
+		village_map.big = false
 		return
 	# Esc: 멈춤 메뉴 (계속하기 · 저장하고 나가기). 사냥터 안에서도 된다.
 	if event.is_action_pressed("menu_close"):
@@ -3123,8 +3131,12 @@ func _build_hud() -> void:
 	help.position = Vector2(8, 345)
 	help.add_theme_font_size_override("font_size", 10)
 	help.modulate = Color(1, 1, 1, 0.6)
-	help.text = "WASD 이동 · Space 도구 (사냥터: 클릭 공격 · Space 구르기) · Q/E 도구 바꾸기 · F 상호작용 · R 크리처 일 · I 가방 · T 스킬 · 집 현관 F 잠자기"
+	help.text = "WASD 이동 · Space 도구 (사냥터: 클릭 공격 · 구르기) · Q/E 도구 · F 상호작용 · R 크리처 일 · I 가방 · T 스킬 · M 지도 · 집 현관 F 잠자기"
 	layer.add_child(help)
+	# 마을 지도 (오른쪽 위 작은 지도 · M 큰 지도). 메뉴 · 아침 카드가 위에 오게 먼저 붙인다
+	village_map = VillageMap.new()
+	village_map.main = self
+	layer.add_child(village_map)
 	# 저녁·밤 색 (하루 시계). 아침엔 투명.
 	_dusk = ColorRect.new()
 	_dusk.color = Color(0.1, 0.08, 0.3, 0.0)

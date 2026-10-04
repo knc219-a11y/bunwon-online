@@ -2681,6 +2681,8 @@ func _ready() -> void:
 	await _smith_level_checks()
 	# 56) 장비 버리기 (2026-10-04 백로그 7): X 두 번, Shift+X 일반 한꺼번에
 	await _discard_checks()
+	# 57) 마을 지도 (2026-10-04 백로그 2): 오른쪽 위 작은 지도 + M 큰 지도
+	await _village_map_checks()
 
 	# 41) 저장/불러오기 (2026-09-30 사용자 선택 C 디아2식): 저장 → 장면을 버리고 → 새 장면에 불러오면 모든 상태가 같다
 	await _save_load_checks()
@@ -4597,5 +4599,46 @@ func _discard_checks() -> void:
 	_check(Wearables.normal_in_bag(&"hunter") == 0 and GameState.gear.has(magic_id), "Shift+X 두 번: 일반 3개만 버리고 마법은 남김")
 	_check(inv.discard_normal() == 0 and inv.discard_armed.is_empty(), "버릴 일반 장비가 없으면 아무것도 안 함")
 	m.close_inventory()
+	m.queue_free()
+	await get_tree().process_frame
+
+
+func _village_map_checks() -> void:
+	var m: Node2D = load("res://scenes/main.tscn").instantiate()
+	add_child(m)
+	await get_tree().process_frame
+	GameState.reset()
+	m.close_menu()
+	await get_tree().process_frame
+	var vm: VillageMap = m.village_map
+	_check(vm.visible and not vm.big, "마을: 작은 지도가 뜸")
+	_check(VillageMap.mini_rect().position.y >= 30 and VillageMap.mini_rect().end.x <= 640, "작은 지도는 윗줄 아래 오른쪽 위")
+	_check(VillageMap.prop_cells(m.house) == Config.HOUSE_RECT and VillageMap.prop_cells(m.supply_box) == Config.SUPPLY_RECT, "오브젝트 칸 자리를 지도에 맞게 되찾음")
+	_check(VillageMap.cell_color(m.farm, Vector2i(20, 7)) == VillageMap.PATH, "길 칸은 길 색")
+	_check(VillageMap.cell_color(m.farm, Vector2i(39, 20)) == VillageMap.LAKE, "호수 칸은 물 색")
+	_check(VillageMap.cell_color(m.farm, Vector2i(10, 8)) == VillageMap.LOCKED, "잠긴 밭 구역은 따로 표시")
+	var c := Config.FIELD_PLOTS[0].position
+	m.farm.do_work(Farm.Work.TILL, c)
+	m.farm.do_work(Farm.Work.SOW, c)
+	_check(VillageMap.cell_color(m.farm, c) == VillageMap.SPROUT, "심은 칸은 싹 색")
+	m.farm.get_cell(c).growth = 99
+	_check(VillageMap.cell_color(m.farm, c) == VillageMap.RIPE, "다 익은 칸은 주황")
+	m._unhandled_input(_action(&"map"))
+	_check(vm.big, "M: 큰 지도 열림")
+	m._unhandled_input(_action(&"menu_close"))
+	_check(not vm.big and not m.menu_open, "Esc: 큰 지도만 닫고 멈춤 메뉴는 안 엶")
+	m._unhandled_input(_action(&"map"))
+	m._unhandled_input(_action(&"map"))
+	_check(not vm.big, "M 한 번 더: 닫힘")
+	m.open_inventory()
+	await get_tree().process_frame
+	_check(not vm.visible, "가방 창이 열리면 지도 숨김")
+	m.close_inventory()
+	m.enter_hunt()
+	await get_tree().process_frame
+	_check(not vm.visible, "사냥터에서는 마을 지도 숨김 (사냥터 작은 지도만)")
+	m._unhandled_input(_action(&"map"))
+	_check(not vm.big, "사냥터에서 M 은 마을 큰 지도를 안 엶")
+	m.leave_hunt()
 	m.queue_free()
 	await get_tree().process_frame
