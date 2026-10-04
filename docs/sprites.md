@@ -224,6 +224,14 @@ python3 tools/make_wear_sheets.py   # 이 캐릭터의 장비 덧그림을 새 �
 
 게임은 그림을 늘이거나 줄이지 않고 원본 1px = 화면 1px (또는 정수 2px) 로 그린다. 32칸 시트를 1.8배 · 0.65배로 그리면 픽셀이 1px · 2px 로 들쭉날쭉해서 깨져 보인다.
 
-- 대장 (구역 데이터 `boss_sheet`, 게임 배율 `Config.BOSS_SCALE`): AI 그림이 있는 대장은 `tools/import_ai_monster.py --hd` 로 58칸 시트 `<이름>_hd.png` 를 만들어 1:1. 코드 그림 대장 (대장 슬라임 · 산군 백호) 은 32칸 시트를 정수 2배.
+- 대장 (구역 데이터 `boss_sheet`, 게임 배율 `Config.BOSS_SCALE`): AI 그림이 있는 대장은 `tools/import_ai_monster.py --hd` 로 58칸 시트 `<이름>_hd.png` 를 만들어 1:1. 코드 그림 대장 (대장 슬라임) 은 32칸 시트를 정수 2배.
 - 새끼 (`Config.MINION_SCALE`): `--mini` 로 21칸 시트 `<이름>_mini.png` (슬라임은 `import_ai_slime.py --mini`). 있으면 `WildSlime.make_minion` 이 그걸 1:1 로 쓴다.
 - 칸 크기는 시트 높이로 정한다 (`WildSlime._apply_sheet`). 대장 웅크림은 배율 대신 2px 내려앉는다.
+
+## 새 크기 몬스터 (2026-10-04 "섞어서", 사람 키 46px 에 맞춤)
+
+밀목부터 몬스터를 사람 크기에 맞춰 다시 그린다. 옆모습, 앞이 오른쪽. `tools/import_ai_monster.py` 의 종류마다 칸 크기가 다르다.
+
+- 일반 몬스터 48칸 (그림자 늑대 몸 길이 약 42px), 대장 96칸 (산군 백호 약 86px, 노드 배율 1.8 을 되돌려 1:1), 아기 크리처는 32칸 그대로 (약 28px).
+- 48 · 96칸 시트는 발밑 그림자를 몸 크기에 맞춰 넓힌다 (`WildSlime.TALL_CELLS`).
+- 흰 몸은 초록 바탕 AI 그림 + `--backdrop`, 잔무늬가 점으로 깨지면 `--smooth`.

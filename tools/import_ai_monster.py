@@ -34,7 +34,16 @@
                  바퀴 밑 = y 46, 반쯤 비치게 --alpha (기본 225). 전조등 빛 · 문 · 승객 도깨비불은 게임이 그린다.
   도깨비불 일렁임: 위쪽 40% 줄을 1px 씩 옆으로 밀어 (sway) 불꽃 꼬리가 흔들려 보이게.
 
-실행: python3 tools/import_ai_monster.py 그림.png --kind crab|boss|baby|sparrow|scarecrow|baby_sparrow|stump|cheonha|jiha|tree_spirit|will_o|will_o_baby|bus [--width 24] [--colors 20] [--preview 미리보기.png]
+밀목 세트 (2026-10-04, 새 크기 "섞어서"): 프롬프트는 /mnt/project-files/design/new-art-ai/milmok.md.
+  사람 (주인공 · 마을 사람) 키 46px 에 맞춘 첫 몬스터 묶음. 모두 옆모습, 앞이 오른쪽 (왼쪽을 보고 나왔으면 --flip).
+  wolf             → assets/creatures/wild_shadow_wolf.png (384x48, 48칸): 몸 길이 약 40px · 키 약 24px (사람 허리께)
+  tiger            → assets/creatures/wild_white_tiger.png (768x96, 96칸): 몸 길이 약 84px · 키 약 46px (사람 키만 함). 게임은 늘리지 않고 1:1
+  baby_tiger       → assets/creatures/baby_tiger.png (320x32): 몸 길이 약 26px
+  baby_white_tiger → assets/creatures/baby_white_tiger.png (같음)
+  백호 둘은 몸이 희어서 흰 바탕을 지우면 몸까지 지워진다: 초록 바탕으로 뽑고 --backdrop.
+  늑대 · 백호 칸: 0-1 대기, 2-5 달리기 (stride: 앞뒤 다리를 반대로 밀기), 6 웅크림 예고, 7 지침. 아기: 0-1 대기, 2-5 걷기, 6-9 고개 들어 어흥.
+
+실행: python3 tools/import_ai_monster.py 그림.png --kind crab|boss|baby|wolf|tiger|baby_tiger|baby_white_tiger|sparrow|scarecrow|baby_sparrow|stump|cheonha|jiha|tree_spirit|will_o|will_o_baby|bus [--width 24] [--colors 20] [--preview 미리보기.png]
       (--sand 숨은그림.png: 모래에 파묻힌 게 그림이 따로 있으면 숨기 칸에 그걸 쓴다)
 
 지금 시트를 만든 명령 (그림 원본: /mnt/project-files/design/gumsa-ai/ai_*.png, 사용자 AI 그림 2026-09-30)
@@ -57,6 +66,12 @@
   ai_will_o.png --kind will_o --colors 28 --skull 0.49,0.72   (불꽃 속 해골은 뭉개져서 7x7 해골을 다시 찍음)
   ai_bus.png --kind bus --flip --colors 32                    (AI 그림이 앞-왼쪽이라 뒤집음)
   ai_baby.png --kind will_o_baby --colors 24 --eyes 0.33,0.58,0.67,0.58 --cheeks 0.25,0.68,0.75,0.68
+밀목 (그림 원본: /mnt/project-files/design/milmok-tall/ai/ai_*.png, 사용자 AI 그림 2026-10-04, 새 크기)
+  ai_white_tiger.png --kind tiger --backdrop --smooth --colors 32 --eyes 0.938,0.398 --eye-color 150,235,255
+  ai_shadow_wolf.png --kind wolf --width 42 --colors 24 --eyes 0.916,0.369 --eye-size 1 --eye-color 120,240,255
+  ai_baby_tiger.png --kind baby_tiger --colors 24 --smooth --width 28
+  ai_baby_white_tiger.png --kind baby_white_tiger --backdrop --colors 24 --smooth --width 28
+    (초록 바탕. 줄무늬가 칸마다 고르면 점으로 깨져서 --smooth, 빛나는 눈은 줄이면 사라져서 다시 찍음)
 """
 import argparse
 import os
@@ -160,6 +175,28 @@ KINDS["will_o_baby"] = dict(out="baby_will_o_fire", width=15, max_h=19, parts=0.
     dict(sx=1.0, sy=1.0, lift=0, sway=1, ember=1), dict(sx=1.05, sy=1.04, lift=1, sway=-1, ember=2),
     dict(sx=1.0, sy=1.0, lift=0, sway=1, ember=1), dict(sx=1.0, sy=1.0, lift=0),
 ])
+# 밀목 세트 (2026-10-04, 새 크기 "섞어서": 사람 키 46px 에 맞춤). 모두 옆모습, 앞이 오른쪽 (왼쪽을 보고 나왔으면 --flip).
+#   cell: 칸 크기 (게임은 32칸이 아닌 시트를 늘리지 않고 1:1 로 그린다. 대장은 노드 배율 1.8 을 되돌려 1:1)
+#   stride: 네발 달리기. 아래 다리 줄의 뒷다리 (왼쪽 반) 와 앞다리 (오른쪽 반) 를 반대로 민다 (-1/1 = 다리 벌림 · 모음)
+#   rot: 발밑 가운데 축 기울임 (- 는 머리가 아래로 = 웅크림 · 지침, + 는 머리가 위로 = 포효)
+#   늑대 · 백호: 0-1 대기, 2-5 달리기, 6 웅크림 (달려들기 · 도약 예고), 7 공격 뒤 지침 (때릴 틈)
+#   아기: 0-1 대기, 2-5 걷기, 6-9 일 (고개 들어 어흥)
+QUAD = [
+    dict(sx=1.0, sy=1.0, lift=0), dict(sx=1.01, sy=0.97, lift=0),
+    dict(sx=1.04, sy=0.95, lift=0, stride=1), dict(sx=1.0, sy=1.0, lift=1, stride=-1),
+    dict(sx=1.04, sy=0.95, lift=0, stride=1), dict(sx=1.0, sy=1.0, lift=1, stride=-1),
+    dict(sx=1.06, sy=0.84, lift=0, rot=-5, dx=-1), dict(sx=1.02, sy=0.9, lift=0, rot=-4),
+]
+KINDS["wolf"] = dict(out="wild_shadow_wolf", cell=48, width=40, max_h=30, work_w=320, frames=QUAD)
+KINDS["tiger"] = dict(out="wild_white_tiger", cell=96, width=84, max_h=62, work_w=480, frames=QUAD)
+KINDS["baby_tiger"] = dict(out="baby_tiger", cell=32, width=26, max_h=22, frames=[
+    dict(sx=1.0, sy=1.0, lift=0), dict(sx=1.02, sy=0.96, lift=0),
+    dict(sx=1.0, sy=1.0, lift=1, stride=1), dict(sx=1.02, sy=0.96, lift=0, stride=-1),
+    dict(sx=1.0, sy=1.0, lift=1, stride=1), dict(sx=1.02, sy=0.96, lift=0, stride=-1),
+    dict(sx=1.0, sy=1.0, lift=0, rot=5), dict(sx=0.98, sy=1.04, lift=0, rot=9),
+    dict(sx=1.0, sy=1.0, lift=0, rot=5), dict(sx=1.02, sy=0.97, lift=0),
+])
+KINDS["baby_white_tiger"] = dict(KINDS["baby_tiger"], out="baby_white_tiger")
 BUS_W, BUS_H, BUS_FLOOR = 96, 48, 46
 DROP = (150, 200, 240)
 BLUE_L, FIRE_C, FIRE_L = (210, 236, 255), (250, 150, 60), (255, 230, 130)
@@ -305,14 +342,59 @@ def big_blobs(im, frac):
     return out.crop(out.getbbox())
 
 
-def load_figure(src, flip=False, mist=False, parts=0.0):
-    im = white_to_alpha(Image.open(src))
+def clear_backdrop(im, tol=48):
+    """흰 몸 (산군 백호 · 아기 백호) 은 흰 바탕에서 몸까지 지워져서 초록 바탕으로 뽑는다 (--backdrop).
+    네 귀퉁이 색과 비슷한 색을 가장자리에서부터 이어진 만큼 투명으로. 바탕이 흰색이면 흰 바탕 지우기와 같다."""
+    im = im.convert("RGBA")
+    px = im.load()
+    w, h = im.size
+    corners = [px[0, 0], px[w - 1, 0], px[0, h - 1], px[w - 1, h - 1]]
+    bg = tuple(sorted(c[i] for c in corners)[1] for i in range(3))
+    near = lambda c: sum(abs(c[i] - bg[i]) for i in range(3)) <= tol
+    stack = [(x, y) for x in range(w) for y in (0, h - 1)] + [(x, y) for x in (0, w - 1) for y in range(h)]
+    seen = set()
+    while stack:
+        x, y = stack.pop()
+        if (x, y) in seen or not (0 <= x < w and 0 <= y < h):
+            continue
+        seen.add((x, y))
+        if not near(px[x, y]):
+            continue
+        px[x, y] = (0, 0, 0, 0)
+        stack += [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)]
+    # 초록 바탕이 털 가장자리에 번진 픽셀 (초록 기가 센 반투명 테두리)은 지운다
+    for y in range(h):
+        for x in range(w):
+            r, g, b, a = px[x, y]
+            if a and g > r + 40 and g > b + 40 and bg[1] > bg[0] + 60:
+                px[x, y] = (0, 0, 0, 0)
+    return im
+
+
+BACKDROP = False
+SMOOTH = 0
+
+
+def smooth_pixelize(fig, pal_img, w, h):
+    """잔무늬 (백호 줄무늬)가 많은 큰 그림은 칸마다 고르는 pixelize 가 얼룩덜룩한 점이 된다 (--smooth).
+    부드럽게 줄인 뒤 그 작은 그림에서 고른 색으로 맞춰 무늬가 색 덩어리로 남게. 큰 그림에서 고른 팔레트는
+    까만 줄 · 테두리 색이 많아서 작은 아기가 거무튀튀해진다 (아기 호랑이)."""
+    small = fig.resize((w, h), Image.LANCZOS)
+    pal_img = small.convert("RGB").quantize(SMOOTH, method=Image.Quantize.FASTOCTREE)
+    body = small.convert("RGB").quantize(palette=pal_img, dither=Image.Dither.NONE).convert("RGBA")
+    body.putalpha(small.getchannel("A").point(lambda v: 255 if v > 128 else 0))
+    return body
+
+
+def load_figure(src, flip=False, mist=False, parts=0.0, work_w=None):
+    im = clear_backdrop(Image.open(src)) if BACKDROP else white_to_alpha(Image.open(src))
     im = clear_mist(im) if mist else im
     # parts: 떨어진 조각을 남기려고 peel_halo (끝에 가장 큰 덩어리만 남김) 는 건너뛴다
     fig = big_blobs(im, parts) if parts else peel_halo(largest_blob(im))
     if flip:
         fig = fig.transpose(Image.FLIP_LEFT_RIGHT)
-    fig = fig.resize((WORK_W, round(WORK_W * fig.height / fig.width)), Image.LANCZOS)
+    work_w = work_w or WORK_W
+    fig = fig.resize((work_w, round(work_w * fig.height / fig.width)), Image.LANCZOS)
     fig.putalpha(fig.getchannel("A").point(lambda v: 255 if v > 128 else 0))
     return fig
 
@@ -325,6 +407,21 @@ def shove_legs(img, step):
     out = img.copy()
     out.paste((0, 0, 0, 0), (0, top, w, h))
     out.alpha_composite(legs, (step, top)) if step > 0 else out.alpha_composite(legs.crop((-step, 0, w, h - top)), (0, top))
+    return out
+
+
+def stride(img, d):
+    """옆모습 네발 짐승: 아래 30% 줄 (다리) 의 뒷다리 (왼쪽 반) 는 -d, 앞다리 (오른쪽 반) 는 +d 만큼 민다.
+    번갈아 쓰면 다리가 벌어졌다 모였다 해서 달려 보인다. 큰 칸은 2px 씩."""
+    w, h = img.size
+    top = h - max(2, round(h * 0.3))
+    k = d * (2 if w >= 48 else 1)
+    out = img.copy()
+    out.paste((0, 0, 0, 0), (0, top, w, h))
+    mid = w // 2
+    for x0, x1, dx in ((0, mid, -k), (mid, w, k)):
+        part = img.crop((x0, top, x1, h))
+        out.alpha_composite(part, (max(0, min(w - part.width, x0 + dx)), top))
     return out
 
 
@@ -418,7 +515,7 @@ def build(src, kind, width=None, colors=20, redraw_eyes=False, sand_src=None, mo
           fly_eyes=None, eye_color=EYE, peek=None, angry=False, hide_src=None, hide_eyes=None, skull=None):
     spec = KINDS[kind]
     width = width or spec["width"]
-    fig = load_figure(src, flip, spec.get("mist", False), spec.get("parts", 0.0))
+    fig = load_figure(src, flip, spec.get("mist", False), spec.get("parts", 0.0), spec.get("work_w"))
     fly = None
     if fly_src:
         fly = load_figure(fly_src, flip, spec.get("mist", False))
@@ -451,10 +548,12 @@ def build(src, kind, width=None, colors=20, redraw_eyes=False, sand_src=None, mo
             f = dict(f, sx=1.0, sy=1.0 if f["sy"] >= 1.0 else 0.94)
         W = max(8, round(bw * f["sx"]))
         H = max(8, min(CELL - f["lift"], round(bh * f["sy"])))
-        body = pixelize(src_fig, src_pal, src_pal.getpalette(), W, H)
+        body = smooth_pixelize(src_fig, src_pal, W, H) if SMOOTH else pixelize(src_fig, src_pal, src_pal.getpalette(), W, H)
         had_line = soften_edges(body) and had_line
         if f.get("step"):
             body = shove_legs(body, f["step"])
+        if f.get("stride"):
+            body = stride(body, f["stride"])
         if f.get("sway"):
             body = sway(body, f["sway"])
         if f.get("dim"):
@@ -618,7 +717,16 @@ def main():
     ap.add_argument("--preview", help="4배 확대 미리보기 PNG")
     ap.add_argument("--hd", action="store_true", help="대장용 1.8배 (58칸) 시트 <이름>_hd.png. 게임은 늘리지 않고 그린다")
     ap.add_argument("--mini", action="store_true", help="새끼용 0.65배 (21칸) 시트 <이름>_mini.png. 게임은 줄이지 않고 그린다")
+    ap.add_argument("--smooth", action="store_true", help="부드럽게 줄인 뒤 팔레트로 (잔무늬가 점으로 깨질 때)")
+    ap.add_argument("--backdrop", action="store_true", help="흰 바탕 대신 귀퉁이 색 (초록 바탕 등) 을 지운다. 흰 몸 (백호) 용")
     a = ap.parse_args()
+    global BACKDROP, SMOOTH
+    BACKDROP = a.backdrop
+    SMOOTH = a.colors if a.smooth else 0
+    if KINDS.get(a.kind, {}).get("cell"):
+        # 밀목부터는 종류마다 칸 크기가 다르다 (늑대 48 · 백호 96 · 아기 32)
+        global CELL
+        CELL = make_slime_sheet.CELL = KINDS[a.kind]["cell"]
     if a.hd:
         use_scale(a.kind, HD, HD_CELL, "_hd")
         a.width = round(a.width * HD) if a.width else None

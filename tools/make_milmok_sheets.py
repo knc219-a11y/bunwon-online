@@ -10,7 +10,8 @@
   baby_tiger.png: 아기 호랑이 (땅) · baby_white_tiger.png: 아기 백호 (신령)
 여우 · 구미호 · 살모사 · 이무기 후보 그림은 프로젝트 파일 design/act3/ 에만 남김.
 
-실행: python3 tools/make_milmok_sheets.py [--preview 파일]  (Pillow 필요)
+2026-10-04 넷 다 사용자 AI 그림 (새 크기) 으로 바뀜: tools/import_ai_monster.py 의 밀목 줄. 이 파일은 --force 일 때만 assets 에 쓴다.
+실행: python3 tools/make_milmok_sheets.py [--preview 파일] [--force]  (Pillow 필요)
 """
 import os
 import sys
@@ -114,6 +115,10 @@ def make():
     }
     os.makedirs(OUT, exist_ok=True)
     for k, img in out.items():
+        # 2026-10-04: 넷 다 사용자 AI 그림 (새 크기, tools/import_ai_monster.py) 으로 바뀌었다. 덮어쓰지 않게 --force 일 때만 쓴다
+        if "--force" not in sys.argv:
+            print(k, "건너뜀 (AI 그림이 있음, 옛 코드 그림으로 덮으려면 --force)")
+            continue
         img.save(os.path.join(OUT, k + ".png"))
         print(k)
     return out
