@@ -31,6 +31,8 @@
         · 뱃사공 ferryman · 이장 chief. 뱃사공 · 이장은 부위 지도가 생기면 make_naru_sheets / make_hall_sheets 가 덮어쓰지 않는다.
   농부 (2026-10-04): villagers/ai/farmer.png --name player --height 46 --width 18 --tall --bare --clear-pockets --keep-hue --sat 1.0 --hair-span 0.2 --front-hair 0.2
   사냥꾼 (2026-10-04): villagers/ai/hunter.png --name hunter --height 46 --width 18 --tall --keep-hue --sleeves --hair-span 0.55 --front-hair 0.3 --dark-hair 0.3
+  대장장이 (2026-10-04): villagers/ai/smith.png --name smith --height 46 --width 20 --tall --keep-hue --dark-pants --hair-span 0.2 --front-hair 0.2
+  연금술사 (2026-10-04): villagers/ai/alchemist.png --name alchemist --height 46 --width 20 --tall --keep-hue --hair-span 0.2 --front-hair 0.2
   확인: python3 tools/people_lineup.py 비교.png (모두 한 줄로 세운 4배 그림)
 """
 import argparse
