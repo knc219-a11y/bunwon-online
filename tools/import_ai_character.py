@@ -34,6 +34,7 @@
   대장장이 (2026-10-04): villagers/ai/smith.png --name smith --height 46 --width 20 --tall --keep-hue --dark-pants --hair-span 0.2 --front-hair 0.2
   연금술사 (2026-10-04): villagers/ai/alchemist.png --name alchemist --height 46 --width 20 --tall --keep-hue --hair-span 0.2 --front-hair 0.2
   목축인 (2026-10-04): villagers/ai/rancher.png --name rancher --height 46 --width 18 --tall --keep-hue --hair-span 0.45 --front-hair 0.3
+  뱃사공 (2026-10-04): villagers/ai/ferryman.png --name ferryman --height 46 --width 20 --tall --keep-hue --hair-span 0.2 --front-hair 0.2
   확인: python3 tools/people_lineup.py 비교.png (모두 한 줄로 세운 4배 그림)
 """
 import argparse
