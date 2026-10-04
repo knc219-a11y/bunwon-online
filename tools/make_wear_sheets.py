@@ -457,21 +457,42 @@ def clothes_pts(pp, row, hs):
     return pts
 
 
+def mid_of(pts):
+    x0, _, x1, _ = bbox(pts)
+    return (x0 + x1) / 2
+
+
+# 공격 칸 (tools/make_attack_frames.py): 무기 든 팔은 새로 그려 손 자리가 없다. 정면 · 뒷모습의 다른 손은
+# 대기 칸 그대로라 대기 칸에서 잰 손 자리를 쓴다. 활 칸 (10-12) 은 두 팔 다 새로 그린다.
+IDLE_HANDS = {}
+IDLE_PP = {}
+
+
+def attack_hands(row, col, mid):
+    if row == 2 or 10 <= col <= 12:
+        return []
+    # 정면은 화면 왼쪽 손이, 뒷모습은 오른쪽 손이 무기 손
+    return [(a, b) for a, b in IDLE_HANDS.get(row, []) if (a > mid if row == 0 else b < mid)]
+
+
 def fit_top(ramp, vest=False, pocket=None, stripe=None, lace=None, belt=False):
     """옷: 윗도리 픽셀을 다시 칠한다. vest 면 팔(손 위 세로줄)은 남기고, 정면은 앞섶을 연다.
     lace 가 있으면 앞섶을 열지 않고 가운데를 그 색 끈으로 여민다 (사냥꾼 조끼). belt 면 아랫단에 허리띠."""
     def fn(img, row, col, body, pp, edge, pose):
         top = pp["top"]
-        hs = hands(pp, top, row)
+        hs = attack_hands(row, col, mid_of(top)) if col >= COLS else hands(pp, top, row)
         pts = top = clothes_pts(pp, row, hs)
         tx0, ty0, tx1, ty1 = bbox(top)
         mid = (tx0 + tx1) / 2
         # 소매가 있을 때만 팔을 남긴다. 윗도리 줄 가운데쯤에서 몸 가장자리가 살색이면 맨팔
-        body_px = set().union(*pp.values())
+        # 공격 칸은 팔을 옮겨 그려서 대기 칸 몸으로 잰다
+        sp = IDLE_PP[row] if col >= COLS else pp
+        body_px = set().union(*sp.values())
+        sx0, sy0, sx1, sy1 = bbox(sp["top"])
         bare = 0
-        for y in range(ty0 + 2, ty1 - 3):
+        for y in range(sy0 + 2, sy1 - 3):
             line = sorted(x for x, yy in body_px if yy == y)
-            if line and (line[0], y) in pp["skin"] and (line[-1], y) in pp["skin"]:
+            if line and (line[0], y) in sp["skin"] and (line[-1], y) in sp["skin"]:
                 bare += 1
         sleeves = row != 2 and bare < 2
         if vest and sleeves:
@@ -645,12 +666,17 @@ FIT = {
 def make_fit(name, fn, body_name, sub=""):
     body = Image.open(os.path.join(OUT_DIR, "..", "characters", f"{body_name}.png")).convert("RGBA")
     parts = Image.open(os.path.join(PARTS_DIR, f"{body_name}.png")).convert("RGBA")
-    img = Image.new("RGBA", (CELL * COLS, CELL * ROWS), (0, 0, 0, 0))
+    # 부위 지도 폭만큼 칸을 만든다 (주인공은 공격 칸 6-15 도 있다: tools/make_attack_frames.py)
+    cols = parts.width // CELL
+    img = Image.new("RGBA", (CELL * cols, CELL * ROWS), (0, 0, 0, 0))
     hat = Image.new("RGBA", img.size, (0, 0, 0, 0))
-    poses = IDLE + WALK
+    poses = IDLE + WALK + [IDLE[0]] * (cols - COLS)
     CUR_BODY[0] = body_name
     for row in range(ROWS):
-        for col in range(COLS):
+        pp0, _ = cell_parts(parts, row, 0)
+        IDLE_HANDS[row] = hands(pp0, pp0["top"], row)
+        IDLE_PP[row] = pp0
+        for col in range(cols):
             pp, edge = cell_parts(parts, row, col)
             fn(hat if fn in HAT_FITS else img, row, col, body, pp, edge, poses[col])
     if fn in HAT_FITS:

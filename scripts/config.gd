@@ -180,6 +180,10 @@ const HIT_SPARK := 0.14
 ## 사냥꾼 공격 모션: 칠 때 그림이 치는 쪽으로 내딛는 거리 (px, 3타째 · 돌진 베기는 x2) · 시간 (초)
 const ATTACK_LUNGE_PX := 2.0
 const ATTACK_LUNGE_TIME := 0.12
+## 공격 모션 길이 (초, 2026-10-04 칼 · 활 · 지팡이 칸 그림). 다음 공격까지 쿨이 더 짧으면 쿨에 맞춘다.
+const ATTACK_ANIM := {&"melee": 0.26, &"bow": 0.22, &"staff": 0.28}
+## 오른클릭 큰 스킬 · 돌진 베기 모션 길이
+const ATTACK_ANIM_SKILL := 0.34
 ## 사냥꾼이 다쳤을 때 붉게 번쩍이는 시간 (초). 뒤이은 무적 동안은 깜빡인다.
 const HURT_FLASH := 0.15
 ## 맞은 몬스터가 밀려나는 거리 배율 (몰아 베려면 덜 밀려나야 한다)

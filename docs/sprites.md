@@ -51,6 +51,19 @@ python3 tools/make_wear_sheets.py   # 이 캐릭터의 장비 덧그림을 새 �
 
 재생 속도와 칸 규격 상수는 `scripts/character.gd` 맨 위에 있다 (걷기 8fps, 대기 2fps).
 
+## 주인공 공격 칸 (2026-10-04, `tools/make_attack_frames.py`)
+주인공 몸 시트 (`protagonist.png` · `protagonist_b.png`) 는 위 6칸 오른쪽에 공격 칸 10개가 더 있다 (768 x 144).
+
+| 열 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| | 칼 치켜들기 | 휘두르기 | 내려베기 | 마무리 | 활 걸기 | 당기기 | 놓기 | 지팡이 치켜들기 | 내뻗기(빛) | 거두기 |
+
+- 생성기가 대기(옆 내려베기는 걷기 디딤) 칸에서 무기 든 팔을 지우고 새 자리에 그린다. 부위 지도에도 같은 일을 해서 장비 덧그림이 공격 칸에도 맞는다.
+- 무기는 몸과 따로 `assets/weapons/melee.png · bow.png · staff.png` (칸 80 x 80 = 몸 칸 48 의 사방 16px 여유, 가운데 같음). 칼 칸에는 칼끝 잔상도 들어 있다. 뒷모습 줄은 게임이 무기를 몸 뒤에 그린다.
+- 자세 (손 자리 · 무기 각도 · 윗몸 기울기) 는 생성기 맨 위 `MELEE` · `BOW` · `STAFF` 표.
+- 게임: `Character.attack(kind, 초, 거꾸로)` (HuntGround 가 공격 · 스킬 때 부름). 칸마다 시간 비율 `ATTACK_WEIGHTS`, 길이 `Config.ATTACK_ANIM`. 근거리 2타는 칸을 거꾸로 (되베기).
+- 다시 만들기 순서: `import_ai_character.py` (또는 `--rewalk`) → `make_attack_frames.py` → `make_wear_sheets.py`. 미리보기 `WEAR=1 python3 tools/make_attack_frames.py --preview 그림.png`.
+
 # 입는 장비 덧그림
 
 캐릭터 시트와 **같은 배치**(288 x 144, 칸 48 x 48, 열 0-1 대기 · 2-5 걷기, 행 0 아래 · 1 위 · 2 옆)의 투명 PNG.

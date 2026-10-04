@@ -274,6 +274,15 @@ func _ready() -> void:
 	_check(dirt.work_speed(CreatureJobs.SOW) > plain.work_speed(CreatureJobs.SOW), "땅속성은 파종 재능")
 
 	# 8) 캐릭터 스프라이트 시트: 방향별 행, 대기/걷기 열, 왼쪽은 반전
+	# 공격 모션 (2026-10-04): 위 사냥에서 휘두른 모션이 (프레임이 안 흘러) 남아 있으면 칼 칸 → 끝내면 대기 칸
+	farmer.facing = Vector2i.RIGHT
+	farmer.attack(&"melee", 0.26)
+	_check(farmer.attacking() and farmer.frame_coords().x == Character.ATTACK_COLUMNS[&"melee"][0] and farmer.frame_coords().y == 2, "칼 공격 모션은 옆모습 칼 칸부터")
+	farmer.attack(&"melee", 0.26, true)
+	_check(farmer.frame_coords().x == Character.ATTACK_COLUMNS[&"melee"][-1], "되베기는 칸을 거꾸로")
+	farmer.attack(&"bow", 0.2)
+	_check(farmer.frame_coords().x == Character.ATTACK_COLUMNS[&"bow"][0], "활 공격 모션 칸")
+	farmer.stop_attack()
 	farmer.moving = false
 	farmer.facing = Vector2i.UP
 	_check(farmer.frame_coords().y == 1 and farmer.frame_coords().x in Character.IDLE_COLUMNS, "위쪽 대기 프레임")
@@ -281,7 +290,10 @@ func _ready() -> void:
 	farmer.facing = Vector2i.LEFT
 	var f := farmer.frame_coords()
 	_check(f.y == 2 and f.z == 1 and f.x in Character.WALK_COLUMNS, "왼쪽 걷기는 옆모습 반전")
-	_check(farmer.sheet != null and farmer.sheet.get_width() == 48 * 6 and farmer.sheet.get_height() == 48 * 3, "시트 크기 288x144")
+	_check(farmer.sheet != null and farmer.sheet.get_width() == 48 * 16 and farmer.sheet.get_height() == 48 * 3, "주인공 시트 768x144 (대기 · 걷기 6칸 + 공격 10칸)")
+	for kind: StringName in Character.ATTACK_COLUMNS:
+		var wt: Texture2D = load("res://assets/weapons/%s.png" % kind)
+		_check(wt != null and wt.get_width() == Character.WEAPON_FRAME * 16 and wt.get_height() == Character.WEAPON_FRAME * 3, "무기 덧그림 %s 1280x240" % kind)
 
 	# 9) 슬라임 스프라이트 시트: 속성별 시트, 대기2 · 깡충4 · 급수4
 	for id in [&"water", &"earth"]:

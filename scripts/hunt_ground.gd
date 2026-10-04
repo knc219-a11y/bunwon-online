@@ -853,6 +853,7 @@ func swing(dir := Vector2.ZERO) -> int:
 				shots.append({kind = &"arrow", at = hand, dir = _swing_dir, left = w.range})
 		# 활: 시위를 놓으며 살짝 뒤로 (반동)
 		hunter.lunge(-_swing_dir, Config.ATTACK_LUNGE_PX * 0.5)
+		hunter.attack(&"bow", minf(Config.ATTACK_ANIM[&"bow"], _cooldown))
 		Sound.sfx(&"shoot", -2.0)
 		return 1
 	if w.kind == &"staff":
@@ -861,6 +862,7 @@ func swing(dir := Vector2.ZERO) -> int:
 			orb.chain = 2 + (HunterSkills.rank(&"chain_orb") - 1) / 2
 		shots.append(orb)
 		hunter.lunge(_swing_dir, Config.ATTACK_LUNGE_PX * 0.5)
+		hunter.attack(&"staff", minf(Config.ATTACK_ANIM[&"staff"], _cooldown))
 		Sound.sfx(&"cast", -3.0)
 		return 1
 	_swing_time = 0.15
@@ -886,6 +888,8 @@ func swing(dir := Vector2.ZERO) -> int:
 	_cooldown /= 1.0 + Config.SWORD_MASTERY_SPEED * HunterSkills.rank(&"sword_mastery")
 	# 공격 모션 (2026-10-03 타격감): 치는 쪽으로 몸을 싣는다. 3타째는 두 배, 휘두르는 소리도 낮고 굵게.
 	hunter.lunge(_swing_dir, Config.ATTACK_LUNGE_PX * (2.0 if _finisher else 1.0))
+	# 칼 휘두르는 칸 (2타는 되베기, 3타는 조금 길게)
+	hunter.attack(&"melee", minf(Config.ATTACK_ANIM[&"melee"] * (1.25 if _finisher else 1.0), _cooldown), feel and combo == 1)
 	Sound.sfx(&"swing", -2.0, 0.8 if _finisher else 1.0)
 	_swing_radius = radius
 	_whirl = whirl
@@ -1145,6 +1149,7 @@ func _dash_slash() -> void:
 	_finisher = true
 	_whirl = false
 	hunter.lunge(_dash_dir, Config.ATTACK_LUNGE_PX * 2.0)
+	hunter.attack(&"melee", Config.ATTACK_ANIM_SKILL)
 	Sound.sfx(&"swing", -2.0, 0.8)
 	_area_hit(hunter.feet() + Vector2(0, -8) + _dash_dir * w.reach, radius, power() + (1 if r >= 3 else 0) + (1 if r >= 5 else 0))
 
@@ -1192,6 +1197,7 @@ func skill_right(at: Vector2) -> bool:
 			var p := hand + (at - hand).limit_length(w.range)
 			_burst(p, orb_blast(Config.ELEMENT_STORM_RADIUS + 6.0 * (r - 1)), w.element)
 	hunter.lunge(dir, Config.ATTACK_LUNGE_PX * 2.0)
+	hunter.attack(w.kind, Config.ATTACK_ANIM_SKILL)
 	Sound.sfx(&"swing", 0.0, 0.7)
 	return true
 
@@ -2019,13 +2025,22 @@ func _draw() -> void:
 			draw_arc(Vector2.ZERO, _swing_radius - 4.0, 0, TAU, 24, Color(1, 1, 1, 0.7), 1.5)
 			draw_set_transform(Vector2.ZERO)
 		elif _finisher:
-			# 3타째: 넓고 굵은 금빛 반원
-			draw_arc(c, _swing_radius + 2.0, a - 1.5, a + 1.5, 16, Color(1, 0.9, 0.5, 0.9), 4.0)
-			draw_arc(c, _swing_radius - 3.0, a - 1.3, a + 1.3, 14, Color(1, 1, 1, 0.7), 1.5)
+			# 3타째: 넓고 굵은 금빛 반원. 한쪽에서 반대쪽으로 쓸려 나간다 (2026-10-04 공격 모션: 한 번에 뜨지 않고 펼쳐짐)
+			var k := _sweep()
+			draw_arc(c, _swing_radius + 2.0, a - 1.5, a - 1.5 + 3.0 * k, 16, Color(1, 0.9, 0.5, 0.9), 4.0)
+			draw_arc(c, _swing_radius - 3.0, a - 1.3, a - 1.3 + 2.6 * k, 14, Color(1, 1, 1, 0.7), 1.5)
 		else:
-			# 1 · 2타는 번갈아 반대쪽으로 쓸어 벤다
+			# 1 · 2타는 번갈아 반대쪽으로 쓸어 벤다 (2타 되베기는 거꾸로 쓸림)
 			var tilt := 0.25 if combo == 1 else -0.25
-			draw_arc(c, _swing_radius + 2.0, a - 1.0 + tilt, a + 1.0 + tilt, 10, Color(1, 1, 1, 0.85), 2.5)
+			var k := _sweep()
+			var from := a - 1.0 + tilt if combo != 1 else a + 1.0 + tilt
+			var to := from + 2.0 * k * (1.0 if combo != 1 else -1.0)
+			draw_arc(c, _swing_radius + 2.0, minf(from, to), maxf(from, to), 10, Color(1, 1, 1, 0.85), 2.5)
+
+
+## 휘두르기 호가 얼마나 펼쳐졌나 (0 → 1): 처음 60% 시간 동안 쓸려 나가고 나머지는 다 펼친 채 사라진다
+func _sweep() -> float:
+	return clampf((1.0 - _swing_time / 0.15) / 0.6, 0.15, 1.0)
 
 
 ## 타격 불꽃 그리기: 맞은 쪽으로 퍼지는 짧은 빛줄기 + 가운데 번쩍 (쓰러뜨리면 크게 · 금빛 고리)
