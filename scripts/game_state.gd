@@ -341,6 +341,8 @@ func _register_inputs() -> void:
 		"discard": [KEY_X, KEY_DELETE],
 		## 사냥꾼 스킬 창 (2026-10-02, 디아2처럼 T)
 		"skills": [KEY_T],
+		## 마을 큰 지도 (2026-10-04 백로그 2)
+		"map": [KEY_M],
 		## 사냥터 구르기 (2026-10-02). Space 는 마을에선 도구질, 사냥터에선 구르기 (J 는 그대로 휘두르기)
 		"dash": [KEY_SPACE, KEY_SHIFT],
 	}
