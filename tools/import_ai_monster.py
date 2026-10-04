@@ -68,6 +68,7 @@
   ai_baby.png --kind will_o_baby --colors 24 --eyes 0.33,0.58,0.67,0.58 --cheeks 0.25,0.68,0.75,0.68
 밀목 (그림 원본: /mnt/project-files/design/milmok-tall/ai/ai_*.png, 사용자 AI 그림 2026-10-04, 새 크기)
   ai_white_tiger.png --kind tiger --backdrop --smooth --colors 32 --eyes 0.938,0.398 --eye-color 150,235,255
+  ai_shadow_wolf.png --kind wolf --width 42 --colors 24 --eyes 0.916,0.369 --eye-size 1 --eye-color 120,240,255
     (초록 바탕. 줄무늬가 칸마다 고르면 점으로 깨져서 --smooth, 빛나는 눈은 줄이면 사라져서 다시 찍음)
 """
 import argparse
