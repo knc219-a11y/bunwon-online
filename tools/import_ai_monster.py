@@ -84,6 +84,8 @@
     (밤색 말이 보랏빛으로 돌지 않게 --keep-hue, 팔 · 창 사이 갇힌 흰 바탕은 --clear-pockets)
   ai_lancer.png --kind lancer --colors 24 --smooth --keep-hue --clear-pockets --eyes 0.414,0.145,0.447,0.145 --eye-size 1 --eye-color 255,48,40 --angry
     (칸마다 고르면 말 털이 얼룩덜룩해서 --smooth)
+  ai_foal.png --kind foal --backdrop --smooth --colors 24 --keep-hue
+    (초록 바탕. 흰 발 · 흰 이마가 흰 바탕과 함께 지워지지 않게)
 """
 import argparse
 import os

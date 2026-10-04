@@ -208,7 +208,7 @@ GLOW = (255, 120, 80)
 GOLD = (236, 196, 84)
 
 
-AI_DONE = {"wild_post_general", "wild_lancer"}
+AI_DONE = {"wild_post_general", "wild_lancer", "baby_foal"}
 
 
 def make():
