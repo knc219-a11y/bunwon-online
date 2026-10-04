@@ -199,6 +199,10 @@ def main():
         "props/fish.png": fish(),
         "characters/ferryman.png": ferryman(),
     }
+    # AI 그림에서 가져온 몸 (tools/import_ai_character.py) 은 덮어쓰지 않는다
+    if os.path.exists(os.path.join(os.path.dirname(__file__), "char_parts", "ferryman.png")):
+        del out["characters/ferryman.png"]
+        print("characters/ferryman.png 건너뜀 (AI 그림 몸)")
     for path, img in out.items():
         img.save(os.path.join(ROOT, path))
         print(path, img.size)

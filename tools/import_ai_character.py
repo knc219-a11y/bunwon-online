@@ -23,6 +23,13 @@
   A 돌아온 젊은이 (흰 티): ai_a_tee.png --name protagonist --height 46 --width 18 --tall --keep-hue --hair-span 0.2 --front-hair 0.2
   B 개척단 단원 (갈색 반팔): ai_b_tee.png --name protagonist_b 같은 옵션 + --dark-pants --clear-pockets
   그 다음 python3 tools/make_wear_sheets.py (장비를 두 몸에 맞춤, B 는 assets/wear/b/. 모자는 머리 폭에 맞춰 줄어든다)
+
+마을 사람 일곱 (6~7등신으로 다시 그리기, 프롬프트 /mnt/project-files/design/new-art-ai/people.md, 원본은 design/villagers/ai/)
+  주인공과 같은 키 46px · --tall. 예전 얼굴 손질 JSON (*_patch.json) 은 2.5등신용이라 쓰지 않는다.
+  시작 옵션: --height 46 --width 18 --tall --hair-span 0.2 --front-hair 0.2 (+ 그림에 맞춰 --keep-hue · --dark-pants · --sleeves)
+  이름: 농부 player · 사냥꾼 hunter (포니테일이면 --hair-span 0.6) · 대장장이 smith · 연금술사 alchemist · 목축인 rancher
+        · 뱃사공 ferryman · 이장 chief. 뱃사공 · 이장은 부위 지도가 생기면 make_naru_sheets / make_hall_sheets 가 덮어쓰지 않는다.
+  확인: python3 tools/people_lineup.py 비교.png (모두 한 줄로 세운 4배 그림)
 """
 import argparse
 import colorsys
