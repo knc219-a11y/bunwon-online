@@ -22,7 +22,8 @@
 주인공 (2026-10-04, 사용자 AI 그림, 새 게임 때 고르는 두 모습 Config.LOOKS. 원본 /mnt/project-files/design/protagonist/ai/)
   A 돌아온 젊은이 (흰 티): ai_a_tee.png --name protagonist --height 46 --width 18 --tall --keep-hue --hair-span 0.2 --front-hair 0.2
   B 개척단 단원 (갈색 반팔): ai_b_tee.png --name protagonist_b 같은 옵션 + --dark-pants --clear-pockets
-  그 다음 python3 tools/make_wear_sheets.py (장비를 두 몸에 맞춤, B 는 assets/wear/b/. 모자는 머리 폭에 맞춰 줄어든다)
+  그 다음 python3 tools/make_attack_frames.py (공격 칸 10개 + 무기 그림, 2026-10-04) 뒤
+  python3 tools/make_wear_sheets.py (장비를 두 몸에 맞춤, B 는 assets/wear/b/. 모자는 머리 폭에 맞춰 줄어든다)
 
 마을 사람 일곱 (6~7등신으로 다시 그리기, 프롬프트 /mnt/project-files/design/new-art-ai/people.md, 원본은 design/villagers/ai/)
   주인공과 같은 키 46px · --tall. 예전 얼굴 손질 JSON (*_patch.json) 은 2.5등신용이라 쓰지 않는다.

@@ -8,6 +8,12 @@ extends Node2D
 const FRAME_SIZE := 48
 const IDLE_COLUMNS: Array[int] = [0, 1]
 const WALK_COLUMNS: Array[int] = [2, 3, 4, 5]
+## 공격 칸 (2026-10-04 공격 모션, tools/make_attack_frames.py): 무기 종류별 열과 칸마다 쓰는 시간 비율.
+## 근거리 치켜들기 · 휘두르기 · 내려베기 · 마무리, 활 걸기 · 당기기 · 놓기, 지팡이 치켜들기 · 내뻗기 · 거두기
+const ATTACK_COLUMNS := {&"melee": [6, 7, 8, 9], &"bow": [10, 11, 12], &"staff": [13, 14, 15]}
+const ATTACK_WEIGHTS := {&"melee": [0.14, 0.14, 0.36, 0.36], &"bow": [0.16, 0.2, 0.64], &"staff": [0.2, 0.45, 0.35]}
+## 무기 덧그림 칸 (몸 칸 사방 16px 여유)
+const WEAPON_FRAME := 80
 const IDLE_FPS := 2.0
 const WALK_FPS := 8.0
 ## 발바닥이 캐릭터 위치보다 이만큼 아래 (칸 아래쪽)
@@ -64,6 +70,13 @@ var _anim_time := 0.0
 var _lunge_dir := Vector2.ZERO
 var _lunge_px := 0.0
 var _lunge_t := -1.0
+## 공격 모션: 무기 종류 (&"" 면 안 함), 지난 시간, 길이, 거꾸로 (연속 베기 2타 되베기)
+var _atk_kind: StringName = &""
+var _atk_t := 0.0
+var _atk_dur := 0.0
+var _atk_reverse := false
+## 공격하는 동안 손에 든 무기 그림 (assets/weapons)
+var _weapon: Sprite2D
 ## 다쳤을 때 붉게 번쩍이는 남은 시간
 var _hurt_t := 0.0
 ## 타격 멈춤 동안 true: 공격 모션 · 번쩍임을 멈춰 둔다 (HuntGround 가 넣음)
@@ -74,12 +87,23 @@ func _ready() -> void:
 	_sprite = Sprite2D.new()
 	_sprite.texture = sheet
 	_sprite.centered = false
-	_sprite.hframes = 6
 	_sprite.vframes = 3
+	_fit_frames(_sprite)
 	_sprite.position = _base_offset()
 	_sprite.material = HitFlash.material(HitFlash.HURT_COLOR)
 	add_child(_sprite)
+	_weapon = Sprite2D.new()
+	_weapon.centered = false
+	_weapon.vframes = 3
+	_weapon.visible = false
+	_weapon.material = HitFlash.material(HitFlash.HURT_COLOR)
+	add_child(_weapon)
 	refresh_wear()
+
+
+## 시트 폭에 맞춰 가로 칸 수 (주인공은 공격 칸까지 16칸, NPC · 옛 장비 그림은 6칸)
+func _fit_frames(sp: Sprite2D, size := FRAME_SIZE) -> void:
+	sp.hframes = maxi(1, sp.texture.get_width() / size) if sp.texture else 6
 
 
 ## 몸 시트를 바꾼다 (주인공 모습 고르기)
@@ -88,6 +112,7 @@ func set_sheet(t: Texture2D, dir := "") -> void:
 	wear_dir = dir
 	if _sprite:
 		_sprite.texture = t
+		_fit_frames(_sprite)
 	refresh_wear()
 
 
@@ -105,8 +130,8 @@ func refresh_wear() -> void:
 		var w := Sprite2D.new()
 		w.texture = Wearables.sheet_of(id, wear_dir)
 		w.centered = false
-		w.hframes = 6
 		w.vframes = 3
+		_fit_frames(w)
 		w.position = _sprite.position
 		w.material = HitFlash.material(HitFlash.HURT_COLOR)
 		add_child(w)
@@ -156,6 +181,32 @@ func lunge(dir: Vector2, px := Config.ATTACK_LUNGE_PX) -> void:
 	_update_sprite()
 
 
+## 공격 모션을 dur 초 동안 보여 준다 (kind: &"melee" · &"bow" · &"staff"). 시트에 공격 칸이 없으면 (NPC) 아무것도 안 한다.
+## reverse 면 칸을 거꾸로 (근거리 2타: 아래에서 위로 되베기)
+func attack(kind: StringName, dur: float, reverse := false) -> void:
+	if not ATTACK_COLUMNS.has(kind) or _sprite == null or _sprite.hframes <= ATTACK_COLUMNS[kind][-1]:
+		return
+	_atk_kind = kind
+	_atk_t = 0.0
+	_atk_dur = maxf(dur, 0.05)
+	_atk_reverse = reverse
+	var tex := load("res://assets/weapons/%s.png" % kind) as Texture2D
+	if _weapon.texture != tex:
+		_weapon.texture = tex
+		_fit_frames(_weapon, WEAPON_FRAME)
+	_update_sprite()
+
+
+func attacking() -> bool:
+	return _atk_kind != &""
+
+
+## 공격 모션을 바로 끝낸다
+func stop_attack() -> void:
+	_atk_kind = &""
+	_update_sprite()
+
+
 ## 다쳤다: 붉게 번쩍
 func hurt_flash() -> void:
 	_hurt_t = Config.HURT_FLASH
@@ -182,6 +233,10 @@ func _process(delta: float) -> void:
 			if _lunge_t >= Config.ATTACK_LUNGE_TIME:
 				_lunge_t = -1.0
 		_hurt_t = maxf(_hurt_t - delta, 0.0)
+		if _atk_kind != &"":
+			_atk_t += delta
+			if _atk_t >= _atk_dur:
+				_atk_kind = &""
 	var dir := Vector2.ZERO
 	if active and not frozen and not dashing:
 		dir = Input.get_vector("move_left", "move_right", "move_up", "move_down")
@@ -194,10 +249,12 @@ func _process(delta: float) -> void:
 	z_index = int(sort_y())
 	if not moving:
 		return
-	if absf(dir.x) > absf(dir.y):
-		facing = Vector2i(int(signf(dir.x)), 0)
-	else:
-		facing = Vector2i(0, int(signf(dir.y)))
+	# 공격하는 동안은 치는 쪽을 계속 본다 (걸어도 몸이 돌지 않게)
+	if _atk_kind == &"":
+		if absf(dir.x) > absf(dir.y):
+			facing = Vector2i(int(signf(dir.x)), 0)
+		else:
+			facing = Vector2i(0, int(signf(dir.y)))
 	var ground_mult := terrain.speed_at(feet()) if terrain else 1.0
 	# 날랜 걸음 (농사 기술, 2026-10-03): 주인공이 마을 (밭 옷) 에서 걸을 때만
 	var farm_mult := FarmSkills.walk_mult() if who == &"player" and outfit == &"farmer" else 1.0
@@ -212,6 +269,18 @@ func frame_coords() -> Vector3i:
 		row = 1
 	elif facing.x != 0:
 		row = 2
+	if _atk_kind != &"":
+		var cols: Array = ATTACK_COLUMNS[_atk_kind]
+		var weights: Array = ATTACK_WEIGHTS[_atk_kind]
+		var k := clampf(_atk_t / _atk_dur, 0.0, 0.999)
+		var i := 0
+		var acc: float = weights[0]
+		while k >= acc and i < weights.size() - 1:
+			i += 1
+			acc += weights[i]
+		if _atk_reverse:
+			i = cols.size() - 1 - i
+		return Vector3i(cols[i], row, 1 if facing == Vector2i.LEFT else 0)
 	var columns := WALK_COLUMNS if moving else IDLE_COLUMNS
 	var fps := WALK_FPS if moving else IDLE_FPS
 	var col: int = columns[int(_anim_time * fps) % columns.size()]
@@ -225,11 +294,24 @@ func _update_sprite() -> void:
 	var at := _base_offset() + lunge_offset()
 	var red := clampf(_hurt_t / Config.HURT_FLASH, 0.0, 1.0) * 0.75
 	for sp: Sprite2D in [_sprite] + _wear:
+		# 옛 6칸 장비 그림은 공격 칸이 없으니 그동안 숨긴다
+		sp.visible = f.x < sp.hframes
+		if not sp.visible:
+			continue
 		sp.frame_coords = Vector2i(f.x, f.y)
 		sp.flip_h = f.z == 1
 		sp.modulate.a = 1.0 if active or npc else 0.55
 		sp.position = at
 		HitFlash.set_amount(sp, red)
+	if _weapon:
+		_weapon.visible = _atk_kind != &"" and _weapon.texture != null and f.x < _weapon.hframes
+		if _weapon.visible:
+			_weapon.frame_coords = Vector2i(f.x, f.y)
+			_weapon.flip_h = f.z == 1
+			_weapon.position = at - Vector2.ONE * (WEAPON_FRAME - FRAME_SIZE) / 2.0
+			# 뒷모습은 무기가 몸 뒤로 (앞으로 내미는 칼 · 활이 등에 가려진다)
+			_weapon.z_index = -1 if f.y == 1 else 0
+			HitFlash.set_amount(_weapon, red)
 
 
 func _draw() -> void:
