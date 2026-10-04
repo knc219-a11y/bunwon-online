@@ -146,6 +146,8 @@ var boss_frame := Vector2i.ZERO
 ## 시트 한 칸 크기 (32 또는 대장 고해상 58) · 스프라이트를 이 노드 안에서 키우는 배율.
 ## 2026-10-01 사용자: "보스몬스터의 도트가 너무 깨져보이는 현상" → 화면에서 원본 1px 이 늘 1px (고해상) 또는 2px (32칸 대장) 이 되게.
 var _frame := FRAME_SIZE
+## 큰 칸 시트 (TALL_CELLS): 첫 칸 그림 키 (노드 좌표). 체력 줄 · 대장 이름표를 머리 위로 올린다 (켄타우로스는 사람보다 크다)
+var _fig_h := 0.0
 var _px := 1.0
 ## 허수아비 장수 짚단 던지기: 떨어질 짚단들 {at, t = 남은 시간}, 던진 횟수 (두 번에 한 번 까마귀 부르기)
 var _bales: Array[Dictionary] = []
@@ -283,6 +285,10 @@ func _apply_sheet() -> void:
 		_px = net / scale.x
 		_sprite.scale = Vector2.ONE * _px
 		_sprite.position = Vector2(-_frame * _px / 2.0, BOTTOM_Y - _frame * _px)
+		_fig_h = 0.0
+		if _frame in TALL_CELLS:
+			var used := sheet.get_image().get_region(Rect2i(0, 0, _frame, _frame)).get_used_rect()
+			_fig_h = (_frame - used.position.y) * _px
 
 
 ## 짝 대장으로 바꾼다 (도마리 지하여장군: 구역 데이터 partner = {name, sheet, pattern}). make_boss 뒤에 부른다.
@@ -1164,7 +1170,7 @@ func _draw() -> void:
 	draw_circle(Vector2.ZERO, _frame * _px * 0.4 if _frame in TALL_CELLS else 10.0, Color(0.27, 0.16, 0.33, 0.25))
 	draw_set_transform(Vector2.ZERO)
 	# 남은 체력 (맞은 뒤에만 보임)
-	var top := -boss_frame.y + 4.0 if boss_frame != Vector2i.ZERO else 0.0
+	var top := -boss_frame.y + 4.0 if boss_frame != Vector2i.ZERO else minf(0.0, BOTTOM_Y - _fig_h + 26.0)
 	if hp < max_hp:
 		draw_rect(Rect2(-10, -24 + top, 20, 3), Color(0.25, 0.2, 0.2))
 		draw_rect(Rect2(-10, -24 + top, 20.0 * hp / max_hp, 3), Color(0.9, 0.5, 0.3))

@@ -79,10 +79,14 @@
   ai_baby_tiger.png --kind baby_tiger --colors 24 --smooth --width 28
   ai_baby_white_tiger.png --kind baby_white_tiger --backdrop --colors 24 --smooth --width 28
     (초록 바탕. 줄무늬가 칸마다 고르면 점으로 깨져서 --smooth, 빛나는 눈은 줄이면 사라져서 다시 찍음)
+역동 (그림 원본: /mnt/project-files/design/yeokdong-tall/ai/ai_*.png, 사용자 AI 그림 2026-10-04, 새 크기)
+  ai_post_general.png --kind general --colors 32 --keep-hue --clear-pockets --eyes 0.528,0.215,0.57,0.215 --eye-size 1 --eye-color 255,48,40 --angry
+    (밤색 말이 보랏빛으로 돌지 않게 --keep-hue, 팔 · 창 사이 갇힌 흰 바탕은 --clear-pockets)
 """
 import argparse
 import os
 
+import import_ai_character
 import make_slime_sheet
 
 from PIL import Image
@@ -761,10 +765,13 @@ def main():
     ap.add_argument("--hd", action="store_true", help="대장용 1.8배 (58칸) 시트 <이름>_hd.png. 게임은 늘리지 않고 그린다")
     ap.add_argument("--mini", action="store_true", help="새끼용 0.65배 (21칸) 시트 <이름>_mini.png. 게임은 줄이지 않고 그린다")
     ap.add_argument("--smooth", action="store_true", help="부드럽게 줄인 뒤 팔레트로 (잔무늬가 점으로 깨질 때)")
+    ap.add_argument("--keep-hue", action="store_true", help="짙은 색을 보랏빛으로 돌리지 않는다 (밤색 말 · 역마 장군)")
+    ap.add_argument("--clear-pockets", action="store_true", help="팔 · 창 사이에 갇힌 흰 바탕도 지운다 (흰 무늬 없는 그림만)")
     ap.add_argument("--backdrop", action="store_true", help="흰 바탕 대신 귀퉁이 색 (초록 바탕 등) 을 지운다. 흰 몸 (백호) 용")
     a = ap.parse_args()
     global BACKDROP, SMOOTH
     BACKDROP = a.backdrop
+    import_ai_character.KEEP_HUE, import_ai_character.CLEAR_POCKETS = a.keep_hue, a.clear_pockets
     SMOOTH = a.colors if a.smooth else 0
     if KINDS.get(a.kind, {}).get("cell"):
         # 밀목부터는 종류마다 칸 크기가 다르다 (늑대 48 · 창기병 64 · 백호 · 장군 96 · 아기 32)
