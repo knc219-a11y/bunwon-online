@@ -58,6 +58,14 @@ var _sprite: Sprite2D
 ## 입은 장비 덧그림. 몸 시트와 같은 칸을 겹쳐 그린다.
 var _wear: Array[Sprite2D] = []
 var _anim_time := 0.0
+## 사냥터 공격 모션 (2026-10-03 타격감): 치는 쪽으로 그림만 살짝 내딛었다 돌아온다 (발 위치는 그대로)
+var _lunge_dir := Vector2.ZERO
+var _lunge_px := 0.0
+var _lunge_t := -1.0
+## 다쳤을 때 붉게 번쩍이는 남은 시간
+var _hurt_t := 0.0
+## 타격 멈춤 동안 true: 공격 모션 · 번쩍임을 멈춰 둔다 (HuntGround 가 넣음)
+var hold := false
 
 
 func _ready() -> void:
@@ -66,7 +74,8 @@ func _ready() -> void:
 	_sprite.centered = false
 	_sprite.hframes = 6
 	_sprite.vframes = 3
-	_sprite.position = Vector2(-FRAME_SIZE / 2.0, FEET_Y - FRAME_SIZE)
+	_sprite.position = _base_offset()
+	_sprite.material = HitFlash.material(HitFlash.HURT_COLOR)
 	add_child(_sprite)
 	refresh_wear()
 
@@ -88,6 +97,7 @@ func refresh_wear() -> void:
 		w.hframes = 6
 		w.vframes = 3
 		w.position = _sprite.position
+		w.material = HitFlash.material(HitFlash.HURT_COLOR)
 		add_child(w)
 		_wear.append(w)
 	_update_sprite()
@@ -127,7 +137,40 @@ func facing_cell() -> Vector2i:
 	return cell() + facing
 
 
+## 공격 모션: dir 쪽으로 px 만큼 그림이 휙 나갔다 돌아온다
+func lunge(dir: Vector2, px := Config.ATTACK_LUNGE_PX) -> void:
+	_lunge_dir = dir.normalized()
+	_lunge_px = px
+	_lunge_t = 0.0
+	_update_sprite()
+
+
+## 다쳤다: 붉게 번쩍
+func hurt_flash() -> void:
+	_hurt_t = Config.HURT_FLASH
+	_update_sprite()
+
+
+func _base_offset() -> Vector2:
+	return Vector2(-FRAME_SIZE / 2.0, FEET_Y - FRAME_SIZE)
+
+
+## 공격 모션 지금 밀린 거리 (빨리 나가고 천천히 돌아옴, 도트가 번지지 않게 정수 px)
+func lunge_offset() -> Vector2:
+	if _lunge_t < 0.0:
+		return Vector2.ZERO
+	var k := _lunge_t / Config.ATTACK_LUNGE_TIME
+	var out := k / 0.25 if k < 0.25 else 1.0 - (k - 0.25) / 0.75
+	return (_lunge_dir * _lunge_px * out).round()
+
+
 func _process(delta: float) -> void:
+	if not hold:
+		if _lunge_t >= 0.0:
+			_lunge_t += delta
+			if _lunge_t >= Config.ATTACK_LUNGE_TIME:
+				_lunge_t = -1.0
+		_hurt_t = maxf(_hurt_t - delta, 0.0)
 	var dir := Vector2.ZERO
 	if active and not frozen and not dashing:
 		dir = Input.get_vector("move_left", "move_right", "move_up", "move_down")
@@ -168,10 +211,14 @@ func _update_sprite() -> void:
 	if _sprite == null:
 		return
 	var f := frame_coords()
+	var at := _base_offset() + lunge_offset()
+	var red := clampf(_hurt_t / Config.HURT_FLASH, 0.0, 1.0) * 0.75
 	for sp: Sprite2D in [_sprite] + _wear:
 		sp.frame_coords = Vector2i(f.x, f.y)
 		sp.flip_h = f.z == 1
 		sp.modulate.a = 1.0 if active or npc else 0.55
+		sp.position = at
+		HitFlash.set_amount(sp, red)
 
 
 func _draw() -> void:

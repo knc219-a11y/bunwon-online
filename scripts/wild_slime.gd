@@ -41,6 +41,9 @@ var _hop_from := Vector2.ZERO
 var _hop_to := Vector2.ZERO
 var _hop_t := -1.0
 var _flash := 0.0
+## 맞아서 납작해졌다 돌아오는 남은 시간 · 맞은 쪽 (타격감 2026-10-03)
+var _squash := 0.0
+var _hit_dir := Vector2.ZERO
 var _anim_time := 0.0
 ## 혀에 끌려가는 중 (0~1, -1 = 아님)
 var _pull_t := -1.0
@@ -192,6 +195,8 @@ func _ready() -> void:
 	_sprite = Sprite2D.new()
 	_sprite.centered = false
 	_sprite.modulate = _tint
+	# 맞으면 하얗게 번쩍 (몸 색과 상관없이 새하얀 실루엣)
+	_sprite.material = HitFlash.material()
 	add_child(_sprite)
 	_apply_sheet()
 	_rest = randf_range(0.3, Config.WILD_SLIME_REST_TIME)
@@ -381,18 +386,28 @@ func hit(from: Vector2, amount := Config.DMG_UNIT) -> bool:
 			# 맞으면 조금만 더 쪼다가 날아오른다
 			_rest = minf(_rest, Config.SWOOP_HIT_RECOVER)
 	hp -= amount
-	_flash = 0.25
-	# 쓰러뜨리는 마지막 한 방은 조금 낮고 묵직하게
-	Sound.sfx(&"hit", 0.0, 0.8 if hp <= 0 else 1.0)
+	_flash = Config.HIT_FLASH
+	# 쓰러뜨리는 마지막 한 방은 따로 묵직한 소리 (HuntGround 가 kill 을 낸다)
+	if hp > 0:
+		Sound.sfx(&"hit")
 	var away := (position - from).normalized()
 	if away == Vector2.ZERO:
 		away = Vector2.UP
+	_squash = Config.HIT_SQUASH
+	_hit_dir = away
+	# 타격 멈춤 동안에도 바로 하얗게 보이게 (tick 이 멈춰 있어도)
+	HitFlash.set_amount(_sprite, 1.0)
 	if _air_t < 0.0 and _bus_t < 0.0 and boss_frame == Vector2i.ZERO:
 		position = _stand(position + away * knockback * knock_mult)
 	_hop_t = -1.0
 	if not flyer:
 		_rest = Config.WILD_SLIME_REST_TIME
 	return hp <= 0
+
+
+## 맞은 번쩍임 세기 (0 ~ 1): 처음 절반은 새하얗고 나머지는 옅어진다
+func _flash_amount() -> float:
+	return clampf(_flash / (Config.HIT_FLASH * 0.5), 0.0, 1.0)
 
 
 ## 공중에 떠 있어 칼·몸이 닿지 않는다 (대장 내려찍기)
@@ -559,6 +574,7 @@ func tick(delta: float, target: Vector2) -> void:
 		# 바라보는 동안 얼어붙은 악귀는 그림도 멈춘다
 		_anim_time += delta
 	_flash = maxf(_flash - delta, 0.0)
+	_squash = maxf(_squash - delta, 0.0)
 	_stun = maxf(_stun - delta, 0.0)
 	_fear = maxf(_fear - delta, 0.0)
 	gold_t = maxf(gold_t - delta, 0.0)
@@ -666,7 +682,8 @@ func tick(delta: float, target: Vector2) -> void:
 			_sprite.flip_h = _lunge_dir.x < 0.0
 	if boss_frame != Vector2i.ZERO:
 		z_index = int(sort_y())
-		_sprite.modulate = Color(1, 1, 1) * 2.0 if _flash > 0.0 and int(_flash * 20) % 2 == 0 else _tint
+		_sprite.modulate = _tint
+		HitFlash.set_amount(_sprite, _flash_amount())
 		queue_redraw()
 		return
 	# 내려찍기: 공중에서 그림을 위로 띄운다 (그림자는 제자리). 까마귀는 나는 동안 FLY_HEIGHT 만큼.
@@ -676,17 +693,27 @@ func tick(delta: float, target: Vector2) -> void:
 	var crouch := (_windup >= 0.0 and not lancer) or _aim >= 0.0 or _log_aim >= 0.0
 	_sprite.position = Vector2(-_frame * _px / 2.0, BOTTOM_Y - _frame * _px - lift)
 	# 웅크림: 납작해졌다가 튀어나간다. 대장은 배율을 바꾸면 도트가 깨져서 대신 2px 내려앉는다.
+	# 맞았을 때도 같은 식: 작은 몬스터는 잠깐 납작, 대장은 맞은 쪽으로 2px 밀린다.
 	if boss:
 		_sprite.scale = Vector2.ONE * _px
 		if crouch:
 			_sprite.position.y += 2.0 / scale.y
+		if _squash > 0.0:
+			_sprite.position += (_hit_dir * 2.0).round() / scale.x
 	else:
-		_sprite.scale = Vector2(1.15, 0.85) * _px if crouch else Vector2.ONE * _px
+		var sq := Config.HIT_SQUASH_AMOUNT * _squash / Config.HIT_SQUASH
+		var sc := Vector2(1.15, 0.85) if crouch else Vector2.ONE
+		if sq > 0.0 and not wisp:
+			sc = Vector2(1.0 + sq, 1.0 - sq)
+		_sprite.scale = sc * _px
+		# 발바닥은 그대로 두고 가운데 기준으로 넓어진다
+		_sprite.position = Vector2(-_frame * _px * sc.x / 2.0, BOTTOM_Y - _frame * _px * sc.y - lift)
 	if wisp:
 		# 도깨비불은 둥둥 떠 있다
 		_sprite.position.y -= 3.0 + sin(_anim_time * 3.0 + _angle) * 2.0
 		_sprite.scale = Vector2.ONE * _px
-	_sprite.modulate = Color(1, 1, 1) * 2.0 if _flash > 0.0 and int(_flash * 20) % 2 == 0 else _tint
+	_sprite.modulate = _tint
+	HitFlash.set_amount(_sprite, _flash_amount())
 	if _slow > 0.0 and _flash <= 0.0:
 		# 물의 지팡이에 느려진 동안 푸르게
 		_sprite.modulate = _tint * Color(0.7, 0.85, 1.4)

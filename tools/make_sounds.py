@@ -558,10 +558,50 @@ def sfx(style, name):
 		buzz = lowpass(buzz, 2200)
 		thump = drum_tone(140, 60, 0.07, 0.8, 0.4, 0.35)
 		return mix(buzz, thump)
+	# --- 타격감 (2026-10-03): 화면 흔들림 대신 소리로 묵직하게
+	if name == "swing":  # 칼 · 구르기 휘익 (바람 가르는 소리, 가운데가 가장 큼)
+		n = int(0.2 * SR)
+		t = np.arange(n) / SR
+		bell = np.sin(np.pi * np.clip(t / 0.16, 0, 1)) ** 2
+		if style == "chip":
+			return chip_noise(0.16, 0.8, 9000, 0.06) * 0.8
+		low = bandpass(noise(n), 400, 1500) * bell * 0.8
+		high = bandpass(noise(n), 1800, 6000) * np.sin(np.pi * np.clip(t / 0.11, 0, 1)) ** 2 * 0.45
+		return mix(low, high)
+	if name == "shoot":  # 활시위 퉁 + 화살 슉
+		if style == "chip":
+			return mix(chip_square(hz(45), 0.06, 0.5, duty=0.25), chip_noise(0.1, 0.5, 9000, 0.04))
+		n = int(0.25 * SR)
+		t = np.arange(n) / SR
+		twang = ks_pluck(110, 0.22, 0.9, bright=0.4, decay=0.99, ring=0.3)
+		zip_ = bandpass(noise(n), 2500, 8000) * np.exp(-t * 30) * np.minimum(1, t / 0.01) * 0.35
+		return mix(twang, zip_)
+	if name == "cast":  # 지팡이 구슬 (올라가는 반짝임)
+		n = int(0.3 * SR)
+		t = np.arange(n) / SR
+		fr = 520 + 900 * (1 - np.exp(-t * 18))
+		if style == "chip":
+			ph = np.cumsum(fr) / SR % 1.0
+			return np.where(ph < 0.5, 1.0, -1.0) * env_ar(n, 0.004, 0.08) * 0.25
+		tone = np.sin(phase_of(fr)) * env_ar(n, 0.005, 0.08) * 0.5
+		shimmer = bandpass(noise(n), 4000, 10000) * env_ar(n, 0.02, 0.06) * 0.2
+		return mix(tone, shimmer)
+	if name == "kill":  # 쓰러뜨림: 묵직한 퍽 + 부서짐 (+ 국악풍은 북 한 번)
+		if style == "chip":
+			return mix(chip_kick(1.0), chip_noise(0.25, 1.2, 4000, 0.08))
+		n = int(0.4 * SR)
+		crunch = bandpass(noise(n), 500, 3500) * env_ar(n, 0.001, 0.06) * 1.3
+		body = drum_tone(170, 50, 0.1, 1.2, 0.3, 0.4)
+		out = mix(crunch, body)
+		if style == "gugak":
+			out = mix(out, drum_tone(110, 70, 0.14, 0.7, 0.1, 0.4), woodblock(380, 0.35))
+		return out
 	raise KeyError(name)
 
 
 SFX = ["hoe", "water", "harvest", "coin", "hatch", "hit", "hurt"]
+# 나중에 더한 효과음: 배경음 뒤에 만들어 앞의 소리 · 배경음이 다시 만들어도 그대로이게 한다
+SFX_LATER = ["swing", "shoot", "cast", "kill"]
 BGM = ["village_day", "village_night", "hunt"]
 BGM_RMS = {"village_day": 0.10, "village_night": 0.075, "hunt": 0.12}
 
@@ -619,6 +659,9 @@ def build(style, out_dir, ogg, game=False):
 	for name in BGM:
 		path = os.path.join(bgm_dir, name if game else "bgm_" + name)
 		write(path, normalize(arrange(style, name), 0.85, BGM_RMS[name]), ogg, loop=True)
+	for name in SFX_LATER:
+		path = os.path.join(sfx_dir, name if game else "sfx_" + name)
+		write(path, fade_tail(normalize(sfx(style, name), 0.8, 0.15)), ogg)
 
 
 if __name__ == "__main__":

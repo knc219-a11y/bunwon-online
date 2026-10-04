@@ -159,10 +159,23 @@ const COMBO_SPEED := 0.7
 const COMBO_FINISH_RADIUS := 1.45
 ## 3타째 앞으로 내딛는 거리 (px)
 const COMBO_FINISH_STEP := 8.0
-## 맞히면 세상이 아주 잠깐 멈춘다 (타격 멈춤, 초) · 쓰러뜨리면 화면이 살짝 흔들린다 (px)
-const HITSTOP := 0.045
-const HITSTOP_KILL := 0.07
-const SHAKE := 2.5
+## 맞히면 세상이 아주 잠깐 멈춘다 (타격 멈춤, 초). 3타째 · 큰 스킬은 HITSTOP_HEAVY.
+## 화면 흔들림은 없앴다 (2026-10-03 사용자: 머리가 아픔). 타격감은 멈춤 · 번쩍임 · 튕김 · 불꽃 · 소리로.
+const HITSTOP := 0.05
+const HITSTOP_KILL := 0.08
+const HITSTOP_HEAVY := 0.1
+## 맞은 몬스터가 하얗게 번쩍이는 시간 (초). 처음 절반은 새하얗고 나머지는 옅어진다.
+const HIT_FLASH := 0.12
+## 맞은 몬스터가 납작해졌다 돌아오는 시간 (초) · 납작한 정도 (대장은 도트가 깨지지 않게 대신 1px 밀린다)
+const HIT_SQUASH := 0.12
+const HIT_SQUASH_AMOUNT := 0.2
+## 타격 불꽃 (맞은 자리에 튀는 빛줄기) 시간 (초)
+const HIT_SPARK := 0.14
+## 사냥꾼 공격 모션: 칠 때 그림이 치는 쪽으로 내딛는 거리 (px, 3타째 · 돌진 베기는 x2) · 시간 (초)
+const ATTACK_LUNGE_PX := 2.0
+const ATTACK_LUNGE_TIME := 0.12
+## 사냥꾼이 다쳤을 때 붉게 번쩍이는 시간 (초). 뒤이은 무적 동안은 깜빡인다.
+const HURT_FLASH := 0.15
 ## 맞은 몬스터가 밀려나는 거리 배율 (몰아 베려면 덜 밀려나야 한다)
 const HIT_KNOCKBACK_MULT := 0.45
 ## 떼 (몰아잡기): 몬스터 자리 하나에 SWARM_SIZE 마리가 모여 있다 (구역 swarm 이 있으면 그 수).
