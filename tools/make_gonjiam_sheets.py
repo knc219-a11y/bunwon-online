@@ -196,7 +196,7 @@ out = {
     "baby_imp": sheet(frames10(lambda **k: baby_imp(**k)), 32),
 }
 # 2026-10-04: 사용자 AI 그림 (새 크기, tools/import_ai_monster.py 의 곤지암 줄) 으로 바뀐 시트는 --force 일 때만 덮어쓴다
-AI_DONE = set()
+AI_DONE = {"wild_archdemon"}
 for k, img in out.items():
     if k in AI_DONE and "--force" not in sys.argv:
         print(k, "건너뜀 (AI 그림이 있음, 옛 코드 그림으로 덮으려면 --force)")

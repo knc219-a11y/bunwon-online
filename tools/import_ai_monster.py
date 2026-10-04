@@ -93,6 +93,9 @@
     (칸마다 고르면 말 털이 얼룩덜룩해서 --smooth)
   ai_foal.png --kind foal --backdrop --smooth --colors 24 --keep-hue
     (초록 바탕. 흰 발 · 흰 이마가 흰 바탕과 함께 지워지지 않게)
+곤지암 (그림 원본: /mnt/project-files/design/gonjiam-tall/ai/ai_*.png, 사용자 AI 그림 2026-10-04, 새 크기)
+  ai_archdemon.png --kind archdemon --colors 32 --keep-hue --clear-pockets --smooth --calm 9 --eyes 0.721,0.248 --eye-size 2 --eye-color 255,224,64 --angry
+    (옷자락 밝은 주름이 얼룩이 되어서 --calm 9, 날개 사이 흰 바탕은 --clear-pockets)
 """
 import argparse
 import os
@@ -100,7 +103,7 @@ import os
 import import_ai_character
 import make_slime_sheet
 
-from PIL import Image
+from PIL import Image, ImageFilter
 
 from import_ai_character import pixelize, white_to_alpha
 from import_ai_slime import draw_face, find_face, inpaint, largest_blob, peel_halo, soften_edges
@@ -304,7 +307,7 @@ def lamp(img, k):
     for y in range(img.height):
         for x in range(img.width):
             r, g, b, a = px[x, y]
-            if a and g > 110 and g > r + 40 and g > b + 25:
+            if a and g > 110 and g >= r + 25 and g > b + 70:
                 px[x, y] = (min(255, r + 70), 255, min(255, b + 70), a) if k > 0 else (52, 56, 54, a)
     return img
 
@@ -462,6 +465,7 @@ def clear_backdrop(im, tol=48):
 
 BACKDROP = False
 SMOOTH = 0
+CALM = 0
 
 
 def smooth_pixelize(fig, pal_img, w, h):
@@ -476,7 +480,11 @@ def smooth_pixelize(fig, pal_img, w, h):
 
 
 def load_figure(src, flip=False, mist=False, parts=0.0, work_w=None):
-    im = clear_backdrop(Image.open(src)) if BACKDROP else white_to_alpha(Image.open(src))
+    im = Image.open(src)
+    if CALM:
+        # --calm: 옷자락 잔무늬 (밝은 갈색 주름) 가 큰 칸에서 얼룩 덩어리가 되지 않게 미리 중앙값으로 누그러뜨린다 (마왕)
+        im = im.convert("RGB").filter(ImageFilter.MedianFilter(CALM))
+    im = clear_backdrop(im) if BACKDROP else white_to_alpha(im)
     im = clear_mist(im) if mist else im
     # parts: 떨어진 조각을 남기려고 peel_halo (끝에 가장 큰 덩어리만 남김) 는 건너뛴다
     fig = big_blobs(im, parts) if parts else peel_halo(largest_blob(im))
@@ -831,10 +839,11 @@ def main():
     ap.add_argument("--smooth", action="store_true", help="부드럽게 줄인 뒤 팔레트로 (잔무늬가 점으로 깨질 때)")
     ap.add_argument("--keep-hue", action="store_true", help="짙은 색을 보랏빛으로 돌리지 않는다 (밤색 말 · 역마 장군)")
     ap.add_argument("--clear-pockets", action="store_true", help="팔 · 창 사이에 갇힌 흰 바탕도 지운다 (흰 무늬 없는 그림만)")
+    ap.add_argument("--calm", type=int, default=0, help="줄이기 전에 중앙값 필터 (홀수 px). 잔주름이 얼룩이 될 때 (마왕 9)")
     ap.add_argument("--backdrop", action="store_true", help="흰 바탕 대신 귀퉁이 색 (초록 바탕 등) 을 지운다. 흰 몸 (백호) 용")
     a = ap.parse_args()
-    global BACKDROP, SMOOTH
-    BACKDROP = a.backdrop
+    global BACKDROP, SMOOTH, CALM
+    BACKDROP, CALM = a.backdrop, a.calm
     import_ai_character.KEEP_HUE, import_ai_character.CLEAR_POCKETS = a.keep_hue, a.clear_pockets
     SMOOTH = a.colors if a.smooth else 0
     if KINDS.get(a.kind, {}).get("cell"):

@@ -3624,7 +3624,7 @@ func _gonjiam_checks() -> void:
 	h.slimes.clear()
 	# 마왕: 등불 깜빡 → 정전 + 등 뒤 악귀, 다음은 지옥불 기둥
 	var b: WildSlime = h.spawn_boss()
-	_check(b.boss and b.pattern == &"archdemon" and b.title == "마왕" and b._frame == 64 and is_equal_approx(b._sprite.scale.x * b.scale.x, 1.0), "마왕 (64칸 시트를 늘이지 않고)")
+	_check(b.boss and b.pattern == &"archdemon" and b.title == "마왕" and b._frame == 96 and b._lamp != Vector2.INF and is_equal_approx(b._sprite.scale.x * b.scale.x, 1.0), "마왕 (96칸 새 그림을 늘이지 않고, 등불 자리를 시트에서 찾음)")
 	b.position = feet + Vector2(140, 0)
 	b.ai_enabled = true
 	b._pattern_cd = 0.0
