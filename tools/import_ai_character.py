@@ -29,6 +29,8 @@
   시작 옵션: --height 46 --width 18 --tall --hair-span 0.2 --front-hair 0.2 (+ 그림에 맞춰 --keep-hue · --dark-pants · --sleeves)
   이름: 농부 player · 사냥꾼 hunter (포니테일이면 --hair-span 0.6) · 대장장이 smith · 연금술사 alchemist · 목축인 rancher
         · 뱃사공 ferryman · 이장 chief. 뱃사공 · 이장은 부위 지도가 생기면 make_naru_sheets / make_hall_sheets 가 덮어쓰지 않는다.
+  농부 (2026-10-04): villagers/ai/farmer.png --name player --height 46 --width 18 --tall --bare --clear-pockets --keep-hue --sat 1.0 --hair-span 0.2 --front-hair 0.2
+  사냥꾼 (2026-10-04): villagers/ai/hunter.png --name hunter --height 46 --width 18 --tall --keep-hue --sleeves --hair-span 0.55 --front-hair 0.3 --dark-hair 0.3
   확인: python3 tools/people_lineup.py 비교.png (모두 한 줄로 세운 4배 그림)
 """
 import argparse
@@ -503,6 +505,7 @@ def main():
     ap.add_argument("--dark-hair", type=float, default=1.0, help="이 높이 아래 어두운 선은 머리카락이 아니다 (체크무늬 셔츠면 0.42 쯤)")
     ap.add_argument("--sleeves", action="store_true", help="윗도리 색을 소매(팔 윗쪽)에서도 뽑는다. 멜빵바지처럼 가슴을 다른 옷이 덮을 때")
     ap.add_argument("--tall", action="store_true", help="6~7등신 실제 비율 그림 (부위 높이를 작은 머리에 맞춤). --hair-span 은 0.2 쯤")
+    ap.add_argument("--bare", action="store_true", help="민소매 · 반바지: 팔 · 정강이에서도 살색을 뽑는다 (얼굴이 작아 살색이 옷으로 잡힐 때)")
     ap.add_argument("--clear-pockets", action="store_true", help="팔 · 몸 사이에 갇힌 흰 바탕도 지운다 (흰 옷 없는 그림)")
     ap.add_argument("--keep-hue", action="store_true", help="짙은 색을 보랏빛으로 돌리지 않는다 (짙은 갈색 머리)")
     ap.add_argument("--dark-pants", action="store_true", help="검은 바지: 어두운 색도 바지로 친다")
@@ -519,6 +522,8 @@ def main():
         PROBES.clear()
         PROBES.update(TALL_PROBES)
         SPAN.update(TALL_SPAN)
+    if a.bare:
+        PROBES["skin"] = PROBES["skin"] + [(0.0, 0.2, 0.28, 0.45), (0.8, 1.0, 0.28, 0.45), (0.2, 0.8, 0.78, 0.85)]
     if a.sleeves:
         PROBES["top"] = PROBES["top"] + [(0.08, 0.22, 0.44, 0.54), (0.78, 0.92, 0.44, 0.54)]
     figs = split_figures(white_to_alpha(Image.open(a.src)))
