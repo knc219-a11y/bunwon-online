@@ -52,7 +52,8 @@
 
 곤지암 세트 (2026-10-04, 새 크기): 프롬프트는 /mnt/project-files/design/new-art-ai/gonjiam.md. 옆모습, 앞이 오른쪽.
   archdemon  → assets/creatures/wild_archdemon.png (768x96, 96칸): 키 약 84px (사람의 1.8배). 게임은 1:1
-  horn_demon → assets/creatures/wild_horn_demon.png (512x64, 64칸): 구부정한 키 약 50px, 팔 들면 약 60px
+  horn_demon → assets/creatures/wild_horn_demon.png (768x96, 96칸): 구부정한 키 약 48px, 팔을 옆으로 넓게 벌려 가로 약 90px
+               (처음엔 64칸이었는데 AI 그림이 팔을 넓게 벌려서 96칸으로)
   imp        → assets/creatures/baby_imp.png (320x32): 키 약 22px
   마왕 칸: 0-1 대기, 2-5 걷기, 6 등불 깜빡 (초록 불을 더 밝게), 7 등불 꺼진 채 숨 고름 (초록 불을 쇠 색으로).
   뿔 악귀 칸: 0-1 대기, 2-5 걷기, 6 두 팔 치켜듦 (--raise 그림, 없으면 뒤로 젖힘), 7 숨 고름. 아기: 6-9 손에서 작은 불.
@@ -96,6 +97,10 @@
 곤지암 (그림 원본: /mnt/project-files/design/gonjiam-tall/ai/ai_*.png, 사용자 AI 그림 2026-10-04, 새 크기)
   ai_archdemon.png --kind archdemon --colors 32 --keep-hue --clear-pockets --smooth --calm 9 --eyes 0.721,0.248 --eye-size 2 --eye-color 255,224,64 --angry
     (옷자락 밝은 주름이 얼룩이 되어서 --calm 9, 날개 사이 흰 바탕은 --clear-pockets)
+  ai_horn_demon.png --kind horn_demon --raise ai_horn_demon_raise_fixed.png --colors 32 --keep-hue --smooth --calm 13 --clear-pockets
+      --eyes 0.681,0.38,0.751,0.384 --fly-eyes 0.699,0.476,0.764,0.48 --eye-size 1 --eye-color 255,230,60 --angry
+    (원본 오른쪽 아래 AI 워터마크 별은 지움. 팔 든 그림은 뿔 모양이 달라서 design/gonjiam-tall/fix_raise_horns.py 로
+     대기 그림의 숫양 뿔로 바꾼 _fixed 를 쓴다. 근육 잔무늬가 붉은 점이 되어서 --calm 13)
 """
 import argparse
 import os
@@ -244,7 +249,7 @@ KINDS["foal"] = dict(out="baby_foal", cell=32, width=24, max_h=24, frames=[
 ])
 # 곤지암 세트 (2026-10-04, 새 크기): 악마 셋. 옆모습, 앞이 오른쪽 (왼쪽을 보고 나왔으면 --flip).
 #   마왕: 0-1 대기, 2-5 걷기 (긴 옷자락 끝을 번갈아 밀기), 6 등불 깜빡 (초록 불 밝게), 7 등불 꺼진 채 숨 고름 (lamp=-1)
-#   뿔 악귀: 0-1 대기, 2-5 걷기 (두 발), 6 두 팔 치켜듦 (예고, --raise 그림이 있으면 그걸), 7 내려찍은 뒤 숨 고름
+#   뿔 악귀 (96칸: 팔을 옆으로 넓게 벌린 그림이라): 0-1 대기, 2-5 걷기 (두 발), 6 두 팔 치켜듦 (예고, --raise 그림이 있으면 그걸), 7 내려찍은 뒤 숨 고름
 #   아기 악귀: 0-1 대기, 2-5 이동 (깡충), 6-9 일 (손에서 작은 불, hand=불 크기)
 KINDS["archdemon"] = dict(out="wild_archdemon", cell=96, width=70, max_h=84, work_w=480, frames=[
     dict(sx=1.0, sy=1.0, lift=0), dict(sx=1.0, sy=0.98, lift=0),
@@ -252,7 +257,7 @@ KINDS["archdemon"] = dict(out="wild_archdemon", cell=96, width=70, max_h=84, wor
     dict(sx=1.0, sy=1.0, lift=1, step=1), dict(sx=1.01, sy=0.98, lift=0, step=-1),
     dict(sx=1.0, sy=1.01, lift=0, lamp=1), dict(sx=0.98, sy=0.95, lift=0, rot=-4, lamp=-1),
 ])
-KINDS["horn_demon"] = dict(out="wild_horn_demon", cell=64, width=46, max_h=50, work_w=360, rear_k=1.2, frames=[
+KINDS["horn_demon"] = dict(out="wild_horn_demon", cell=96, width=90, max_h=56, work_w=480, rear_k=1.45, frames=[
     dict(sx=1.0, sy=1.0, lift=0), dict(sx=1.02, sy=0.97, lift=0),
     dict(sx=1.02, sy=0.97, lift=0, stride=1), dict(sx=1.0, sy=1.0, lift=1, stride=-1),
     dict(sx=1.02, sy=0.97, lift=0, stride=1), dict(sx=1.0, sy=1.0, lift=1, stride=-1),

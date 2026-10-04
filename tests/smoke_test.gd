@@ -3588,7 +3588,7 @@ func _gonjiam_checks() -> void:
 	h.set_process(false)
 	h.companion_ai = false
 	_check(h.zone == zi and h.slimes.size() == z.count * h.swarm_size() and h.slimes.all(func(o: WildSlime) -> bool: return o.demon), "곤지암에 들어옴: 뿔 악귀 %d마리 (자리마다 %d)" % [h.slimes.size(), h.swarm_size()])
-	_check(h.slimes[0]._frame == 48 and is_equal_approx(h.slimes[0]._sprite.scale.x * h.slimes[0].scale.x, 1.0), "뿔 악귀 48칸 시트를 늘이지 않고 그림")
+	_check(h.slimes[0]._frame == 96 and is_equal_approx(h.slimes[0]._sprite.scale.x * h.slimes[0].scale.x, 1.0), "뿔 악귀 96칸 새 그림을 늘이지 않고 그림")
 	m.player.position = Vector2(25, 10) * Config.TILE
 	m.player.facing = Vector2i.RIGHT
 	var feet: Vector2 = m.player.feet()
