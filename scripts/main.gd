@@ -110,6 +110,8 @@ var craft_tier := 0
 var menu_index := 0
 var _menu_options: Array[StringName] = []
 var _menu: ColorRect
+## 새 게임 주인공 고르기 그림 (menu_kind &"look")
+var _look_picker: LookPicker
 var _menu_text: Label
 ## 디아블로식 가방 창 (I 키, 창고 궤짝 F). 열려 있는 동안 캐릭터는 멈추고 사냥터도 멈춘다.
 var inventory: InventoryUI
@@ -173,7 +175,7 @@ func _ready() -> void:
 	ambience.add_light(incubator.position + Vector2(10, -40), 34, Color(1.0, 0.55, 0.4))
 	ambience.add_light(supply_box.position + Vector2(0, -20), 30, warm)
 
-	player = _add_character("주인공", preload("res://assets/characters/protagonist.png"), Config.PLAYER_START, &"player")
+	player = _add_character("주인공", load(Config.LOOKS[&"a"].sheet), Config.PLAYER_START, &"player")
 	player.outfit = &"farmer"
 	player.npc = false
 	player.refresh_wear()
@@ -395,7 +397,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif event.is_action_pressed("interact") or event.is_action_pressed("use_tool"):
 			menu_confirm()
 		elif event.is_action_pressed("menu_close"):
-			if menu_kind == &"delete":
+			if menu_kind == &"delete" or menu_kind == &"look":
 				open_menu(&"title")
 			elif menu_kind != &"title":
 				close_menu()
@@ -950,6 +952,7 @@ func close_menu() -> void:
 		return
 	menu_open = false
 	_menu.visible = false
+	_look_picker.visible = false
 	player.frozen = false
 	if hunt:
 		hunt.process_mode = Node.PROCESS_MODE_INHERIT
@@ -966,9 +969,17 @@ func menu_confirm() -> void:
 	if menu_kind == &"title" or menu_kind == &"delete" or menu_kind == &"pause":
 		save_menu_confirm(id)
 		return
+	if menu_kind == &"look":
+		GameState.look = StringName(String(id).trim_prefix("look_"))
+		apply_look()
+		_after_look()
+		return
 	if menu_kind == &"start":
 		close_menu()
+		var look := GameState.look
 		TestStarts.apply(self, id)
+		GameState.look = look
+		apply_look()
 		autosave()
 		return
 	if menu_kind == &"class":
@@ -2403,7 +2414,10 @@ func _rebuild_menu() -> void:
 	var adopting := menu_kind == &"adopt"
 	var classing := menu_kind == &"class" or menu_kind == &"respec"
 	var saving := menu_kind == &"title" or menu_kind == &"delete" or menu_kind == &"pause"
-	if saving:
+	var looking := menu_kind == &"look"
+	if looking:
+		_menu_options = [&"look_a", &"look_b"]
+	elif saving:
 		_menu_options = save_menu_options()
 	elif starting:
 		_menu_options = TestStarts.ids()
@@ -2446,6 +2460,8 @@ func _rebuild_menu() -> void:
 		head = "사냥터 입구 · 직업 · 초기화   %s Lv %d · 가진 돈 %d원" % [HunterClass.class_name_of(GameState.hunter_class), GameState.hunter_level, GameState.money]
 	if starting:
 		head = "테스트용 시작 지점 (개발용 빌드에서만)"
+	if looking:
+		head = "새 게임 · 주인공을 고르자"
 	if menu_kind == &"title":
 		head = "분원리   어느 슬롯으로 할까?"
 	elif menu_kind == &"delete":
@@ -2479,7 +2495,10 @@ func _rebuild_menu() -> void:
 	for i in range(first, last):
 		var o := _menu_options[i]
 		var text := ""
-		if saving:
+		if looking:
+			var l: Dictionary = Config.LOOKS[StringName(String(o).trim_prefix("look_"))]
+			text = "%s   %s" % [l.name, l.note]
+		elif saving:
 			text = save_menu_text(o)
 		elif starting:
 			text = TestStarts.option_text(o)
@@ -2567,6 +2586,8 @@ func _rebuild_menu() -> void:
 	if starting:
 		lines.append("W/S 고르기 · F 정하기 · 숫자키 바로 · Esc 처음부터")
 		lines.append("그 시점쯤의 상태를 새로 채운다 (고른 뒤부터 이 슬롯에 저장)")
+	if looking:
+		lines.append("W/S 고르기 · F 정하기 · Esc 슬롯으로")
 	if menu_kind == &"title":
 		lines.append("W/S 고르기 · F 정하기")
 		lines.append("잘 때 · 사냥터에서 돌아올 때 저절로 저장, Esc로 언제든 저장하고 나가기")
@@ -2592,6 +2613,12 @@ func _rebuild_menu() -> void:
 	at = to_screen(at)
 	if starting or saving:
 		at = (Vector2(640, 360) - _menu.size) / 2
+	if looking:
+		at = Vector2((640 - _menu.size.x) / 2, 168)
+	if _look_picker:
+		_look_picker.visible = menu_open and looking
+		_look_picker.pick = menu_index
+		_look_picker.queue_redraw()
 	_menu.position = at.clamp(Vector2(4, 32), Vector2(636, 324) - _menu.size)
 	_menu.visible = menu_open
 
@@ -2681,11 +2708,24 @@ func save_menu_confirm(id: StringName) -> void:
 	save_slot = slot
 	if SaveGame.load_into(self, slot):
 		GameState.notify("슬롯 %d: %d일째에서 이어 한다." % [slot, GameState.day])
-	elif OS.is_debug_build():
-		# 테스트용 시작 지점 (2026-09-29): 개발용 빌드에서만. 고른 상태부터 이 슬롯에 저장한다.
+	else:
+		# 새 게임: 먼저 주인공 모습을 고른다 (2026-10-04 캐릭터 선택)
+		open_menu(&"look")
+
+
+## 모습을 고른 뒤: 개발용 빌드면 테스트용 시작 지점 (2026-09-29), 아니면 바로 시작해 이 슬롯에 저장
+func _after_look() -> void:
+	if OS.is_debug_build():
 		open_menu(&"start")
 	else:
+		close_menu()
 		autosave()
+
+
+## 주인공 모습 (GameState.look) 을 몸 시트 · 장비 덧그림에 입힌다
+func apply_look() -> void:
+	var l: Dictionary = Config.LOOKS.get(GameState.look, Config.LOOKS[&"a"])
+	player.set_sheet(load(l.sheet), l.wear)
 
 
 ## 저장 슬롯이 있으면 지금 상태를 쓴다 (잘 때 · 사냥터에서 돌아올 때 · 저장하고 나가기)
@@ -3173,6 +3213,9 @@ func _build_hud() -> void:
 	_menu.visible = false
 	_menu.add_child(UiSkin.nine(UiSkin.WINDOW, 9))
 	layer.add_child(_menu)
+	_look_picker = LookPicker.new()
+	_look_picker.visible = false
+	layer.add_child(_look_picker)
 	_menu_text = Label.new()
 	_menu_text.position = Vector2(11, 8)
 	_menu_text.add_theme_font_size_override("font_size", 10)

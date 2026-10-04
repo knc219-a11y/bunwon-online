@@ -170,6 +170,8 @@ var smith_level := 1
 var smith_xp := 0
 var smith_points := 0
 var smith_skills := {}
+## 주인공 모습 (Config.LOOKS 키, 새 게임 때 고름)
+var look := &"a"
 
 
 func _ready() -> void:
@@ -315,6 +317,7 @@ func reset() -> void:
 	smith_xp = 0
 	smith_points = 0
 	smith_skills = {}
+	look = &"a"
 	changed.emit()
 
 

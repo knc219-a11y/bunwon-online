@@ -271,7 +271,10 @@ static func apply(main: Node2D, d: Dictionary) -> void:
 	if not at.is_empty():
 		player.position = at[0]
 		player.facing = at[1]
-	player.refresh_wear()
+	# 주인공 모습 (2026-10-04, 옛 저장 파일엔 없음 = A)
+	if not gs.has("look") or not Config.LOOKS.has(GameState.look):
+		GameState.look = &"a"
+	main.apply_look()
 	main.tool_index = d.get("tool_index", 0)
 	main._update_dusk()
 	main._refresh_props()

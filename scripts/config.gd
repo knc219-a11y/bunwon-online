@@ -26,6 +26,12 @@ const HATCH_CELL := Vector2i(16, 5)
 const DOOR_CELL := Vector2i(25, 13)
 ## 새 게임에서 주인공이 서는 칸 (밭 울타리 입구 앞)
 const PLAYER_START := Vector2i(15, 7)
+## 주인공 모습 (2026-10-04 사용자: "둘다 캐릭터 선택창에서 고르는걸로할까"). 새 게임 때 고른다 (GameState.look).
+## sheet: 몸 시트, wear: 장비 덧그림 폴더 (assets/wear/<wear>, "" 이면 assets/wear 바로 아래, tools/make_wear_sheets.py LOOK_BODIES).
+const LOOKS := {
+	&"a": {name = "돌아온 젊은이", note = "짧은 남색 머리 · 흰 티 · 회색 카고 바지", sheet = "res://assets/characters/protagonist.png", wear = ""},
+	&"b": {name = "개척단 단원", note = "갈색 단발 · 빨간 머리띠 · 검은 바지", sheet = "res://assets/characters/protagonist_b.png", wear = "b"},
+}
 ## 마을 사람 NPC 농부 (밭 아래 풀밭) · 사냥꾼 (사냥터 입구 왼쪽 아래) 자리. 2026-10-03 주인공 하나.
 const FARMER_CELL := Vector2i(10, 13)
 const HUNTER_CELL := Vector2i(31, 8)

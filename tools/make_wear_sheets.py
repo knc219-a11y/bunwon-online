@@ -310,6 +310,8 @@ ITEMS = {
 #   옷 · 신발: 새 몸의 옷 · 신발 픽셀을 장비 색으로 다시 칠한다 (밝기 순서를 지켜 음영이 그대로 산다).
 # 어느 벌인지 → 몸 시트 이름 (부위 지도가 없는 몸은 위 그림 그대로). 2026-10-03 주인공 하나: 밭 옷 · 사냥 옷 다 주인공 몸
 BODY_OF = {"farmer": "protagonist", "hunter": "protagonist"}
+# 주인공 모습 (2026-10-04 캐릭터 선택): 몸 시트 → 장비 덧그림 폴더 (assets/wear/<폴더>). Config.LOOKS 와 같다
+LOOK_BODIES = {"protagonist": "", "protagonist_b": "b"}
 PARTS_DIR = os.path.join(os.path.dirname(__file__), "char_parts")
 PART = {"hair": (40, 40, 40), "skin": (250, 200, 160), "top": (160, 160, 160), "pants": (70, 100, 200),
         "shoes": (120, 60, 20), "detail": (255, 255, 255)}  # import_ai_character.PART_COLORS 와 같음
@@ -640,7 +642,7 @@ FIT = {
 }
 
 
-def make_fit(name, fn, body_name):
+def make_fit(name, fn, body_name, sub=""):
     body = Image.open(os.path.join(OUT_DIR, "..", "characters", f"{body_name}.png")).convert("RGBA")
     parts = Image.open(os.path.join(PARTS_DIR, f"{body_name}.png")).convert("RGBA")
     img = Image.new("RGBA", (CELL * COLS, CELL * ROWS), (0, 0, 0, 0))
@@ -655,7 +657,8 @@ def make_fit(name, fn, body_name):
         outline(hat)
         img = hat
     grade_p1(img)
-    path = os.path.join(OUT_DIR, f"{name}.png")
+    os.makedirs(os.path.join(OUT_DIR, sub), exist_ok=True)
+    path = os.path.join(OUT_DIR, sub, f"{name}.png")
     img.save(path)
     return path
 
@@ -673,6 +676,8 @@ if __name__ == "__main__":
     for name, fn in ITEMS.items():
         body = BODY_OF.get(who_of(name))
         if body and name in FIT and os.path.exists(os.path.join(PARTS_DIR, f"{body}.png")):
-            print(make_fit(name, FIT[name], body), "(새 몸)")
+            for look_body, sub in LOOK_BODIES.items():
+                if os.path.exists(os.path.join(PARTS_DIR, f"{look_body}.png")):
+                    print(make_fit(name, FIT[name], look_body, sub), "(새 몸)")
         else:
             print(make(name, fn))

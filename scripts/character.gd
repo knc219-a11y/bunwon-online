@@ -22,6 +22,8 @@ const FEET_BOX := Vector2(12, 6)
 ## NPC 는 &"" (장비를 안 입음).
 @export var outfit: StringName = &""
 @export var sheet: Texture2D
+## 장비 덧그림 폴더 (주인공 모습 B 면 "b", Wearables.sheet_of)
+var wear_dir := ""
 
 var active := false:
 	set(v):
@@ -80,6 +82,15 @@ func _ready() -> void:
 	refresh_wear()
 
 
+## 몸 시트를 바꾼다 (주인공 모습 고르기)
+func set_sheet(t: Texture2D, dir := "") -> void:
+	sheet = t
+	wear_dir = dir
+	if _sprite:
+		_sprite.texture = t
+	refresh_wear()
+
+
 ## 입은 장비에 맞춰 덧그림을 다시 만든다 (산 뒤에 부른다).
 func refresh_wear() -> void:
 	for w in _wear:
@@ -92,7 +103,7 @@ func refresh_wear() -> void:
 		if not Wearables.item(id).has("sheet"):
 			continue
 		var w := Sprite2D.new()
-		w.texture = Wearables.item(id).sheet
+		w.texture = Wearables.sheet_of(id, wear_dir)
 		w.centered = false
 		w.hframes = 6
 		w.vframes = 3

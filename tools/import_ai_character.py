@@ -19,10 +19,10 @@
       --preview 파일.png 를 주면 4배 확대 미리보기도 저장한다.
       6~7등신 실제 비율 그림 (2026-10-04 그림 방향 "섞어서") 은 --tall, 검은 바지면 --dark-pants.
 
-주인공 (2026-10-04, 사용자 AI 그림 A 돌아온 젊은이: /mnt/project-files/design/protagonist/ai/ai_a.png)
-  python3 tools/import_ai_character.py ai_a.png --name protagonist --height 46 --width 18 --tall --hair-span 0.2 --front-hair 0.2
-  python3 tools/make_wear_sheets.py   (장비를 새 몸에 맞춤. 모자는 머리 폭에 맞춰 줄어든다)
-  B 개척단 단원 (ai_b.png) 은 같은 옵션 + --dark-pants
+주인공 (2026-10-04, 사용자 AI 그림, 새 게임 때 고르는 두 모습 Config.LOOKS. 원본 /mnt/project-files/design/protagonist/ai/)
+  A 돌아온 젊은이 (흰 티): ai_a_tee.png --name protagonist --height 46 --width 18 --tall --keep-hue --hair-span 0.2 --front-hair 0.2
+  B 개척단 단원 (갈색 반팔): ai_b_tee.png --name protagonist_b 같은 옵션 + --dark-pants --clear-pockets
+  그 다음 python3 tools/make_wear_sheets.py (장비를 두 몸에 맞춤, B 는 assets/wear/b/. 모자는 머리 폭에 맞춰 줄어든다)
 """
 import argparse
 import colorsys
@@ -89,7 +89,19 @@ def white_to_alpha(im):
                 continue
             px[x, y] = (0, 0, 0, 0)
             stack += [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)]
+        if CLEAR_POCKETS:
+            # 팔과 몸 사이처럼 갇힌 흰 바탕도 지운다 (흰 옷이 없는 그림만, --clear-pockets)
+            for y in range(h):
+                for x in range(w):
+                    r, g, b, a = px[x, y]
+                    if a and min(r, g, b) >= 238:
+                        px[x, y] = (0, 0, 0, 0)
     return im
+
+
+# --clear-pockets: 갇힌 흰 바탕도 지움. --keep-hue: 짙은 색을 보랏빛으로 돌리지 않음 (갈색 머리)
+CLEAR_POCKETS = False
+KEEP_HUE = False
 
 
 # 부위별 색을 뽑는 정면 그림 속 자리 (가로 x0, x1, 세로 y0, y1 비율). 어떤 옷이든 색으로 나눈다.
@@ -159,7 +171,7 @@ def soften(c, lift, sat):
     h, l, s = colorsys.rgb_to_hls(*(v / 255 for v in c))
     l2 = lift + l * (1 - lift)
     s2 = s * sat
-    if l < 0.25:  # 까만색은 살짝 보랏빛 도는 짙은 회색으로 (원래 캐릭터 머리색 50,48,56 근처)
+    if l < 0.25 and not KEEP_HUE:  # 까만색은 살짝 보랏빛 도는 짙은 회색으로 (원래 캐릭터 머리색 50,48,56 근처)
         h, s2 = 0.75, max(s2, 0.1)
     r, g, b = colorsys.hls_to_rgb(h, l2, s2)
     return (round(r * 255), round(g * 255), round(b * 255))
@@ -484,12 +496,16 @@ def main():
     ap.add_argument("--dark-hair", type=float, default=1.0, help="이 높이 아래 어두운 선은 머리카락이 아니다 (체크무늬 셔츠면 0.42 쯤)")
     ap.add_argument("--sleeves", action="store_true", help="윗도리 색을 소매(팔 윗쪽)에서도 뽑는다. 멜빵바지처럼 가슴을 다른 옷이 덮을 때")
     ap.add_argument("--tall", action="store_true", help="6~7등신 실제 비율 그림 (부위 높이를 작은 머리에 맞춤). --hair-span 은 0.2 쯤")
+    ap.add_argument("--clear-pockets", action="store_true", help="팔 · 몸 사이에 갇힌 흰 바탕도 지운다 (흰 옷 없는 그림)")
+    ap.add_argument("--keep-hue", action="store_true", help="짙은 색을 보랏빛으로 돌리지 않는다 (짙은 갈색 머리)")
     ap.add_argument("--dark-pants", action="store_true", help="검은 바지: 어두운 색도 바지로 친다")
     ap.add_argument("--order", default="down,up,side", help="그림 속 왼쪽부터 순서 (정면 down · 뒷모습 up · 옆 side). 예: down,side,up")
     a = ap.parse_args()
 
     global DARK_HAIR_MAX
     DARK_HAIR_MAX = a.dark_hair
+    global CLEAR_POCKETS, KEEP_HUE
+    CLEAR_POCKETS, KEEP_HUE = a.clear_pockets, a.keep_hue
     if a.dark_pants:
         DARK_PARTS.append("pants")
     if a.tall:
