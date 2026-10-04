@@ -69,6 +69,7 @@
 밀목 (그림 원본: /mnt/project-files/design/milmok-tall/ai/ai_*.png, 사용자 AI 그림 2026-10-04, 새 크기)
   ai_white_tiger.png --kind tiger --backdrop --smooth --colors 32 --eyes 0.938,0.398 --eye-color 150,235,255
   ai_shadow_wolf.png --kind wolf --width 42 --colors 24 --eyes 0.916,0.369 --eye-size 1 --eye-color 120,240,255
+  ai_baby_tiger.png --kind baby_tiger --colors 24 --smooth --width 28
     (초록 바탕. 줄무늬가 칸마다 고르면 점으로 깨져서 --smooth, 빛나는 눈은 줄이면 사라져서 다시 찍음)
 """
 import argparse
@@ -370,13 +371,15 @@ def clear_backdrop(im, tol=48):
 
 
 BACKDROP = False
-SMOOTH = False
+SMOOTH = 0
 
 
 def smooth_pixelize(fig, pal_img, w, h):
     """잔무늬 (백호 줄무늬)가 많은 큰 그림은 칸마다 고르는 pixelize 가 얼룩덜룩한 점이 된다 (--smooth).
-    부드럽게 줄인 뒤 팔레트로 맞춰 무늬가 색 덩어리로 남게 (build_bus 와 같은 방식)."""
+    부드럽게 줄인 뒤 그 작은 그림에서 고른 색으로 맞춰 무늬가 색 덩어리로 남게. 큰 그림에서 고른 팔레트는
+    까만 줄 · 테두리 색이 많아서 작은 아기가 거무튀튀해진다 (아기 호랑이)."""
     small = fig.resize((w, h), Image.LANCZOS)
+    pal_img = small.convert("RGB").quantize(SMOOTH, method=Image.Quantize.FASTOCTREE)
     body = small.convert("RGB").quantize(palette=pal_img, dither=Image.Dither.NONE).convert("RGBA")
     body.putalpha(small.getchannel("A").point(lambda v: 255 if v > 128 else 0))
     return body
@@ -718,7 +721,7 @@ def main():
     a = ap.parse_args()
     global BACKDROP, SMOOTH
     BACKDROP = a.backdrop
-    SMOOTH = a.smooth
+    SMOOTH = a.colors if a.smooth else 0
     if KINDS.get(a.kind, {}).get("cell"):
         # 밀목부터는 종류마다 칸 크기가 다르다 (늑대 48 · 백호 96 · 아기 32)
         global CELL
