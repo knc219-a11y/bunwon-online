@@ -13,7 +13,7 @@ const IDLE_COLUMNS: Array[int] = [0, 1]
 const HOP_COLUMNS: Array[int] = [2, 3, 4, 5]
 const BOTTOM_Y := 8
 ## 새 크기 시트 (2026-10-04 "섞어서", 사람 키 46px 에 맞춘 몬스터: 늑대 48칸 · 백호 96칸). 발밑 그림자를 몸 크기에 맞춰 넓힌다
-const TALL_CELLS: Array[int] = [48, 96]
+const TALL_CELLS: Array[int] = [48, 64, 96]
 
 var hp := Config.WILD_SLIME_HP * Config.DMG_UNIT
 var max_hp := Config.WILD_SLIME_HP * Config.DMG_UNIT

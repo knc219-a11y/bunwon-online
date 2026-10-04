@@ -43,7 +43,14 @@
   백호 둘은 몸이 희어서 흰 바탕을 지우면 몸까지 지워진다: 초록 바탕으로 뽑고 --backdrop.
   늑대 · 백호 칸: 0-1 대기, 2-5 달리기 (stride: 앞뒤 다리를 반대로 밀기), 6 웅크림 예고, 7 지침. 아기: 0-1 대기, 2-5 걷기, 6-9 고개 들어 어흥.
 
-실행: python3 tools/import_ai_monster.py 그림.png --kind crab|boss|baby|wolf|tiger|baby_tiger|baby_white_tiger|sparrow|scarecrow|baby_sparrow|stump|cheonha|jiha|tree_spirit|will_o|will_o_baby|bus [--width 24] [--colors 20] [--preview 미리보기.png]
+역동 세트 (2026-10-04, 새 크기): 프롬프트는 /mnt/project-files/design/new-art-ai/yeokdong.md. 옆모습, 앞이 오른쪽.
+  general → assets/creatures/wild_post_general.png (768x96, 96칸): 키 약 80px (사람의 1.7배), 말 몸 길이 약 70px. 게임은 1:1
+  lancer  → assets/creatures/wild_lancer.png (512x64, 64칸): 키 약 58px, 말 몸 길이 약 50px
+  foal    → assets/creatures/baby_foal.png (320x32): 키 · 길이 약 24px. 흰 발 · 흰 이마라 초록 바탕 + --backdrop
+  장군 · 창기병 칸: 0-1 대기, 2-5 달리기, 6 앞발 들기 (돌격 예고), 7 돌아섬. 망아지: 0-1 대기, 2-5 걷기, 6-9 앞발 들기 · 뒷발차기.
+  --rear 앞발 든 그림이 있으면 6열 (망아지 6-7열) 에 쓰고, 없으면 한 장을 머리 쪽이 위로 가게 기울인다.
+
+실행: python3 tools/import_ai_monster.py 그림.png --kind crab|boss|baby|wolf|tiger|baby_tiger|baby_white_tiger|general|lancer|foal|sparrow|scarecrow|baby_sparrow|stump|cheonha|jiha|tree_spirit|will_o|will_o_baby|bus [--width 24] [--colors 20] [--preview 미리보기.png]
       (--sand 숨은그림.png: 모래에 파묻힌 게 그림이 따로 있으면 숨기 칸에 그걸 쓴다)
 
 지금 시트를 만든 명령 (그림 원본: /mnt/project-files/design/gumsa-ai/ai_*.png, 사용자 AI 그림 2026-09-30)
@@ -197,6 +204,25 @@ KINDS["baby_tiger"] = dict(out="baby_tiger", cell=32, width=26, max_h=22, frames
     dict(sx=1.0, sy=1.0, lift=0, rot=5), dict(sx=1.02, sy=0.97, lift=0),
 ])
 KINDS["baby_white_tiger"] = dict(KINDS["baby_tiger"], out="baby_white_tiger")
+# 역동 세트 (2026-10-04, 새 크기): 켄타우로스는 말 등 위에 사람 윗몸이 있어서 사람 (46px) 보다 크다. 옆모습, 앞이 오른쪽.
+#   rear: 앞발 들고 발 구름 (돌격 예고). --rear 그림이 있으면 그걸, 없으면 한 장을 뒤로 (머리 위로) 기울인다.
+#   장군 · 창기병: 0-1 대기, 2-5 달리기, 6 앞발 들기 (예고), 7 돌격 뒤 돌아섬 (때릴 틈)
+#   아기 망아지: 0-1 대기, 2-5 걷기, 6-9 일 (앞발 들기 · 뒷발차기)
+RIDER = [
+    dict(sx=1.0, sy=1.0, lift=0), dict(sx=1.0, sy=0.98, lift=0),
+    dict(sx=1.03, sy=0.97, lift=0, stride=1), dict(sx=1.0, sy=1.0, lift=1, stride=-1),
+    dict(sx=1.03, sy=0.97, lift=0, stride=1), dict(sx=1.0, sy=1.0, lift=1, stride=-1),
+    dict(sx=1.0, sy=1.0, lift=0, rot=10, rear=True), dict(sx=0.97, sy=0.96, lift=0, rot=-3),
+]
+KINDS["general"] = dict(out="wild_post_general", cell=96, width=84, max_h=80, work_w=480, frames=RIDER)
+KINDS["lancer"] = dict(out="wild_lancer", cell=64, width=58, max_h=56, work_w=360, frames=RIDER)
+KINDS["foal"] = dict(out="baby_foal", cell=32, width=24, max_h=24, frames=[
+    dict(sx=1.0, sy=1.0, lift=0), dict(sx=1.0, sy=0.97, lift=0),
+    dict(sx=1.0, sy=1.0, lift=1, stride=1), dict(sx=1.02, sy=0.96, lift=0, stride=-1),
+    dict(sx=1.0, sy=1.0, lift=1, stride=1), dict(sx=1.02, sy=0.96, lift=0, stride=-1),
+    dict(sx=1.0, sy=1.0, lift=0, rot=8, rear=True), dict(sx=1.0, sy=1.0, lift=0, rot=12, rear=True),
+    dict(sx=1.0, sy=1.0, lift=0, rot=-10), dict(sx=1.02, sy=0.97, lift=0),
+])
 BUS_W, BUS_H, BUS_FLOOR = 96, 48, 46
 DROP = (150, 200, 240)
 BLUE_L, FIRE_C, FIRE_L = (210, 236, 255), (250, 150, 60), (255, 230, 130)
@@ -512,7 +538,7 @@ def tilt(body, deg):
 
 def build(src, kind, width=None, colors=20, redraw_eyes=False, sand_src=None, mouth=(0.5, 0.62),
           spot_eyes=None, eye_size=2, eye_ring=False, cheeks=(), eye_lid=False, fly_src=None, flip=False,
-          fly_eyes=None, eye_color=EYE, peek=None, angry=False, hide_src=None, hide_eyes=None, skull=None):
+          fly_eyes=None, eye_color=EYE, peek=None, angry=False, hide_src=None, hide_eyes=None, skull=None, rear_src=None):
     spec = KINDS[kind]
     width = width or spec["width"]
     fig = load_figure(src, flip, spec.get("mist", False), spec.get("parts", 0.0), spec.get("work_w"))
@@ -531,6 +557,12 @@ def build(src, kind, width=None, colors=20, redraw_eyes=False, sand_src=None, mo
     base_h = round(width * fig.height / fig.width)
     if spec.get("max_h") and base_h > spec["max_h"]:
         width, base_h = round(width * spec["max_h"] / base_h), spec["max_h"]
+    rear = None
+    if rear_src:
+        # 앞발 든 그림 (역동 --rear): 대기 그림과 같은 키로, 눈은 --fly-eyes 자리
+        rear = load_figure(rear_src, flip, work_w=spec.get("work_w"))
+        rear_pal = rear.convert("RGB").quantize(colors, method=Image.Quantize.FASTOCTREE)
+        rear_w = round(base_h * rear.width / rear.height)
     frames = spec["frames"]
     bodies = Image.new("RGBA", (CELL * len(frames), CELL), (0, 0, 0, 0))
     over = Image.new("RGBA", bodies.size, (0, 0, 0, 0))
@@ -543,6 +575,9 @@ def build(src, kind, width=None, colors=20, redraw_eyes=False, sand_src=None, mo
             continue
         use_fly = f.get("fly") and fly is not None
         src_fig, src_pal, bw, bh = (fly, fly_pal, spec["fw"], fly_h) if use_fly else (fig, pal_img, width, base_h)
+        if f.get("rear") and rear is not None:
+            src_fig, src_pal, bw, bh = rear, rear_pal, rear_w, base_h
+            f = dict(f, rot=0, fly=True)
         if f.get("fly") and fly is None:
             # 날개 편 그림이 없으면 앉은 그림을 위아래로만 흔든다
             f = dict(f, sx=1.0, sy=1.0 if f["sy"] >= 1.0 else 0.94)
@@ -562,6 +597,13 @@ def build(src, kind, width=None, colors=20, redraw_eyes=False, sand_src=None, mo
         if f.get("rot"):
             W0, H0 = W, H
             body, mv = tilt(body, f["rot"])
+            if body.height > CELL - f["lift"]:
+                # 기울이면 칸보다 커지는 큰 칸 (켄타우로스 앞발 들기): 줄여서 다시 픽셀화한 뒤 기울인다
+                k = (CELL - f["lift"]) / body.height
+                W0, H0 = max(8, int(W0 * k)), max(8, int(H0 * k))
+                body = smooth_pixelize(src_fig, src_pal, W0, H0) if SMOOTH else pixelize(src_fig, src_pal, src_pal.getpalette(), W0, H0)
+                soften_edges(body)
+                body, mv = tilt(body, f["rot"])
             W, H = body.size
             H = min(H, CELL - f["lift"])
             move = lambda fx, fy, mv=mv, W0=W0, H0=H0, W=W, H=H: tuple(v / d for v, d in zip(mv(fx * W0, fy * H0), (W, H)))
@@ -645,7 +687,7 @@ def build(src, kind, width=None, colors=20, redraw_eyes=False, sand_src=None, mo
         left, top, W, H, move = p
         if eyes:
             draw_face(l, left, top, W, H, eyes, mouth)
-        use_eyes = fly_eyes if f.get("fly") and fly is not None else spot_eyes
+        use_eyes = fly_eyes if (f.get("fly") and fly is not None) or (f.get("rear") and rear is not None) else spot_eyes
         if use_eyes and move:
             use_eyes = [move(fx, fy) for fx, fy in use_eyes]
         if use_eyes:
@@ -709,6 +751,7 @@ def main():
     ap.add_argument("--fly-eyes", help="날개 편 그림의 눈 자리 (몸 비율 x,y, 옆모습이라 하나)")
     ap.add_argument("--eye-color", help="눈 색 r,g,b (요괴 까마귀 붉은 눈)")
     ap.add_argument("--flip", action="store_true", help="그림을 좌우로 뒤집는다 (참새가 오른쪽을 보고 나왔을 때)")
+    ap.add_argument("--rear", help="앞발 높이 든 그림 (general · lancer · foal 예고 · 일 칸). 눈 자리는 --fly-eyes")
     ap.add_argument("--hide", help="잠든 그루터기 그림 (stump 숨기 칸)")
     ap.add_argument("--hide-eyes", help="잠든 그루터기 그림에서 눈이 번쩍일 자리 (몸 비율 x1,y1,x2,y2)")
     ap.add_argument("--skull", help="will_o: 작은 해골을 찍을 자리 (몸 비율 x,y)")
@@ -724,7 +767,7 @@ def main():
     BACKDROP = a.backdrop
     SMOOTH = a.colors if a.smooth else 0
     if KINDS.get(a.kind, {}).get("cell"):
-        # 밀목부터는 종류마다 칸 크기가 다르다 (늑대 48 · 백호 96 · 아기 32)
+        # 밀목부터는 종류마다 칸 크기가 다르다 (늑대 48 · 창기병 64 · 백호 · 장군 96 · 아기 32)
         global CELL
         CELL = make_slime_sheet.CELL = KINDS[a.kind]["cell"]
     if a.hd:
@@ -750,7 +793,7 @@ def main():
     sheet = build(a.src, a.kind, a.width, a.colors, a.redraw_eyes, a.sand, mouth,
                   pairs(a.eyes), a.eye_size, a.eye_ring, pairs(a.cheeks), a.eye_lid, a.fly, a.flip, pairs(a.fly_eyes),
                   tuple(int(v) for v in a.eye_color.split(",")) if a.eye_color else EYE, a.peek, a.angry, a.hide, pairs(a.hide_eyes),
-                  (pairs(a.skull) or [None])[0])
+                  (pairs(a.skull) or [None])[0], a.rear)
     out = a.out or os.path.join(ROOT, "assets", "creatures", KINDS[a.kind]["out"] + ".png")
     sheet.save(out)
     print(out)
