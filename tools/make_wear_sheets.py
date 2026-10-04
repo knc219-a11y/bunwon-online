@@ -315,9 +315,9 @@ PART = {"hair": (40, 40, 40), "skin": (250, 200, 160), "top": (160, 160, 160), "
         "shoes": (120, 60, 20), "detail": (255, 255, 255)}  # import_ai_character.PART_COLORS 와 같음
 OLD_HEAD_X0, OLD_HEAD_X1, OLD_HEAD_TOP = 11, 36, 1
 # 멜빵바지처럼 바지가 가슴까지 올라오는 몸: 이 줄(칸 y)까지의 바지 픽셀도 옷(조끼 · 망토)이 덮는다
-BIB = {"hunter": 33, "protagonist": 33}
+BIB = {"hunter": 33}
 # 모자를 머리카락 위에서 몇 줄 옮길지 (사냥꾼은 정수리 올림머리 때문에 모자가 눈을 가려 2줄 올린다)
-HAT_DY = {"hunter": -2, "protagonist": -2}
+HAT_DY = {"hunter": -2}
 CUR_BODY = [None]
 
 
@@ -419,8 +419,11 @@ def fit_hat(draw_hat):
         hx0, hy0, hx1, _ = bbox(pp["hair"])
         band = [x for x, y in pp["hair"] if y == hy0 + 4]
         cx = (min(band) + max(band)) / 2 if band else (hx0 + hx1) / 2
-        ox = round(cx - (OLD_HEAD_X1 - OLD_HEAD_X0) / 2)
-        c = Warp(Canvas(img, col * CELL, row * CELL), ox, hy0 + 2 + HAT_DY.get(CUR_BODY[0], 0), 1.0, 1.0)
+        # 머리 크기에 맞춰 줄인다 (2026-10-04 6~7등신 주인공: 머리 폭 약 9px, 옛 머리 25px)
+        old_w = OLD_HEAD_X1 - OLD_HEAD_X0
+        k = min(1.0, (max(band) - min(band) + 2) / old_w) if band else 1.0
+        ox = cx - old_w * k / 2
+        c = Warp(Canvas(img, col * CELL, row * CELL), ox, hy0 + round((2 + HAT_DY.get(CUR_BODY[0], 0)) * k), k, k)
         draw_hat(c, row, 0)
     return fn
 

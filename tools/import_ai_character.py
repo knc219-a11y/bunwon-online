@@ -17,6 +17,12 @@
 실행: python3 tools/import_ai_character.py 그림.png --name player [--width 30] [--height 46] [--patch tools/char_parts/player_patch.json]
       그림 순서가 정면 · 옆 · 뒤면 --order down,side,up
       --preview 파일.png 를 주면 4배 확대 미리보기도 저장한다.
+      6~7등신 실제 비율 그림 (2026-10-04 그림 방향 "섞어서") 은 --tall, 검은 바지면 --dark-pants.
+
+주인공 (2026-10-04, 사용자 AI 그림 A 돌아온 젊은이: /mnt/project-files/design/protagonist/ai/ai_a.png)
+  python3 tools/import_ai_character.py ai_a.png --name protagonist --height 46 --width 18 --tall --hair-span 0.2 --front-hair 0.2
+  python3 tools/make_wear_sheets.py   (장비를 새 몸에 맞춤. 모자는 머리 폭에 맞춰 줄어든다)
+  B 개척단 단원 (ai_b.png) 은 같은 옵션 + --dark-pants
 """
 import argparse
 import colorsys
@@ -96,6 +102,15 @@ PROBES = {
 }
 # 부위가 나올 수 있는 높이 (0 머리끝 ~ 1 발끝)
 SPAN = {"hair": (0, 0.5), "skin": (0, 1), "top": (0.3, 0.85), "pants": (0.55, 1), "shoes": (0.85, 1)}
+# --tall: 6~7등신 실제 비율 그림 (2026-10-04 그림 방향 "섞어서", 주인공 돌아온 젊은이). 머리가 작아 부위 높이가 다르다
+TALL_PROBES = {
+    "hair": [(0.3, 0.7, 0.01, 0.05)],
+    "skin": [(0.42, 0.62, 0.13, 0.17)],
+    "top": [(0.25, 0.75, 0.22, 0.42)],
+    "pants": [(0.25, 0.45, 0.6, 0.75), (0.55, 0.75, 0.6, 0.75)],
+    "shoes": [(0.1, 0.9, 0.95, 1.0)],
+}
+TALL_SPAN = {"hair": (0, 0.2), "skin": (0, 1), "top": (0.14, 0.56), "pants": (0.48, 0.95), "shoes": (0.9, 1)}
 
 
 def part_refs(front):
@@ -109,7 +124,7 @@ def part_refs(front):
             for y in range(int(y0 * h), max(int(y0 * h) + 1, int(y1 * h))):
                 for x in range(int(x0 * w), max(int(x0 * w) + 1, int(x1 * w))):
                     p = px[x, min(y, h - 1)]
-                    if p[3] and (part in ("hair", "shoes") or lum(p) >= 60):
+                    if p[3] and (part in DARK_PARTS or lum(p) >= 60):
                         c[p[:3]] += 1
         count[part] = c
     refs = {}
@@ -128,13 +143,15 @@ def classify(c, yf, refs):
             d = sum((a - b) ** 2 for a, b in zip(c, r))
             if d < bd:
                 best, bd = part, d
-    if lum(c) < 60 and (best not in ("hair", "shoes") or (best == "hair" and yf > DARK_HAIR_MAX)):
+    if lum(c) < 60 and (best not in DARK_PARTS or (best == "hair" and yf > DARK_HAIR_MAX)):
         return None
     return best
 
 
 # 이 높이 아래의 어두운 선은 머리카락으로 치지 않는다 (체크무늬 셔츠 선이 머리카락이 되지 않게). --dark-hair
 DARK_HAIR_MAX = 1.0
+# 어두워도 선이 아니라 그 부위로 치는 곳. --dark-pants 면 검은 바지도 (개척단 단원)
+DARK_PARTS = ["hair", "shoes"]
 
 
 def soften(c, lift, sat):
@@ -466,11 +483,19 @@ def main():
     ap.add_argument("--front-hair", type=float, default=0.5, help="정면에서 머리카락이 내려올 수 있는 높이 (포니테일은 앞에서 안 보여 0.4 쯤)")
     ap.add_argument("--dark-hair", type=float, default=1.0, help="이 높이 아래 어두운 선은 머리카락이 아니다 (체크무늬 셔츠면 0.42 쯤)")
     ap.add_argument("--sleeves", action="store_true", help="윗도리 색을 소매(팔 윗쪽)에서도 뽑는다. 멜빵바지처럼 가슴을 다른 옷이 덮을 때")
+    ap.add_argument("--tall", action="store_true", help="6~7등신 실제 비율 그림 (부위 높이를 작은 머리에 맞춤). --hair-span 은 0.2 쯤")
+    ap.add_argument("--dark-pants", action="store_true", help="검은 바지: 어두운 색도 바지로 친다")
     ap.add_argument("--order", default="down,up,side", help="그림 속 왼쪽부터 순서 (정면 down · 뒷모습 up · 옆 side). 예: down,side,up")
     a = ap.parse_args()
 
     global DARK_HAIR_MAX
     DARK_HAIR_MAX = a.dark_hair
+    if a.dark_pants:
+        DARK_PARTS.append("pants")
+    if a.tall:
+        PROBES.clear()
+        PROBES.update(TALL_PROBES)
+        SPAN.update(TALL_SPAN)
     if a.sleeves:
         PROBES["top"] = PROBES["top"] + [(0.08, 0.22, 0.44, 0.54), (0.78, 0.92, 0.44, 0.54)]
     figs = split_figures(white_to_alpha(Image.open(a.src)))
