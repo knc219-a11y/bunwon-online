@@ -13,7 +13,7 @@ const IDLE_COLUMNS: Array[int] = [0, 1]
 const HOP_COLUMNS: Array[int] = [2, 3, 4, 5]
 const BOTTOM_Y := 8
 ## 새 크기 시트 (2026-10-04 "섞어서", 사람 키 46px 에 맞춘 몬스터: 늑대 48칸 · 백호 96칸). 발밑 그림자를 몸 크기에 맞춰 넓힌다
-const TALL_CELLS: Array[int] = [48, 96]
+const TALL_CELLS: Array[int] = [48, 64, 80, 96]
 
 var hp := Config.WILD_SLIME_HP * Config.DMG_UNIT
 var max_hp := Config.WILD_SLIME_HP * Config.DMG_UNIT
@@ -146,6 +146,11 @@ var boss_frame := Vector2i.ZERO
 ## 시트 한 칸 크기 (32 또는 대장 고해상 58) · 스프라이트를 이 노드 안에서 키우는 배율.
 ## 2026-10-01 사용자: "보스몬스터의 도트가 너무 깨져보이는 현상" → 화면에서 원본 1px 이 늘 1px (고해상) 또는 2px (32칸 대장) 이 되게.
 var _frame := FRAME_SIZE
+## 큰 칸 시트 (TALL_CELLS): 첫 칸 그림 키 (노드 좌표). 체력 줄 · 대장 이름표를 머리 위로 올린다 (켄타우로스는 사람보다 크다)
+var _fig_h := 0.0
+## 큰 칸 시트: 발 (아래 15% 줄) 가운데가 칸 가운데에서 벗어난 만큼 (텍스처 px). 창을 앞으로 뻗은 창기병은 말이 뒤쪽에 있어서
+## 그림을 이만큼 밀어 발이 노드 자리 (그림자 · 맞는 자리) 에 오게 한다
+var _feet_dx := 0.0
 var _px := 1.0
 ## 허수아비 장수 짚단 던지기: 떨어질 짚단들 {at, t = 남은 시간}, 던진 횟수 (두 번에 한 번 까마귀 부르기)
 var _bales: Array[Dictionary] = []
@@ -283,6 +288,22 @@ func _apply_sheet() -> void:
 		_px = net / scale.x
 		_sprite.scale = Vector2.ONE * _px
 		_sprite.position = Vector2(-_frame * _px / 2.0, BOTTOM_Y - _frame * _px)
+		_fig_h = 0.0
+		if _frame in TALL_CELLS:
+			var img := sheet.get_image()
+			var used := img.get_region(Rect2i(0, 0, _frame, _frame)).get_used_rect()
+			_fig_h = (_frame - used.position.y) * _px
+			var sum := 0.0
+			var n := 0
+			for y in range(int(_frame * 0.85), _frame):
+				for x in _frame:
+					if img.get_pixel(x, y).a > 0.5:
+						sum += x
+						n += 1
+			_feet_dx = sum / n - _frame / 2.0 if n > 0 else 0.0
+		else:
+			_feet_dx = 0.0
+		_sprite.offset.x = 0.0
 
 
 ## 짝 대장으로 바꾼다 (도마리 지하여장군: 구역 데이터 partner = {name, sheet, pattern}). make_boss 뒤에 부른다.
@@ -682,6 +703,8 @@ func tick(delta: float, target: Vector2) -> void:
 		if lancer and _recover > 0.0:
 			# 돌격 뒤 돌아서는 동안은 달려온 쪽을 그대로 본다
 			_sprite.flip_h = _lunge_dir.x < 0.0
+	if _feet_dx != 0.0:
+		_sprite.offset.x = _feet_dx if _sprite.flip_h else -_feet_dx
 	if boss_frame != Vector2i.ZERO:
 		z_index = int(sort_y())
 		_sprite.modulate = _tint
@@ -1164,7 +1187,7 @@ func _draw() -> void:
 	draw_circle(Vector2.ZERO, _frame * _px * 0.4 if _frame in TALL_CELLS else 10.0, Color(0.27, 0.16, 0.33, 0.25))
 	draw_set_transform(Vector2.ZERO)
 	# 남은 체력 (맞은 뒤에만 보임)
-	var top := -boss_frame.y + 4.0 if boss_frame != Vector2i.ZERO else 0.0
+	var top := -boss_frame.y + 4.0 if boss_frame != Vector2i.ZERO else minf(0.0, BOTTOM_Y - _fig_h + 26.0)
 	if hp < max_hp:
 		draw_rect(Rect2(-10, -24 + top, 20, 3), Color(0.25, 0.2, 0.2))
 		draw_rect(Rect2(-10, -24 + top, 20.0 * hp / max_hp, 3), Color(0.9, 0.5, 0.3))
@@ -1187,9 +1210,10 @@ func _draw() -> void:
 		var fw := -1.0 if _sprite.flip_h else 1.0
 		draw_circle(Vector2(fw * 18.0, -22.0) / scale.x, (7.0 if int(_anim_time * 12.0) % 2 == 0 else 3.0) / scale.x, Color(0.5, 1.0, 0.55, 0.45))
 	if _windup >= 0.0 or _aim >= 0.0 or _log_aim >= 0.0 or _dim >= 0.0:
-		draw_circle(Vector2(0, -30), 6.0, Color(1.0, 0.92, 0.5))
-		draw_arc(Vector2(0, -30), 6.0, 0, TAU, 16, Color(0.6, 0.15, 0.1), 1.0)
-		draw_string(ThemeDB.fallback_font, Vector2(-2.5, -25), "!", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.85, 0.15, 0.1))
+		# 큰 칸 (켄타우로스) 은 top 만큼 머리 위로
+		draw_circle(Vector2(0, -30 + top), 6.0, Color(1.0, 0.92, 0.5))
+		draw_arc(Vector2(0, -30 + top), 6.0, 0, TAU, 16, Color(0.6, 0.15, 0.1), 1.0)
+		draw_string(ThemeDB.fallback_font, Vector2(-2.5, -25 + top), "!", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.85, 0.15, 0.1))
 	# 혀 채찍: 뻗은 혀 (입 → 혀끝, 크기 배율을 되돌려 월드 길이로)
 	if _lash > 0.0:
 		var tip := (_tongue_to - position) / scale.x

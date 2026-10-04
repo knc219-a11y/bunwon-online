@@ -10,7 +10,8 @@
   baby_foal.png: 아기 망아지 (땅)
 궁수 · 불갈기 역마 후보 그림은 프로젝트 파일 design/act4/ 에만 남김.
 
-실행: python3 tools/make_yeokdong_sheets.py [--preview 파일]  (Pillow 필요)
+2026-10-04 새 크기 AI 그림으로 바뀐 시트 (AI_DONE) 는 --force 일 때만 assets 에 쓴다.
+실행: python3 tools/make_yeokdong_sheets.py [--preview 파일] [--force]  (Pillow 필요)
 """
 import os
 import sys
@@ -207,6 +208,9 @@ GLOW = (255, 120, 80)
 GOLD = (236, 196, 84)
 
 
+AI_DONE = {"wild_post_general", "wild_lancer", "baby_foal"}
+
+
 def make():
     out = {
         "wild_lancer": sheet(centaur(BAY, s=1.35, bx=19, by=35, base=46, eye=GLOW, skin=(170, 150, 140), armor=(120, 60, 50), hat=jeollip((40, 36, 44), (220, 60, 50)), weapon=spear((150, 110, 70), (220, 220, 230))), cell=48),
@@ -215,6 +219,10 @@ def make():
     }
     os.makedirs(OUT, exist_ok=True)
     for k, img in out.items():
+        # 2026-10-04: 사용자 AI 그림 (새 크기, tools/import_ai_monster.py 의 역동 줄) 으로 바뀐 시트는 --force 일 때만 덮어쓴다
+        if k in AI_DONE and "--force" not in sys.argv:
+            print(k, "건너뜀 (AI 그림이 있음, 옛 코드 그림으로 덮으려면 --force)")
+            continue
         img.save(os.path.join(OUT, k + ".png"))
         print(k)
     return out

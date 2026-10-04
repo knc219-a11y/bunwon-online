@@ -3491,7 +3491,7 @@ func _yeokdong_checks() -> void:
 		o.queue_free()
 	h.slimes.clear()
 	var b: WildSlime = h.spawn_boss()
-	_check(b.boss and b.pattern == &"general" and b.title == "역마 장군" and is_equal_approx(b._sprite.scale.x * b.scale.x, 2.0), "역마 장군 (32칸 시트를 정수 2배로)")
+	_check(b.boss and b.pattern == &"general" and b.title == "역마 장군" and b._frame == 96 and is_equal_approx(b._sprite.scale.x * b.scale.x, 1.0), "역마 장군 (96칸 새 크기 시트를 늘이지 않고 1:1)")
 	h._invulnerable = 0.0
 	b.position = m.player.feet() + Vector2(120, 0)
 	b.ai_enabled = true
