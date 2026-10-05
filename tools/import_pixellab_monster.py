@@ -11,6 +11,9 @@ import_ai_monster.py 는 큰 AI 그림을 줄여서 픽셀로 만든다. PixelLa
   python3 tools/import_pixellab_monster.py shield_07.png --out wild_shield_lizard --shield 47,35,12.4
   python3 tools/import_pixellab_monster.py shield_12.png --out wild_shield_lizard_b --shield 46,35,12.6
 그림 원본: /mnt/project-files/design/guiyeo-tall/pixellab/shield_*.png
+  (2026-10-05 SpriteCook animate_game_art pixel-engine-v1.5 창 찌르기 8칸을 6 · 7 칸에 쓰려고 80칸으로 키움:
+   python3 tools/import_pixellab_monster.py shield_07_onetail.png --out wild_shield_lizard --shield 47,35,12.4
+       --cell 80 --thrust spritecook/thrust_v3.webp   (13번은 thrust_b.webp, 칸 속 자리 --thrust-at 은 그림마다 확인))
   (2026-10-05 원본은 꼬리가 몸 앞뒤로 두 개라서 앞 꼬리를 지운 shield_*_onetail.png 를 쓴다)
   python3 tools/import_pixellab_monster.py shield_07_onetail.png --out wild_shield_lizard --shield 47,35,12.4
   python3 tools/import_pixellab_monster.py shield_12_onetail.png --out wild_shield_lizard_b --shield 46,35,12.6
@@ -156,6 +159,32 @@ def build(img, cx, cy, r):
     return frames
 
 
+def with_thrust(img, frames, path, cell, which, at):
+    """원본 칸을 cell 칸 가운데 아래에 놓고, 6 · 7 칸은 SpriteCook 움직임 칸으로 바꾼다.
+    움직임은 원본보다 6px 큰 칸 (가장자리 여백) 이라 창이 앞으로 길게 나간다: 그래서 칸을 키운다 (늘이지 않음).
+    색은 원본 색에 다시 맞춘다 (움직임 칸은 조금 바랜 색으로 나온다)."""
+    from PIL import ImageSequence
+    w, h = img.size
+    ox, oy = (cell - w) // 2, cell - h
+    dx, dy = (int(v) for v in at.split(","))
+    pal = img.convert("RGB").quantize(256, method=Image.Quantize.MEDIANCUT)
+    moves = [f.convert("RGBA").copy() for f in ImageSequence.Iterator(Image.open(path))]
+    out = []
+    for f in frames:
+        o = Image.new("RGBA", (cell, cell), (0, 0, 0, 0))
+        o.alpha_composite(f, (ox, oy))
+        out.append(o)
+    for col, k in zip((6, 7), (int(v) for v in which.split(","))):
+        m = moves[k]
+        rgb = m.convert("RGB").quantize(palette=pal, dither=Image.Dither.NONE).convert("RGB")
+        snap = Image.new("RGBA", m.size, (0, 0, 0, 0))
+        snap.paste(rgb, (0, 0), m.getchannel("A").point(lambda v: 255 if v > 110 else 0))
+        o = Image.new("RGBA", (cell, cell), (0, 0, 0, 0))
+        o.alpha_composite(snap, (ox - dx, oy - dy))
+        out[col] = o
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("src")
@@ -163,6 +192,9 @@ def main():
     ap.add_argument("--shield", help="방패 원: 가운데 x,y,반지름 (없으면 7 칸은 숨 고름)")
     ap.add_argument("--height", type=int, help="이 키로 줄인다 (큰 그림일 때)")
     ap.add_argument("--cell", type=int, help="칸 크기 (없으면 그림 높이)")
+    ap.add_argument("--thrust", help="SpriteCook 창 찌르기 움직임 (webp 8칸): 6 · 7 칸을 이걸로 바꾼다")
+    ap.add_argument("--thrust-frames", default="3,5", help="6 칸 (창 당김) · 7 칸 (찌른 채 방패 비킴) 에 쓸 움직임 칸 번호")
+    ap.add_argument("--thrust-at", default="5,6", help="움직임 칸 속에서 원본 그림 왼쪽 위 자리 x,y")
     ap.add_argument("--flip", action="store_true")
     ap.add_argument("--preview")
     a = ap.parse_args()
@@ -171,11 +203,13 @@ def main():
         img = img.transpose(Image.FLIP_LEFT_RIGHT)
     if a.height:
         img = shrink(img, a.height)
-    if a.cell:
+    if a.cell and not a.thrust:
         img = place(img, a.cell)
     cx, cy, r = (float(v) for v in a.shield.split(",")) if a.shield else (0, 0, 0)
     frames = build(img, int(cx), int(cy), r)
-    c = img.size[1]
+    if a.thrust:
+        frames = with_thrust(img, frames, a.thrust, a.cell, a.thrust_frames, a.thrust_at)
+    c = frames[0].size[1]
     sheet = Image.new("RGBA", (c * len(frames), c), (0, 0, 0, 0))
     for i, f in enumerate(frames):
         sheet.alpha_composite(f, (i * c, 0))
