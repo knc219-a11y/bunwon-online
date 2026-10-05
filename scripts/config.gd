@@ -707,6 +707,8 @@ const HUNT_ZONES: Array[Dictionary] = [
 		## 대장 도마뱀 족장 (chief): 전쟁 북 (모든 방패 금빛 CHIEF_GOLD_TIME + 도마뱀 CHIEF_CALL 마리) → 꼬리 휘두르기 (둘레 원),
 		## 체력 절반부터 창 던지기 CHIEF_SPEARS 개.
 		shield = true,
+		## 방패 도마뱀 두 모습 (2026-10-05 사용자: PixelLab 16장 중 둘 다 쓰자): 한 마리마다 sheet · sheet_alts 중 하나를 고른다
+		sheet_alts = ["res://assets/creatures/wild_shield_lizard_b.png"],
 		## 알: 아기 도마뱀 (땅, 장보기 = 공급함 판매값 +20%, 동행 냄비뚜껑 방패). 대장도 가끔 같은 알.
 		egg = "res://data/creatures/species/lizard.tres", boss_egg = "res://data/creatures/species/lizard.tres",
 		egg_chance = 0.012, boss_egg_chance = 0.2,

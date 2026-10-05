@@ -220,7 +220,9 @@ func setup_zone(zone: int) -> void:
 	hp = HunterSkills.monster_hp(zone, z.hp)
 	max_hp = hp
 	_tint = z.monster_tint
-	sheet = load(z.sheet)
+	# 모습이 여럿인 구역 (sheet_alts): 한 마리마다 하나를 고른다
+	var sheets: Array = [z.sheet] + z.get("sheet_alts", [])
+	sheet = load(sheets.pick_random())
 	buried = z.burrow
 	disguise = z.get("disguise", false)
 	damage = HunterSkills.monster_damage(zone, z.get("damage", 1))
