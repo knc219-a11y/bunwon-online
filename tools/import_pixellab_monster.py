@@ -11,6 +11,15 @@ import_ai_monster.py 는 큰 AI 그림을 줄여서 픽셀로 만든다. PixelLa
   python3 tools/import_pixellab_monster.py shield_07.png --out wild_shield_lizard --shield 47,35,12.4
   python3 tools/import_pixellab_monster.py shield_12.png --out wild_shield_lizard_b --shield 46,35,12.6
 그림 원본: /mnt/project-files/design/guiyeo-tall/pixellab/shield_*.png
+  (2026-10-05 원본은 꼬리가 몸 앞뒤로 두 개라서 앞 꼬리를 지운 shield_*_onetail.png 를 쓴다)
+  python3 tools/import_pixellab_monster.py shield_07_onetail.png --out wild_shield_lizard --shield 47,35,12.4
+  python3 tools/import_pixellab_monster.py shield_12_onetail.png --out wild_shield_lizard_b --shield 46,35,12.6
+
+도마뱀 족장 (2026-10-05, SpriteCook generate_game_art 124칸 4장 중 사용자가 2번 = chief_01 을 고름):
+  124px 그림을 키 80px 로 줄인다 (--height: BOX 로 줄이고 원본 색에 다시 맞춘다), 96칸 가운데 아래에 놓는다.
+  방패를 내리는 칸이 없으므로 7 은 숨 고름 (윗몸을 2px 눌러 앞으로 숙임).
+  python3 tools/import_pixellab_monster.py chief_01.png --out wild_lizard_chief --height 80 --cell 96
+  그림 원본: /mnt/project-files/design/guiyeo-tall/spritecook/chief_*.png
 """
 import argparse
 from pathlib import Path
@@ -106,6 +115,26 @@ def shield_down(img, cx, cy, r, dy=5, dx=-1):
     return body
 
 
+def shrink(img, height, colors=256):
+    """BOX 로 줄이고, 원본 색 몇 가지에 다시 맞춰 흐려진 색을 픽셀 색으로 돌린다."""
+    img = img.crop(img.getbbox())
+    w = round(img.width * height / img.height)
+    pal = img.convert("RGB").quantize(colors, method=Image.Quantize.MEDIANCUT)
+    small = img.resize((w, height), Image.BOX)
+    rgb = small.convert("RGB").quantize(palette=pal, dither=Image.Dither.NONE).convert("RGB")
+    out = Image.new("RGBA", small.size, (0, 0, 0, 0))
+    a = small.getchannel("A").point(lambda v: 255 if v > 110 else 0)
+    out.paste(rgb, (0, 0), a)
+    return out
+
+
+def place(img, cell):
+    """cell 칸 가운데 아래에 놓는다."""
+    out = Image.new("RGBA", (cell, cell), (0, 0, 0, 0))
+    out.alpha_composite(img, ((cell - img.width) // 2, cell - img.height))
+    return out
+
+
 def build(img, cx, cy, r):
     h = img.size[1]
     ys = [y for y in range(h) for x in range(img.size[0]) if img.getpixel((x, y))[3]]
@@ -122,7 +151,7 @@ def build(img, cx, cy, r):
         stride(vshift(img, foot, -1), foot, -1),
         stride(img, foot, 1),
         shear(img, lean_back),
-        shear(shield_down(img, cx, cy, r), lean_fwd),
+        shear(shield_down(img, cx, cy, r), lean_fwd) if r else shear(vshift(img, hip, 2), lean_fwd),
     ]
     return frames
 
@@ -131,14 +160,20 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("src")
     ap.add_argument("--out", required=True)
-    ap.add_argument("--shield", required=True, help="방패 원: 가운데 x,y,반지름")
+    ap.add_argument("--shield", help="방패 원: 가운데 x,y,반지름 (없으면 7 칸은 숨 고름)")
+    ap.add_argument("--height", type=int, help="이 키로 줄인다 (큰 그림일 때)")
+    ap.add_argument("--cell", type=int, help="칸 크기 (없으면 그림 높이)")
     ap.add_argument("--flip", action="store_true")
     ap.add_argument("--preview")
     a = ap.parse_args()
     img = Image.open(a.src).convert("RGBA")
     if a.flip:
         img = img.transpose(Image.FLIP_LEFT_RIGHT)
-    cx, cy, r = (float(v) for v in a.shield.split(","))
+    if a.height:
+        img = shrink(img, a.height)
+    if a.cell:
+        img = place(img, a.cell)
+    cx, cy, r = (float(v) for v in a.shield.split(",")) if a.shield else (0, 0, 0)
     frames = build(img, int(cx), int(cy), r)
     c = img.size[1]
     sheet = Image.new("RGBA", (c * len(frames), c), (0, 0, 0, 0))

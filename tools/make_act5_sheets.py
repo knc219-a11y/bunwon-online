@@ -537,7 +537,7 @@ out = {
     "baby_gold_dragon": sheet(frames10(lambda **k: baby_gold(**k)), 32),
 }
 # 2026-10-04: 사용자 AI 그림 (새 크기, tools/import_ai_monster.py 의 귀여리 줄) 으로 바뀐 시트는 --force 일 때만 덮어쓴다
-AI_DONE = {"wild_shield_lizard"}  # 2026-10-05 PixelLab 그림 (tools/import_pixellab_monster.py)
+AI_DONE = {"wild_shield_lizard", "wild_lizard_chief"}  # 2026-10-05 PixelLab 방패 도마뱀 · SpriteCook 족장 (tools/import_pixellab_monster.py)
 for k, img in out.items():
     if k in AI_DONE and "--force" not in sys.argv:
         print(k, "건너뜀 (AI 그림이 있음, 옛 코드 그림으로 덮으려면 --force)")
