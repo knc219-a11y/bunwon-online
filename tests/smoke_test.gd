@@ -281,7 +281,7 @@ func _ready() -> void:
 	farmer.attack(&"melee", 0.26, true)
 	_check(farmer.frame_coords().x == farmer.attack_columns(&"melee")[-1], "되베기는 칸을 거꾸로")
 	farmer.attack(&"bow", 0.2)
-	_check(farmer.frame_coords().x == Character.ATTACK_COLUMNS[&"bow"][0], "활 공격 모션 칸")
+	_check(farmer.frame_coords().x == farmer.attack_columns(&"bow")[0], "활 공격 모션 칸")
 	farmer.stop_attack()
 	farmer.moving = false
 	farmer.facing = Vector2i.UP
@@ -290,11 +290,13 @@ func _ready() -> void:
 	farmer.facing = Vector2i.LEFT
 	var f := farmer.frame_coords()
 	_check(f.y == 2 and f.z == 1 and f.x in farmer.walk_columns(), "왼쪽 걷기는 옆모습 반전")
-	# 주인공 A 는 SpriteCook 걷기 8칸 · 칼 6칸 (2026-10-05): 22칸
-	_check(farmer.sheet != null and farmer.sheet.get_width() == 48 * 22 and farmer.sheet.get_height() == 48 * 3, "주인공 A 시트 1056x144 (대기 · 걷기 · 공격 16칸 + 걷기 4 · 칼 2)")
-	_check(farmer.walk_columns() == Character.WALK8_COLUMNS and farmer.attack_columns(&"melee") == Character.MELEE6_COLUMNS, "주인공 A 걷기 8칸 · 칼 6칸")
-	var own_melee: Texture2D = load("res://assets/weapons/protagonist_melee.png")
-	_check(own_melee != null and own_melee.get_width() == Character.WEAPON_FRAME * 22, "주인공 A 칼 덧그림 (칸 밖 칼 · 팔) 22칸")
+	# 주인공 A 는 SpriteCook 걷기 8칸 · 칼 · 활 · 지팡이 6칸씩 (2026-10-05): 28칸
+	_check(farmer.sheet != null and farmer.sheet.get_width() == 48 * 28 and farmer.sheet.get_height() == 48 * 3, "주인공 A 시트 1344x144 (대기 · 걷기 · 공격 16칸 + 걷기 4 · 공격 8)")
+	_check(farmer.walk_columns() == Character.WALK8_COLUMNS, "주인공 A 걷기 8칸")
+	for kind: StringName in Character.ATTACK6_COLUMNS:
+		_check(farmer.attack_columns(kind) == Character.ATTACK6_COLUMNS[kind], "주인공 A %s 공격 6칸" % kind)
+		var own: Texture2D = load("res://assets/weapons/protagonist_%s.png" % kind)
+		_check(own != null and own.get_width() == Character.WEAPON_FRAME * 28, "주인공 A %s 덧그림 (칸 밖 무기 · 팔) 28칸" % kind)
 	for kind: StringName in Character.ATTACK_COLUMNS:
 		var wt: Texture2D = load("res://assets/weapons/%s.png" % kind)
 		_check(wt != null and wt.get_width() == Character.WEAPON_FRAME * 16 and wt.get_height() == Character.WEAPON_FRAME * 3, "무기 덧그림 %s 1280x240" % kind)

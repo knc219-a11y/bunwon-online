@@ -14,6 +14,11 @@ generate_game_art 로 앞 · 뒤 · 옆 4장 뽑아 사용자가 2번을 고르�
   머리 가운데를 칸 가운데에, 발끝을 칸 바닥에 놓는다 (움직임 칸은 몸이 옆으로 떠다니므로).
 부위 지도는 import_ai_character.part_map 을 칸마다 돌린다 (--tall 부위 높이, 머리카락 0.2).
 
+활 · 지팡이 (2026-10-05 사용자 "활쏘는 모션이 너무 부자연스러운데 인터넷 서칭해서 자세 다시 한번 확인해봐"):
+  양궁 기본 자세 (몸을 과녁에 옆으로 열고 · 활 팔을 끝까지 뻗고 · 시위를 턱까지 · 팔꿈치는 화살과 일직선 · 쏜 뒤에도 활 팔은 그대로) 로 다시 뽑아
+  활은 열 10-12 · 22-24, 지팡이는 13-15 · 25-27 에 6칸씩 (Character.ATTACK6_COLUMNS). 시트는 28칸이 된다.
+  실행: python3 tools/import_spritecook_hero.py --attack bow --attack staff --colors 40
+
 칼 공격 (2026-10-05 사용자 "칼만 먼저"): 방향마다 animate_game_art 8칸 (melee_{down,up,side}.webp, 칼을 뽑아 한 번 벤다).
   움직임 2-7 칸 (뽑기 · 치켜들기 · 베기 · 마무리 · 거두기) 을 근거리 열 6-9 · 20-21 에 넣는다 (Character.MELEE6_COLUMNS).
   칼 · 팔이 48 칸 밖으로 나가므로 나눈다: 대기 몸 윤곽 (2px 넓힘) 안 = 몸 칸 (장비가 맞춰진다),
@@ -110,8 +115,8 @@ WCELL = 80
 # 공격 종류마다: 움직임 파일 이름, 쓸 움직임 칸, 넣을 열 (Character.MELEE6 · BOW6 · STAFF6_COLUMNS)
 ATTACKS = {
     "melee": ("melee_{d}.webp", MELEE_FRAMES, MELEE6_COLUMNS),
-    "bow": ("bowstaff/bow_{d}.webp", [2, 3, 4, 5, 6, 7], [10, 11, 12, 22, 23, 24]),
-    "staff": ("bowstaff/staff_{d}.webp", [2, 3, 4, 5, 6, 7], [13, 14, 15, 25, 26, 27]),
+    "bow": ("bowstaff/bow_{d}.webp", [1, 2, 3, 5, 6, 7], [10, 11, 12, 22, 23, 24]),
+    "staff": ("bowstaff/staff_{d}.webp", [1, 2, 3, 5, 6, 7], [13, 14, 15, 25, 26, 27]),
 }
 SHEET_COLS = 28
 
@@ -135,10 +140,16 @@ def attack(a, kind):
         wide.paste(sheet, (0, 0))
         wp.paste(parts, (0, 0))
         sheet, parts = wide, wp
-    stills = {d: solid(Image.open(os.path.join(a.src, f"hero_a_{d}.png")).convert("RGBA")) for d in DIRS}
-    strip = Image.new("RGBA", (sum(s.width for s in stills.values()), max(s.height for s in stills.values())))
+    stills = [solid(Image.open(os.path.join(a.src, f"hero_a_{d}.png")).convert("RGBA")) for d in DIRS]
+    # 무기 (활 · 지팡이) 색이 몸 팔레트에 없으면 까맣게 뭉개지므로 움직임 칸도 팔레트에 넣는다
+    for d in DIRS:
+        path = os.path.join(a.src, pattern.format(d=d))
+        if os.path.exists(path):
+            fr = list(ImageSequence.Iterator(Image.open(path)))
+            stills += [solid(fr[min(i, len(fr) - 1)].convert("RGBA")) for i in frames_used[1:3]]
+    strip = Image.new("RGBA", (sum(s.width for s in stills), max(s.height for s in stills)))
     x = 0
-    for s in stills.values():
+    for s in stills:
         strip.alpha_composite(s, (x, 0))
         x += s.width
     pal = strip.convert("RGB").quantize(a.colors, method=Image.Quantize.MEDIANCUT)
