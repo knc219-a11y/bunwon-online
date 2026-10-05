@@ -23,6 +23,10 @@ import_ai_monster.py 는 큰 AI 그림을 줄여서 픽셀로 만든다. PixelLa
   방패를 내리는 칸이 없으므로 7 은 숨 고름 (윗몸을 2px 눌러 앞으로 숙임).
   python3 tools/import_pixellab_monster.py chief_01.png --out wild_lizard_chief --height 80 --cell 96
   그림 원본: /mnt/project-files/design/guiyeo-tall/spritecook/chief_*.png
+
+아기 도마뱀 (2026-10-05, SpriteCook generate_game_art 4장 중 사용자가 3번 = baby_02 를 고름, 족장 그림을 화풍 참고로):
+  python3 tools/import_pixellab_monster.py baby_02.png --out baby_lizard --height 20 --cell 32 --baby
+  그림 원본: /mnt/project-files/design/guiyeo-tall/spritecook/baby_*.png
 """
 import argparse
 from pathlib import Path
@@ -159,6 +163,24 @@ def build(img, cx, cy, r):
     return frames
 
 
+def lift(img, d):
+    """통째로 d px 위로 (깡충)."""
+    out = Image.new("RGBA", img.size, (0, 0, 0, 0))
+    out.alpha_composite(img.crop((0, d, img.width, img.height)), (0, 0))
+    return out
+
+
+def build_baby(img):
+    """아기 네발 10칸: 0-1 대기, 2-5 걷기, 6-9 일 (냄비뚜껑 들고 장보기: 깡충 · 고개 들기)."""
+    frames = build(img, 0, 0, 0)[:6]
+    h = img.size[1]
+    ys = [y for y in range(h) for x in range(img.size[0]) if img.getpixel((x, y))[3]]
+    top, bottom = min(ys), max(ys)
+    head_up = lambda y: -1 if y < top + (bottom - top) * 0.45 else 0
+    frames += [lift(shear(img, head_up), 2), frames[3], lift(shear(img, head_up), 2), img]
+    return frames
+
+
 def with_thrust(img, frames, path, cell, which, at):
     """원본 칸을 cell 칸 가운데 아래에 놓고, 6 · 7 칸은 SpriteCook 움직임 칸으로 바꾼다.
     움직임은 원본보다 6px 큰 칸 (가장자리 여백) 이라 창이 앞으로 길게 나간다: 그래서 칸을 키운다 (늘이지 않음).
@@ -195,6 +217,7 @@ def main():
     ap.add_argument("--thrust", help="SpriteCook 창 찌르기 움직임 (webp 8칸): 6 · 7 칸을 이걸로 바꾼다")
     ap.add_argument("--thrust-frames", default="3,5", help="6 칸 (창 당김) · 7 칸 (찌른 채 방패 비킴) 에 쓸 움직임 칸 번호")
     ap.add_argument("--thrust-at", default="5,6", help="움직임 칸 속에서 원본 그림 왼쪽 위 자리 x,y")
+    ap.add_argument("--baby", action="store_true", help="아기 네발 10칸 (대기 2 · 걷기 4 · 일 4)")
     ap.add_argument("--flip", action="store_true")
     ap.add_argument("--preview")
     a = ap.parse_args()
@@ -206,7 +229,7 @@ def main():
     if a.cell and not a.thrust:
         img = place(img, a.cell)
     cx, cy, r = (float(v) for v in a.shield.split(",")) if a.shield else (0, 0, 0)
-    frames = build(img, int(cx), int(cy), r)
+    frames = build_baby(img) if a.baby else build(img, int(cx), int(cy), r)
     if a.thrust:
         frames = with_thrust(img, frames, a.thrust, a.cell, a.thrust_frames, a.thrust_at)
     c = frames[0].size[1]
