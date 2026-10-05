@@ -12,7 +12,7 @@
 칸은 80 x 80 (몸 칸 48 의 사방 16px 여유, 가운데 같음) 이라 치켜든 칼 · 지팡이가 잘리지 않는다.
 휘두르는 칸에는 칼끝이 지나간 자리에 옅은 잔상 (smear) 을 함께 그린다.
 
-실행: python3 tools/make_attack_frames.py   (import_ai_character.py · --rewalk 뒤, make_wear_sheets.py 앞에)
+실행: python3 tools/make_attack_frames.py   (import_ai_character.py · --rewalk · import_spritecook_hero.py 뒤, make_wear_sheets.py 앞에)
       python3 tools/make_attack_frames.py --preview 그림.png   (4배 확대 미리보기)
 """
 import math
@@ -27,6 +27,7 @@ ROOT = os.path.join(os.path.dirname(__file__), "..")
 PARTS_DIR = os.path.join(os.path.dirname(__file__), "char_parts")
 BODIES = ["protagonist", "protagonist_b"]
 BASE_COLS = 6
+SHARED_WEAPON_BODY = "protagonist_b"
 PART = {"hair": (40, 40, 40), "skin": (250, 200, 160), "top": (160, 160, 160), "pants": (70, 100, 200),
         "shoes": (120, 60, 20)}
 LABEL = {v: k for k, v in PART.items()}
@@ -410,10 +411,16 @@ def build(body):
     sheet = Image.open(sheet_path).convert("RGBA")
     parts = Image.open(parts_path).convert("RGBA")
     base_box = (0, 0, CELL * BASE_COLS, CELL * ROWS)
-    new_sheet = Image.new("RGBA", (CELL * COLS_ALL, CELL * ROWS), (0, 0, 0, 0))
+    # 공격 칸 뒤 (16 열부터) 에 걷기 칸이 더 있으면 그대로 둔다 (SpriteCook 주인공 A 걷기 8칸: import_spritecook_hero.py)
+    cols = max(COLS_ALL, sheet.width // CELL)
+    new_sheet = Image.new("RGBA", (CELL * cols, CELL * ROWS), (0, 0, 0, 0))
     new_parts = Image.new("RGBA", new_sheet.size, (0, 0, 0, 0))
     new_sheet.paste(sheet.crop(base_box), (0, 0))
     new_parts.paste(parts.crop(base_box), (0, 0))
+    if cols > COLS_ALL:
+        extra = (CELL * COLS_ALL, 0, CELL * cols, CELL * ROWS)
+        new_sheet.paste(sheet.crop(extra), extra[:2])
+        new_parts.paste(parts.crop(extra), extra[:2])
     weapons = {}
     for kind, col0, table in KINDS:
         wimg = Image.new("RGBA", (WCELL * COLS_ALL, WCELL * ROWS), (0, 0, 0, 0))
@@ -434,16 +441,16 @@ def build(body):
 
 
 def main():
-    weapons = None
-    for body in BODIES:
-        w = build(body)
-        weapons = weapons or w
-    # 무기 그림은 몸에 상관없이 하나 (손 자리는 두 몸이 같은 규격: 키 46px · 어깨 높이 같음)
     out = os.path.join(ROOT, "assets", "weapons")
     os.makedirs(out, exist_ok=True)
-    for kind, img in weapons.items():
-        img.save(os.path.join(out, f"{kind}.png"))
-        print("weapon", kind)
+    # 무기 그림: 공용 (assets/weapons/<종류>.png) 은 주인공 B 손 자리. 2026-10-05 주인공 A 가 SpriteCook 새 몸이 되어
+    # 손 자리가 달라졌으므로 A 는 자기 것 (<몸>_<종류>.png, Character 가 있으면 먼저 쓴다)
+    for body in BODIES:
+        weapons = build(body)
+        for kind, img in weapons.items():
+            name = f"{kind}.png" if body == SHARED_WEAPON_BODY else f"{body}_{kind}.png"
+            img.save(os.path.join(out, name))
+            print("weapon", name)
     if len(sys.argv) > 2 and sys.argv[1] == "--preview":
         preview(sys.argv[2])
 
