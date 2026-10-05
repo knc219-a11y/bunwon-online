@@ -58,7 +58,13 @@
   마왕 칸: 0-1 대기, 2-5 걷기, 6 등불 깜빡 (초록 불을 더 밝게), 7 등불 꺼진 채 숨 고름 (초록 불을 쇠 색으로).
   뿔 악귀 칸: 0-1 대기, 2-5 걷기, 6 두 팔 치켜듦 (--raise 그림, 없으면 뒤로 젖힘), 7 숨 고름. 아기: 6-9 손에서 작은 불.
 
-실행: python3 tools/import_ai_monster.py 그림.png --kind crab|boss|baby|wolf|tiger|baby_tiger|baby_white_tiger|general|lancer|foal|archdemon|horn_demon|imp|sparrow|scarecrow|baby_sparrow|stump|cheonha|jiha|tree_spirit|will_o|will_o_baby|bus [--width 24] [--colors 20] [--preview 미리보기.png]
+귀여리 세트 (2026-10-04, 새 크기): 프롬프트는 /mnt/project-files/design/new-art-ai/guiyeo.md. 옆모습, 앞이 오른쪽.
+  lizard_chief  → assets/creatures/wild_lizard_chief.png (768x96, 96칸): 키 약 80px (사람의 1.7배). 게임은 1:1
+  shield_lizard → assets/creatures/wild_shield_lizard.png (512x64, 64칸): 키 약 50px, 세운 창 끝까지 약 60px
+  baby_lizard   → assets/creatures/baby_lizard.png (320x32): 네발, 몸 길이 약 24px
+  족장 칸: 0-1 대기, 2-5 걷기, 6 예고 (북 · 창 던지기), 7 숨 고름. 방패 도마뱀: 6 창 당김 예고, 7 방패 내림 (--down 그림, 없으면 앞으로 숙임).
+
+실행: python3 tools/import_ai_monster.py 그림.png --kind crab|boss|baby|wolf|tiger|baby_tiger|baby_white_tiger|general|lancer|foal|archdemon|horn_demon|imp|lizard_chief|shield_lizard|baby_lizard|sparrow|scarecrow|baby_sparrow|stump|cheonha|jiha|tree_spirit|will_o|will_o_baby|bus [--width 24] [--colors 20] [--preview 미리보기.png]
       (--sand 숨은그림.png: 모래에 파묻힌 게 그림이 따로 있으면 숨기 칸에 그걸 쓴다)
 
 지금 시트를 만든 명령 (그림 원본: /mnt/project-files/design/gumsa-ai/ai_*.png, 사용자 AI 그림 2026-09-30)
@@ -103,6 +109,7 @@
      대기 그림의 숫양 뿔로 바꾼 _fixed 를 쓴다. 근육 잔무늬가 붉은 점이 되어서 --calm 13)
   ai_imp.png --kind imp --colors 24 --keep-hue --eyes 0.706,0.32,0.922,0.321 --eye-size 1 --eye-color 255,214,60
     (노란 눈이 줄이면 사라져서 다시 찍음)
+귀여리 (그림 원본: /mnt/project-files/design/guiyeo-tall/ai/ai_*.png, 사용자 AI 그림 2026-10-04, 새 크기)
 """
 import argparse
 import os
@@ -271,6 +278,30 @@ KINDS["imp"] = dict(out="baby_imp", cell=32, width=20, max_h=22, frames=[
     dict(sx=1.0, sy=1.0, lift=2), dict(sx=1.02, sy=0.96, lift=0, step=-1),
     dict(sx=1.0, sy=1.0, lift=0, hand=1), dict(sx=1.0, sy=1.02, lift=0, hand=2),
     dict(sx=1.0, sy=1.0, lift=0, hand=3), dict(sx=1.02, sy=0.97, lift=0, hand=1),
+])
+# 귀여리 세트 (2026-10-04, 새 크기): 도마뱀인간 둘 + 아기. 옆모습, 앞이 오른쪽 (왼쪽을 보고 나왔으면 --flip).
+#   족장 (96칸): 0-1 대기, 2-5 걷기 (두 발), 6 예고 (북 · 창 던지기: 뒤로 젖힘), 7 숨 고름
+#   방패 도마뱀 (64칸, 세운 창 끝까지 키 약 60): 0-1 대기, 2-5 걷기, 6 창 당김 (예고: 뒤로 젖힘),
+#     7 방패 내림 = 칠 틈 (--down 그림이 있으면 그걸, 없으면 앞으로 숙임)
+#   아기 도마뱀 (네발): 0-1 대기, 2-5 걷기, 6-9 일 (냄비뚜껑 들고 장보기: 깡충 · 고개 들기)
+KINDS["lizard_chief"] = dict(out="wild_lizard_chief", cell=96, width=92, max_h=80, work_w=480, frames=[
+    dict(sx=1.0, sy=1.0, lift=0), dict(sx=1.01, sy=0.98, lift=0),
+    dict(sx=1.02, sy=0.97, lift=0, stride=1), dict(sx=1.0, sy=1.0, lift=1, stride=-1),
+    dict(sx=1.02, sy=0.97, lift=0, stride=1), dict(sx=1.0, sy=1.0, lift=1, stride=-1),
+    dict(sx=0.98, sy=1.03, lift=0, rot=6), dict(sx=1.03, sy=0.93, lift=0, rot=-5),
+])
+KINDS["shield_lizard"] = dict(out="wild_shield_lizard", cell=64, width=62, max_h=60, work_w=420, frames=[
+    dict(sx=1.0, sy=1.0, lift=0), dict(sx=1.01, sy=0.98, lift=0),
+    dict(sx=1.02, sy=0.97, lift=0, stride=1), dict(sx=1.0, sy=1.0, lift=1, stride=-1),
+    dict(sx=1.02, sy=0.97, lift=0, stride=1), dict(sx=1.0, sy=1.0, lift=1, stride=-1),
+    dict(sx=0.98, sy=1.02, lift=0, rot=6), dict(sx=1.03, sy=0.94, lift=0, rot=-8, rear=True),
+])
+KINDS["baby_lizard"] = dict(out="baby_lizard", cell=32, width=26, max_h=18, frames=[
+    dict(sx=1.0, sy=1.0, lift=0), dict(sx=1.02, sy=0.96, lift=0),
+    dict(sx=1.0, sy=1.0, lift=1, stride=1), dict(sx=1.02, sy=0.96, lift=0, stride=-1),
+    dict(sx=1.0, sy=1.0, lift=1, stride=1), dict(sx=1.02, sy=0.96, lift=0, stride=-1),
+    dict(sx=1.0, sy=1.0, lift=2, rot=5), dict(sx=1.02, sy=0.96, lift=0, stride=1),
+    dict(sx=1.0, sy=1.0, lift=2, rot=5), dict(sx=1.0, sy=1.0, lift=0),
 ])
 BUS_W, BUS_H, BUS_FLOOR = 96, 48, 46
 DROP = (150, 200, 240)
@@ -834,7 +865,7 @@ def main():
     ap.add_argument("--fly-eyes", help="날개 편 그림의 눈 자리 (몸 비율 x,y, 옆모습이라 하나)")
     ap.add_argument("--eye-color", help="눈 색 r,g,b (요괴 까마귀 붉은 눈)")
     ap.add_argument("--flip", action="store_true", help="그림을 좌우로 뒤집는다 (참새가 오른쪽을 보고 나왔을 때)")
-    ap.add_argument("--rear", "--raise", dest="rear", help="앞발 높이 든 그림 (general · lancer · foal 예고 · 일 칸) · 두 팔 치켜든 그림 (horn_demon). 눈 자리는 --fly-eyes")
+    ap.add_argument("--rear", "--raise", "--down", dest="rear", help="앞발 높이 든 그림 (general · lancer · foal 예고 · 일 칸) · 두 팔 치켜든 그림 (horn_demon) · 방패 내린 그림 (shield_lizard 칠 틈 칸). 눈 자리는 --fly-eyes")
     ap.add_argument("--hide", help="잠든 그루터기 그림 (stump 숨기 칸)")
     ap.add_argument("--hide-eyes", help="잠든 그루터기 그림에서 눈이 번쩍일 자리 (몸 비율 x1,y1,x2,y2)")
     ap.add_argument("--skull", help="will_o: 작은 해골을 찍을 자리 (몸 비율 x,y)")

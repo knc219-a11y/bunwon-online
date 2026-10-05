@@ -536,7 +536,12 @@ out = {
     "baby_cloud_dragon": sheet(frames10(lambda **k: baby_cloud_dragon(**k)), 32),
     "baby_gold_dragon": sheet(frames10(lambda **k: baby_gold(**k)), 32),
 }
+# 2026-10-04: 사용자 AI 그림 (새 크기, tools/import_ai_monster.py 의 귀여리 줄) 으로 바뀐 시트는 --force 일 때만 덮어쓴다
+AI_DONE = {"wild_shield_lizard", "wild_lizard_chief", "baby_lizard"}  # 2026-10-05 PixelLab 방패 도마뱀 · SpriteCook 족장 · 아기 (tools/import_pixellab_monster.py)
 for k, img in out.items():
+    if k in AI_DONE and "--force" not in sys.argv:
+        print(k, "건너뜀 (AI 그림이 있음, 옛 코드 그림으로 덮으려면 --force)")
+        continue
     img.save(os.path.join(OUT, k + ".png"))
 ims = [img.resize((img.width * 2, img.height * 2), Image.NEAREST) for img in out.values()]
 pv = Image.new("RGBA", (max(i.width for i in ims), sum(i.height + 6 for i in ims)), (70, 76, 80, 255))
