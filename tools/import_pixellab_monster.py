@@ -27,6 +27,11 @@ import_ai_monster.py 는 큰 AI 그림을 줄여서 픽셀로 만든다. PixelLa
 아기 도마뱀 (2026-10-05, SpriteCook generate_game_art 4장 중 사용자가 3번 = baby_02 를 고름, 족장 그림을 화풍 참고로):
   python3 tools/import_pixellab_monster.py baby_02.png --out baby_lizard --height 20 --cell 32 --baby
   그림 원본: /mnt/project-files/design/guiyeo-tall/spritecook/baby_*.png
+
+소내섬 용 · 독꼬리 와이번 (2026-10-05, SpriteCook generate_game_art 2장씩, 기본값 1번):
+  python3 tools/import_pixellab_monster.py dragon_00.png --out wild_dragon --height 90 --cell 96
+  python3 tools/import_pixellab_monster.py wyvern_00.png --out wild_wyvern --wyvern --width 46 --cell 64
+  그림 원본: /mnt/project-files/design/sonae-tall/spritecook/
 """
 import argparse
 from pathlib import Path
@@ -181,6 +186,38 @@ def build_baby(img):
     return frames
 
 
+def fold(img, cut, k):
+    """cut 줄 위 (날개) 를 k 배 높이로 눌러 cut 에 붙인다 (날갯짓 · 날개 접기)."""
+    w, h = img.size
+    top = img.crop((0, 0, w, cut))
+    nh = max(1, round(cut * k))
+    out = Image.new("RGBA", img.size, (0, 0, 0, 0))
+    out.alpha_composite(img.crop((0, cut, w, h)), (0, cut))
+    out.alpha_composite(top.resize((w, nh), Image.NEAREST), (0, cut - nh))
+    return out
+
+
+def build_wyvern(img, cell, air=8):
+    """나는 와이번 8칸 (make_act5_sheets.wyvern 과 같은 뜻):
+    0-1 맴돌기, 2-5 날기 (날개를 눌렀다 폈다 + 몸 1px 들썩), 6 내려꽂기 예고 (날개 접고 머리 숙임),
+    7 내려앉아 숨 고름 (날개 반쯤 접고 칸 바닥에 섬). 나는 칸은 바닥에서 air px 띄운다."""
+    ys = [y for y in range(img.height) for x in range(img.width) if img.getpixel((x, y))[3]]
+    cut = min(ys) + int((max(ys) - min(ys)) * 0.5)
+
+    def put(f, up, dx=0):
+        o = Image.new("RGBA", (cell, cell), (0, 0, 0, 0))
+        o.alpha_composite(f, ((cell - f.width) // 2 + dx, cell - f.height - up))
+        return o
+
+    flap = [1.0, 0.86, 0.7, 0.86]
+    frames = [put(img, air), put(img, air - 1)]
+    frames += [put(fold(img, cut, flap[i]), air - (i % 2)) for i in range(4)]
+    dive = fold(img, cut, 0.6).rotate(-22, Image.NEAREST, expand=True)
+    frames.append(put(dive.crop(dive.getbbox()), air, 1))
+    frames.append(put(fold(img, cut, 0.55), 0))
+    return frames
+
+
 def with_thrust(img, frames, path, cell, which, at):
     """원본 칸을 cell 칸 가운데 아래에 놓고, 6 · 7 칸은 SpriteCook 움직임 칸으로 바꾼다.
     움직임은 원본보다 6px 큰 칸 (가장자리 여백) 이라 창이 앞으로 길게 나간다: 그래서 칸을 키운다 (늘이지 않음).
@@ -218,18 +255,26 @@ def main():
     ap.add_argument("--thrust-frames", default="3,5", help="6 칸 (창 당김) · 7 칸 (찌른 채 방패 비킴) 에 쓸 움직임 칸 번호")
     ap.add_argument("--thrust-at", default="5,6", help="움직임 칸 속에서 원본 그림 왼쪽 위 자리 x,y")
     ap.add_argument("--baby", action="store_true", help="아기 네발 10칸 (대기 2 · 걷기 4 · 일 4)")
+    ap.add_argument("--wyvern", action="store_true", help="나는 와이번 8칸 (--width 날개 폭, --cell 칸)")
+    ap.add_argument("--width", type=int, help="이 폭으로 줄인다 (날개 편 그림일 때)")
     ap.add_argument("--flip", action="store_true")
     ap.add_argument("--preview")
     a = ap.parse_args()
     img = Image.open(a.src).convert("RGBA")
     if a.flip:
         img = img.transpose(Image.FLIP_LEFT_RIGHT)
+    if a.width:
+        bb = img.crop(img.getbbox())
+        img = shrink(bb, round(bb.height * a.width / bb.width))
     if a.height:
         img = shrink(img, a.height)
-    if a.cell and not a.thrust:
+    if a.wyvern:
+        frames = build_wyvern(img, a.cell)
+    elif a.cell and not a.thrust:
         img = place(img, a.cell)
     cx, cy, r = (float(v) for v in a.shield.split(",")) if a.shield else (0, 0, 0)
-    frames = build_baby(img) if a.baby else build(img, int(cx), int(cy), r)
+    if not a.wyvern:
+        frames = build_baby(img) if a.baby else build(img, int(cx), int(cy), r)
     if a.thrust:
         frames = with_thrust(img, frames, a.thrust, a.cell, a.thrust_frames, a.thrust_at)
     c = frames[0].size[1]
