@@ -18,6 +18,9 @@ const ATTACK_WEIGHTS := {&"melee": [0.14, 0.14, 0.36, 0.36], &"bow": [0.16, 0.2,
 const WALK8_COLUMNS: Array[int] = [2, 16, 3, 17, 4, 18, 5, 19]
 const MELEE6_COLUMNS: Array[int] = [6, 7, 8, 9, 20, 21]
 const MELEE6_WEIGHTS: Array[float] = [0.14, 0.14, 0.2, 0.24, 0.14, 0.14]
+## SpriteCook 주인공 활 · 지팡이 6칸 (2026-10-05): 앞 3칸은 옛 자리, 뒤 3칸은 시트 오른쪽 끝에 붙였다
+const ATTACK6_COLUMNS := {&"melee": MELEE6_COLUMNS, &"bow": [10, 11, 12, 22, 23, 24], &"staff": [13, 14, 15, 25, 26, 27]}
+const ATTACK6_WEIGHTS := {&"melee": MELEE6_WEIGHTS, &"bow": [0.12, 0.14, 0.18, 0.2, 0.22, 0.14], &"staff": [0.14, 0.16, 0.2, 0.22, 0.14, 0.14]}
 ## 무기 덧그림 칸 (몸 칸 사방 16px 여유)
 const WEAPON_FRAME := 80
 const IDLE_FPS := 2.0
@@ -212,10 +215,11 @@ func walk_columns() -> Array[int]:
 	return WALK8_COLUMNS if _sprite and _sprite.hframes > WALK8_COLUMNS.max() else WALK_COLUMNS
 
 
-## 이 시트의 공격 칸 (SpriteCook 주인공 칼은 6칸)
+## 이 시트의 공격 칸 (SpriteCook 주인공은 6칸)
 func attack_columns(kind: StringName) -> Array:
-	if kind == &"melee" and _sprite and _sprite.hframes > MELEE6_COLUMNS.max():
-		return MELEE6_COLUMNS
+	var six: Array = ATTACK6_COLUMNS[kind]
+	if _sprite and _sprite.hframes > six.max():
+		return six
 	return ATTACK_COLUMNS[kind]
 
 
@@ -293,7 +297,7 @@ func frame_coords() -> Vector3i:
 		row = 2
 	if _atk_kind != &"":
 		var cols: Array = attack_columns(_atk_kind)
-		var weights: Array = MELEE6_WEIGHTS if cols == MELEE6_COLUMNS else ATTACK_WEIGHTS[_atk_kind]
+		var weights: Array = ATTACK6_WEIGHTS[_atk_kind] if cols.size() == 6 else ATTACK_WEIGHTS[_atk_kind]
 		var k := clampf(_atk_t / _atk_dur, 0.0, 0.999)
 		var i := 0
 		var acc: float = weights[0]

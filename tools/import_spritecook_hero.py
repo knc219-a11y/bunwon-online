@@ -107,7 +107,13 @@ def breathe(img):
 MELEE_FRAMES = [2, 3, 4, 5, 6, 7]
 MELEE6_COLUMNS = [6, 7, 8, 9, 20, 21]
 WCELL = 80
-MELEE_COLS = 22
+# 공격 종류마다: 움직임 파일 이름, 쓸 움직임 칸, 넣을 열 (Character.MELEE6 · BOW6 · STAFF6_COLUMNS)
+ATTACKS = {
+    "melee": ("melee_{d}.webp", MELEE_FRAMES, MELEE6_COLUMNS),
+    "bow": ("bowstaff/bow_{d}.webp", [2, 3, 4, 5, 6, 7], [10, 11, 12, 22, 23, 24]),
+    "staff": ("bowstaff/staff_{d}.webp", [2, 3, 4, 5, 6, 7], [13, 14, 15, 25, 26, 27]),
+}
+SHEET_COLS = 28
 
 
 def dilate(mask, n):
@@ -117,13 +123,14 @@ def dilate(mask, n):
     return m
 
 
-def melee(a):
+def attack(a, kind):
+    pattern, frames_used, columns = ATTACKS[kind]
     sheet_path = os.path.join(ROOT, "assets", "characters", f"{a.name}.png")
     parts_path = os.path.join(iac.PARTS_DIR, f"{a.name}.png")
     sheet = Image.open(sheet_path).convert("RGBA")
     parts = Image.open(parts_path).convert("RGBA")
-    if sheet.width < CELL * MELEE_COLS:
-        wide = Image.new("RGBA", (CELL * MELEE_COLS, CELL * ROWS), (0, 0, 0, 0))
+    if sheet.width < CELL * SHEET_COLS:
+        wide = Image.new("RGBA", (CELL * SHEET_COLS, CELL * ROWS), (0, 0, 0, 0))
         wp = wide.copy()
         wide.paste(sheet, (0, 0))
         wp.paste(parts, (0, 0))
@@ -141,10 +148,20 @@ def melee(a):
     iac.SPAN["hair"] = (0, 0.2)
     front = sheet.crop((0, 0, CELL, CELL))
     refs = iac.part_refs(front.crop(front.getbbox()))
-    over = Image.new("RGBA", (WCELL * MELEE_COLS, WCELL * ROWS), (0, 0, 0, 0))
+    over = Image.new("RGBA", (WCELL * SHEET_COLS, WCELL * ROWS), (0, 0, 0, 0))
+    over_path = os.path.join(ROOT, "assets", "weapons", f"{a.name}_{kind}.png")
+    if os.path.exists(over_path):
+        # 다른 종류 · 아직 안 만든 방향의 칸은 그대로 둔다
+        old = Image.open(over_path).convert("RGBA")
+        over.paste(old.crop((0, 0, min(old.width, over.width), old.height)), (0, 0))
     pad = (WCELL - CELL) // 2
     for r, d in enumerate(DIRS):
-        fr = [f.convert("RGBA").copy() for f in ImageSequence.Iterator(Image.open(os.path.join(a.src, f"melee_{d}.webp")))]
+        path = os.path.join(a.src, pattern.format(d=d))
+        if not os.path.exists(path):
+            continue
+        for col in columns:
+            over.paste((0, 0, 0, 0), (col * WCELL, r * WCELL, col * WCELL + WCELL, r * WCELL + WCELL))
+        fr = [f.convert("RGBA").copy() for f in ImageSequence.Iterator(Image.open(path))]
         bb0 = solid(fr[0]).getbbox()
         k = HEIGHT / (bb0[3] - bb0[1])
         w, h = round(fr[0].width * k), round(fr[0].height * k)
@@ -161,7 +178,7 @@ def melee(a):
         dx, dy = CELL // 2 - head_x(f0) - b0[0], CELL - b0[3]
         idle = sheet.crop((0, r * CELL, CELL, r * CELL + CELL)).getchannel("A").load()
         body = dilate({(x, y) for y in range(CELL) for x in range(CELL) if idle[x, y]}, 2)
-        for col, i in zip(MELEE6_COLUMNS, MELEE_FRAMES):
+        for col, i in zip(columns, frames_used):
             full = Image.new("RGBA", (WCELL, WCELL), (0, 0, 0, 0))
             full.alpha_composite(small[i], (dx + pad, dy + pad)) if dx + pad >= 0 and dy + pad >= 0 else None
             fp = full.load()
@@ -191,13 +208,13 @@ def melee(a):
             over.alpha_composite(outside, (col * WCELL, r * WCELL))
     sheet.save(sheet_path)
     parts.save(parts_path)
-    over.save(os.path.join(ROOT, "assets", "weapons", f"{a.name}_melee.png"))
-    print("melee", sheet.size, "overlay", over.size)
+    over.save(over_path)
+    print(kind, sheet.size, "overlay", over.size)
     if a.preview:
         k = 4
         pv = Image.new("RGBA", (WCELL * 6 * k, WCELL * ROWS * k), (92, 98, 84, 255))
         for r in range(ROWS):
-            for j, col in enumerate(MELEE6_COLUMNS):
+            for j, col in enumerate(columns):
                 c = Image.new("RGBA", (WCELL, WCELL), (0, 0, 0, 0))
                 c.alpha_composite(sheet.crop((col * CELL, r * CELL, col * CELL + CELL, r * CELL + CELL)), (pad, pad))
                 c.alpha_composite(over.crop((col * WCELL, r * WCELL, col * WCELL + WCELL, r * WCELL + WCELL)))
@@ -212,9 +229,13 @@ def main():
     ap.add_argument("--colors", type=int, default=32)
     ap.add_argument("--preview")
     ap.add_argument("--melee", action="store_true", help="칼 공격 칸을 SpriteCook 움직임으로 (make_attack_frames.py 뒤에)")
+    ap.add_argument("--attack", choices=sorted(ATTACKS), action="append",
+                    help="이 공격 칸을 SpriteCook 움직임으로 (여러 번 줄 수 있다, make_attack_frames.py 뒤에)")
     a = ap.parse_args()
-    if a.melee:
-        melee(a)
+    kinds = (a.attack or []) + (["melee"] if a.melee else [])
+    if kinds:
+        for kind in kinds:
+            attack(a, kind)
         return
 
     stills = {d: solid(Image.open(os.path.join(a.src, f"hero_a_{d}.png")).convert("RGBA")) for d in DIRS}
