@@ -12,6 +12,12 @@ const WALK_COLUMNS: Array[int] = [2, 3, 4, 5]
 ## 근거리 치켜들기 · 휘두르기 · 내려베기 · 마무리, 활 걸기 · 당기기 · 놓기, 지팡이 치켜들기 · 내뻗기 · 거두기
 const ATTACK_COLUMNS := {&"melee": [6, 7, 8, 9], &"bow": [10, 11, 12], &"staff": [13, 14, 15]}
 const ATTACK_WEIGHTS := {&"melee": [0.14, 0.14, 0.36, 0.36], &"bow": [0.16, 0.2, 0.64], &"staff": [0.2, 0.45, 0.35]}
+## SpriteCook 주인공 A (2026-10-05, tools/import_spritecook_hero.py): 시트가 20칸 이상이면 걷기 8칸 (16-19 열에 나머지),
+## 22칸 이상이면 칼 공격 6칸 (뽑기 · 치켜들기 · 베기 · 마무리 · 거두기 2) 이고 칼은 몸에 그려져 있다
+## (칸 밖으로 나간 칼 · 팔은 assets/weapons/<시트 이름>_melee.png).
+const WALK8_COLUMNS: Array[int] = [2, 16, 3, 17, 4, 18, 5, 19]
+const MELEE6_COLUMNS: Array[int] = [6, 7, 8, 9, 20, 21]
+const MELEE6_WEIGHTS: Array[float] = [0.14, 0.14, 0.2, 0.24, 0.14, 0.14]
 ## 무기 덧그림 칸 (몸 칸 사방 16px 여유)
 const WEAPON_FRAME := 80
 const IDLE_FPS := 2.0
@@ -191,10 +197,26 @@ func attack(kind: StringName, dur: float, reverse := false) -> void:
 	_atk_dur = maxf(dur, 0.05)
 	_atk_reverse = reverse
 	var tex := load("res://assets/weapons/%s.png" % kind) as Texture2D
+	if sheet and sheet.resource_path != "":
+		var own := "res://assets/weapons/%s_%s.png" % [sheet.resource_path.get_file().get_basename(), kind]
+		if attack_columns(kind) != ATTACK_COLUMNS[kind] and ResourceLoader.exists(own):
+			tex = load(own) as Texture2D
 	if _weapon.texture != tex:
 		_weapon.texture = tex
 		_fit_frames(_weapon, WEAPON_FRAME)
 	_update_sprite()
+
+
+## 이 시트의 걷기 칸 (SpriteCook 주인공은 8칸)
+func walk_columns() -> Array[int]:
+	return WALK8_COLUMNS if _sprite and _sprite.hframes > WALK8_COLUMNS.max() else WALK_COLUMNS
+
+
+## 이 시트의 공격 칸 (SpriteCook 주인공 칼은 6칸)
+func attack_columns(kind: StringName) -> Array:
+	if kind == &"melee" and _sprite and _sprite.hframes > MELEE6_COLUMNS.max():
+		return MELEE6_COLUMNS
+	return ATTACK_COLUMNS[kind]
 
 
 func attacking() -> bool:
@@ -270,8 +292,8 @@ func frame_coords() -> Vector3i:
 	elif facing.x != 0:
 		row = 2
 	if _atk_kind != &"":
-		var cols: Array = ATTACK_COLUMNS[_atk_kind]
-		var weights: Array = ATTACK_WEIGHTS[_atk_kind]
+		var cols: Array = attack_columns(_atk_kind)
+		var weights: Array = MELEE6_WEIGHTS if cols == MELEE6_COLUMNS else ATTACK_WEIGHTS[_atk_kind]
 		var k := clampf(_atk_t / _atk_dur, 0.0, 0.999)
 		var i := 0
 		var acc: float = weights[0]
@@ -281,8 +303,9 @@ func frame_coords() -> Vector3i:
 		if _atk_reverse:
 			i = cols.size() - 1 - i
 		return Vector3i(cols[i], row, 1 if facing == Vector2i.LEFT else 0)
-	var columns := WALK_COLUMNS if moving else IDLE_COLUMNS
-	var fps := WALK_FPS if moving else IDLE_FPS
+	var columns := walk_columns() if moving else IDLE_COLUMNS
+	# 8칸 걷기는 두 배 빠르게 넘겨 한 걸음 길이를 같게
+	var fps := (WALK_FPS * columns.size() / 4.0) if moving else IDLE_FPS
 	var col: int = columns[int(_anim_time * fps) % columns.size()]
 	return Vector3i(col, row, 1 if facing == Vector2i.LEFT else 0)
 

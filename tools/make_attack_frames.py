@@ -410,10 +410,16 @@ def build(body):
     sheet = Image.open(sheet_path).convert("RGBA")
     parts = Image.open(parts_path).convert("RGBA")
     base_box = (0, 0, CELL * BASE_COLS, CELL * ROWS)
-    new_sheet = Image.new("RGBA", (CELL * COLS_ALL, CELL * ROWS), (0, 0, 0, 0))
+    # 공격 칸 뒤 (16 열부터) 에 걷기 칸이 더 있으면 그대로 둔다 (SpriteCook 주인공 A 걷기 8칸: import_spritecook_hero.py)
+    cols = max(COLS_ALL, sheet.width // CELL)
+    new_sheet = Image.new("RGBA", (CELL * cols, CELL * ROWS), (0, 0, 0, 0))
     new_parts = Image.new("RGBA", new_sheet.size, (0, 0, 0, 0))
     new_sheet.paste(sheet.crop(base_box), (0, 0))
     new_parts.paste(parts.crop(base_box), (0, 0))
+    if cols > COLS_ALL:
+        extra = (CELL * COLS_ALL, 0, CELL * cols, CELL * ROWS)
+        new_sheet.paste(sheet.crop(extra), extra[:2])
+        new_parts.paste(parts.crop(extra), extra[:2])
     weapons = {}
     for kind, col0, table in KINDS:
         wimg = Image.new("RGBA", (WCELL * COLS_ALL, WCELL * ROWS), (0, 0, 0, 0))
