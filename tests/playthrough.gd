@@ -514,10 +514,10 @@ func place_new_creatures() -> void:
 	fish_creature = firsts[&"naru"]
 	errand_creature = firsts[&"hall"]
 	if FacilityWorkers.is_open(&"yak") and GameState.yak_brew == &"":
-		# 약방 일꾼에게 맡길 약: 힘 물약 (봇이 가장 많이 쓰는 약, 사람이라면 고를 것)
-		while GameState.yak_brew != &"strength":
+		# 약방 일꾼에게 맡길 약: 빨간 물약 (힘 물약은 2026-10-05 없앰)
+		while GameState.yak_brew != &"potion":
 			main.cycle_yak_brew()
-		_log("약방 일꾼이 아침마다 달일 약: 힘 물약")
+		_log("약방 일꾼이 아침마다 달일 약: 빨간 물약")
 	# 공사 중인 터가 있으면 채집 전담 하나 (땅속성 먼저) 에게 터 공사, 공사가 없으면 채집으로 돌린다 (2026-10-03)
 	if SiteWork.build_site() != &"" and build_creature == null:
 		var pick: Creature = null
@@ -554,16 +554,6 @@ func manage_expeditions() -> void:
 			_log("원정대: %s로 %d마리 (%s)" % [Config.HUNT_ZONES[z].name, n, ", ".join(Expedition.team(main, z).map(func(c: Creature) -> String: return "%s %s" % [c.data.element_names(), c.data.species.display_name]))])
 	if zones.any(func(z: int) -> bool: return Expedition.team(main, z).is_empty()):
 		return
-	var spare_list := Expedition.idle(main)
-	spare_list.sort_custom(func(a: Creature, b: Creature) -> bool: return a.data.base_work_speed < b.data.base_work_speed)
-	while spare_list.size() > KEEP_FORAGERS and Expedition.next_villager() != &"":
-		var c: Creature = spare_list.pop_front()
-		var desc := c.describe()
-		var who := Expedition.adopt(main, c)
-		if who == &"":
-			break
-		adopted_n += 1
-		_log("입양: %s → %s" % [desc, who])
 
 
 ## 마을에 남기는 채집 전담 수 (시설 멍석을 채울 때)
@@ -687,8 +677,6 @@ func farm_by_hand() -> Dictionary:
 			continue
 		cells.sort()
 		var reach := 1
-		if work in [Farm.Work.TILL, Farm.Work.WATER] and GameState.tool_level(work) > 0:
-			reach = Config.TOOL_UPGRADE_REACH
 		if work in [Farm.Work.TILL, Farm.Work.WATER]:
 			reach += Wearables.stat_sum(&"farmer", "reach_add")
 		if work == Farm.Work.SOW:
@@ -784,8 +772,8 @@ func shop() -> Array[String]:
 	var held := false
 	plan_plots(did)
 	cook_day(did)
-	# 무는 복구용 · 고추는 매운탕 두 그릇 몫을 남기고 나머지 작물은 모두 진열 (2026-10-03 밭 작물)
-	var keep_peppers := mini(GameState.peppers, 2 * Config.STEW_PEPPERS) if GameState.naru_state >= 1 else 0
+	# 무는 복구용으로 남기고 나머지 작물은 모두 진열 (2026-10-03 밭 작물, 매운탕은 2026-10-05 없앰)
+	var keep_peppers := 0
 	GameState.crops -= keep_crops
 	GameState.peppers -= keep_peppers
 	if Crops.held_total() > 0:
@@ -823,7 +811,7 @@ func shop() -> Array[String]:
 		if bought_seed:
 			keep = true
 			continue
-		for id: StringName in [&"expand_field", &"upgrade_can", &"upgrade_hoe", &"buy_knife", &"seed_vest", &"rain_boots", &"hiking_shoes", &"straw_hat", &"ball_cap"]:
+		for id: StringName in [&"expand_field"]:
 			if main.supply_options().has(id):
 				var m := GameState.money
 				if reserve > 0 and GameState.money - _price_of(id) < reserve:
@@ -908,8 +896,6 @@ func cook_day(did: Array[String]) -> void:
 		if Crops.food_count(id) > 0 or not Crops.can_cook(id):
 			continue
 		var cost: Dictionary = Config.FOODS[id].cost
-		if cost.has(&"pepper") and GameState.naru_state >= 2 and GameState.peppers - int(cost.pepper) < 2 * Config.STEW_PEPPERS:
-			continue
 		var g := Crops.cook(id)
 		var c: Array = cooked.get(id, [0, 0, 0])
 		c[g - 1] += 1
@@ -997,10 +983,6 @@ func dock_day(did: Array[String]) -> void:
 	# 잔치상 매운탕 큰 솥에 들 물고기는 끓이거나 팔지 않고 남긴다 (사람이라면 그럴 것)
 	var keep_fish := mini(GameState.fish, _feast_need("fish"))
 	GameState.fish -= keep_fish
-	if GameState.stews == 0 and GameState.fish >= Config.STEW_FISH:
-		if main.dock_action(&"stew"):
-			stews_made += 1
-			made.append("매운탕")
 	if GameState.fish > 0:
 		fish_sold += GameState.fish
 		made.append("물고기 %d 진열" % GameState.fish)
@@ -1022,11 +1004,8 @@ func coop_day(did: Array[String]) -> void:
 	if GameState.nest > 0 and GameState.hens + GameState.chicks.size() >= Config.HEN_CAP / 2:
 		made.append("달걀 %d" % GameState.nest)
 		main.coop_action(&"take_nest")
-	if GameState.lunches == 0 and GameState.hen_eggs >= Config.LUNCH_EGGS:
-		if main.coop_action(&"lunch"):
-			made.append("도시락")
-	# 다음 도시락 몫은 남기고 나머지만 판다
-	var keep_eggs := Config.LUNCH_EGGS
+	# 잔치상에 들 달걀만 남기고 판다 (도시락은 2026-10-05 없앰)
+	var keep_eggs := mini(GameState.hen_eggs, _feast_need("hen_eggs"))
 	if GameState.hen_eggs > keep_eggs:
 		var sell := GameState.hen_eggs - keep_eggs
 		GameState.hen_eggs = sell
@@ -1042,7 +1021,7 @@ func coop_day(did: Array[String]) -> void:
 ## 잡템은 판매 대신 여기 먼저 쓴다 (사람이라면 그럴 것).
 func brew_day(did: Array[String]) -> void:
 	var made: Array[String] = []
-	var wants: Array = [[&"lamp_oil", "lamp_oil", 2], [&"potion", "potions", 4], [&"strength", "strength", 1 if BUNJEON in GameState.waypoints else 0]]
+	var wants: Array = [[&"lamp_oil", "lamp_oil", 2], [&"potion", "potions", 4]]
 	for w: Array in wants:
 		while GameState.get(w[1]) < w[2] and main.brew(w[0]):
 			brewed[w[0]] = brewed.get(w[0], 0) + 1
@@ -1062,10 +1041,6 @@ func _price_of(id: StringName) -> int:
 	match id:
 		&"expand_field":
 			return Config.FIELD_PLOT_PRICES[Farm.next_plot()]
-		&"upgrade_can", &"upgrade_hoe":
-			return main.TOOL_UPGRADES[id][1]
-		&"buy_knife":
-			return Config.HUNTER_KNIFE_PRICE
 	return Wearables.ITEMS[id].price if Wearables.ITEMS.has(id) else 0
 
 
@@ -1362,10 +1337,6 @@ func hunt_day() -> void:
 	pick_weapon()
 	spend_skill_points()
 	spend_stat_points()
-	if GameState.lunches > 0:
-		lunches_eaten += 1
-	if GameState.stews > 0:
-		stews_eaten += 1
 	main.enter_hunt(pick, zone)
 	var h: HuntGround = main.hunt
 	if OS.get_environment("DEBUG_KO") != "" and not GameState.message.is_connected(_debug_msg):

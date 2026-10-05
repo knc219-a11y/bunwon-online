@@ -34,7 +34,7 @@ const STARTS: Array[Dictionary] = [
 			[&"slime", &"farm", &"water", 0, 0], [&"slime", &"farm", &"", 0, 0], [&"slime", &"farm", &"", 0, 0], [&"slime", &"farm", &"", 0, 0],
 			[&"slime", &"forage", &"earth", 0, 0], [&"gold_toad", &"forage", &"", 0, 0],
 		],
-		waypoints = [0, 1], forge = 1, tools = true, knife = true,
+		waypoints = [0, 1], forge = 1,
 		weapons = [&"hunting_bow", &"water_staff"], shop = [&"rain_boots", &"seed_vest", &"hiking_shoes"],
 		armor = [[&"leather_hood", &"magic"]],
 	},
@@ -46,7 +46,7 @@ const STARTS: Array[Dictionary] = [
 			[&"slime", &"forage", &"earth", 0, 0], [&"slime", &"forage", &"water", 0, 0], [&"gold_toad", &"forage", &"", 0, 0],
 			[&"slime", &"forage", &"earth", 0, 0], [&"slime", &"scrap", &"earth", 0, 0],
 		],
-		waypoints = [0, 1, 2], forge = 2, tools = true, knife = true,
+		waypoints = [0, 1, 2], forge = 2,
 		weapons = [&"hunting_bow", &"water_staff", &"long_sword"], shop = [&"rain_boots", &"seed_vest", &"hiking_shoes"],
 		armor = [[&"leather_hood", &"magic"], [&"hunter_jerkin", &"magic"]],
 	},
@@ -59,7 +59,7 @@ const STARTS: Array[Dictionary] = [
 			[&"gold_toad", &"forage", &"", 0, 0], [&"sparrow", &"forage", &"", 0, 0], [&"sparrow", &"forage", &"", 0, 0],
 			[&"slime", &"forage", &"earth", 0, 0], [&"slime", &"scrap", &"earth", 1, 1],
 		],
-		waypoints = [0, 1, 2, 3], forge = 2, tools = true, knife = true,
+		waypoints = [0, 1, 2, 3], forge = 2,
 		weapons = [&"hunting_bow", &"water_staff", &"long_sword", &"crossbow"], shop = [&"straw_hat", &"ball_cap"],
 		armor = [[&"leather_hood", &"rare"], [&"hunter_jerkin", &"magic"], [&"leather_shoes", &"magic"]],
 		crafted = [&"work_cap", &"rain_suit", &"work_boots"],
@@ -73,7 +73,7 @@ const STARTS: Array[Dictionary] = [
 			[&"gold_toad", &"forage", &"", 0, 0], [&"sparrow", &"forage", &"", 0, 0], [&"sparrow", &"forage", &"", 0, 0],
 			[&"slime", &"forage", &"earth", 0, 0], [&"slime", &"scrap", &"earth", 1, 1], [&"slime", &"herb", &"earth", 0, 0],
 		],
-		waypoints = [0, 1, 2, 3, 4], forge = 2, yak = 2, tools = true, knife = true,
+		waypoints = [0, 1, 2, 3, 4], forge = 2, yak = 2,
 		weapons = [&"hunting_bow", &"water_staff", &"long_sword", &"crossbow"], shop = [&"straw_hat", &"ball_cap"],
 		armor = [[&"leather_hood", &"rare"], [&"hunter_jerkin", &"rare"], [&"leather_shoes", &"magic"]],
 		crafted = [&"work_cap", &"rain_suit", &"work_boots"],
@@ -81,14 +81,14 @@ const STARTS: Array[Dictionary] = [
 	{
 		## 2026-09-30 밀목 스레드: 3막 둘째 구역을 바로 해 보는 자리 (번천 막차를 잡아 밀목 웨이포인트가 켜진 뒤)
 		id = &"milmok", name = "밀목 앞", note = "55일 · 밀목 웨이포인트 · 아기 도깨비불 · 물약",
-		day = 55, money = 6500, seeds = 20, plots = 4, planted = true, scrap = 6, roots = 8, junk = 10, potions = 6, lamp_oil = 1, strength = 2,
+		day = 55, money = 6500, seeds = 20, plots = 4, planted = true, scrap = 6, roots = 8, junk = 10, potions = 6, lamp_oil = 1,
 		creatures = [
 			[&"slime", &"farm", &"water", 2, 2], [&"slime", &"farm", &"", 2, 2], [&"slime", &"farm", &"", 2, 2], [&"tree_spirit", &"farm", &"", 1, 1],
 			[&"slime", &"forage", &"earth", 1, 1], [&"slime", &"forage", &"water", 0, 0], [&"gold_toad", &"forage", &"", 1, 0],
 			[&"gold_toad", &"forage", &"", 0, 0], [&"sparrow", &"forage", &"", 0, 0], [&"will_o", &"herb", &"", 1, 0],
 			[&"will_o", &"forage", &"", 0, 0], [&"slime", &"scrap", &"earth", 1, 1], [&"slime", &"herb", &"earth", 0, 0],
 		],
-		waypoints = [0, 1, 2, 3, 4, 5], forge = 2, yak = 2, tools = true, knife = true,
+		waypoints = [0, 1, 2, 3, 4, 5], forge = 2, yak = 2,
 		weapons = [&"hunting_bow", &"water_staff", &"long_sword", &"crossbow", &"long_bow"], shop = [&"straw_hat", &"ball_cap"],
 		armor = [[&"leather_hood", &"rare"], [&"hunter_jerkin", &"rare"], [&"leather_shoes", &"rare"]],
 		crafted = [&"work_cap", &"rain_suit", &"work_boots"],
@@ -103,7 +103,7 @@ const STARTS: Array[Dictionary] = [
 			[&"gold_toad", &"forage", &"", 0, 0], [&"sparrow", &"forage", &"", 0, 0], [&"will_o", &"herb", &"", 1, 0],
 			[&"tiger", &"feed", &"", 0, 0], [&"slime", &"scrap", &"earth", 1, 1], [&"slime", &"herb", &"earth", 0, 0],
 		],
-		waypoints = [0, 1, 2, 3, 4, 5], forge = 2, yak = 2, barn = 2, hens = 3, lunches = 1, tools = true, knife = true,
+		waypoints = [0, 1, 2, 3, 4, 5], forge = 2, yak = 2, barn = 2, hens = 3,
 		weapons = [&"hunting_bow", &"water_staff", &"long_sword", &"crossbow", &"long_bow"], shop = [&"straw_hat", &"ball_cap"],
 		armor = [[&"leather_hood", &"rare"], [&"hunter_jerkin", &"rare"], [&"leather_shoes", &"rare"]],
 		crafted = [&"work_cap", &"rain_suit", &"work_boots"],
@@ -111,14 +111,14 @@ const STARTS: Array[Dictionary] = [
 	{
 		## 2026-10-02 역동 스레드: 4막 첫 구역을 바로 해 보는 자리 (축사를 고쳐 밀목 윗길 목책이 열리고 역동 웨이포인트가 켜진 뒤)
 		id = &"yeokdong", name = "역동 앞", note = "75일 · 축사 · 역동 웨이포인트 · 도시락 2",
-		day = 75, money = 4500, seeds = 20, crops = 10, plots = 4, planted = true, scrap = 6, roots = 8, junk = 10, potions = 6, lamp_oil = 1, strength = 2,
+		day = 75, money = 4500, seeds = 20, crops = 10, plots = 4, planted = true, scrap = 6, roots = 8, junk = 10, potions = 6, lamp_oil = 1,
 		creatures = [
 			[&"slime", &"farm", &"water", 2, 2], [&"slime", &"farm", &"", 2, 2], [&"slime", &"farm", &"", 2, 2], [&"tree_spirit", &"farm", &"", 2, 1],
 			[&"slime", &"forage", &"earth", 1, 1], [&"slime", &"forage", &"water", 0, 0], [&"gold_toad", &"forage", &"", 1, 0],
 			[&"gold_toad", &"forage", &"", 0, 0], [&"sparrow", &"forage", &"", 0, 0], [&"will_o", &"herb", &"", 1, 0],
 			[&"tiger", &"feed", &"", 1, 0], [&"tiger", &"forage", &"", 0, 0], [&"slime", &"scrap", &"earth", 1, 1], [&"slime", &"herb", &"earth", 0, 0],
 		],
-		waypoints = [0, 1, 2, 3, 4, 5, 6], forge = 2, yak = 2, barn = 2, hens = 4, lunches = 2, tools = true, knife = true,
+		waypoints = [0, 1, 2, 3, 4, 5, 6], forge = 2, yak = 2, barn = 2, hens = 4,
 		weapons = [&"hunting_bow", &"water_staff", &"long_sword", &"crossbow", &"long_bow"], shop = [&"straw_hat", &"ball_cap"],
 		armor = [[&"leather_hood", &"rare"], [&"hunter_jerkin", &"rare"], [&"leather_shoes", &"rare"]],
 		crafted = [&"work_cap", &"rain_suit", &"work_boots"],
@@ -126,14 +126,14 @@ const STARTS: Array[Dictionary] = [
 	{
 		## 2026-10-02 곤지암 스레드: 4막 대장 구역을 바로 해 보는 자리 (역마 장군을 잡아 곤지암 웨이포인트가 켜진 뒤)
 		id = &"gonjiam", name = "곤지암 앞", note = "88일 · 곤지암 웨이포인트 · 아기 망아지 · 도시락 3",
-		day = 88, money = 6500, seeds = 24, crops = 14, plots = 4, planted = true, scrap = 8, roots = 10, junk = 12, potions = 8, lamp_oil = 1, strength = 3,
+		day = 88, money = 6500, seeds = 24, crops = 14, plots = 4, planted = true, scrap = 8, roots = 10, junk = 12, potions = 8, lamp_oil = 1,
 		creatures = [
 			[&"slime", &"farm", &"water", 2, 2], [&"slime", &"farm", &"", 2, 2], [&"foal", &"farm", &"", 1, 1], [&"tree_spirit", &"farm", &"", 2, 1],
 			[&"slime", &"forage", &"earth", 1, 1], [&"slime", &"forage", &"water", 0, 0], [&"gold_toad", &"forage", &"", 1, 0],
 			[&"gold_toad", &"forage", &"", 0, 0], [&"sparrow", &"forage", &"", 0, 0], [&"will_o", &"herb", &"", 1, 0],
 			[&"tiger", &"feed", &"", 1, 0], [&"tiger", &"forage", &"", 0, 0], [&"slime", &"scrap", &"earth", 1, 1], [&"foal", &"forage", &"", 0, 0],
 		],
-		waypoints = [0, 1, 2, 3, 4, 5, 6, 7], forge = 2, yak = 2, barn = 2, hens = 5, lunches = 3, tools = true, knife = true,
+		waypoints = [0, 1, 2, 3, 4, 5, 6, 7], forge = 2, yak = 2, barn = 2, hens = 5,
 		weapons = [&"hunting_bow", &"water_staff", &"long_sword", &"crossbow", &"long_bow"], shop = [&"straw_hat", &"ball_cap"],
 		armor = [[&"leather_hood", &"rare"], [&"hunter_jerkin", &"rare"], [&"leather_shoes", &"rare"]],
 		crafted = [&"work_cap", &"rain_suit", &"work_boots"],
@@ -141,14 +141,14 @@ const STARTS: Array[Dictionary] = [
 	{
 		## 2026-10-02 나루터 스레드: 마왕을 잡아 나루터를 고친 뒤 (뱃사공 · 통발 · 물고기 몰기 · 아기 악귀 밤일)
 		id = &"naru", name = "나루터 복구 뒤", note = "96일 · 뱃사공 · 통발 · 물고기 4 · 아기 악귀",
-		day = 96, money = 5200, seeds = 26, crops = 18, plots = 4, planted = true, scrap = 8, roots = 10, junk = 12, potions = 8, lamp_oil = 1, strength = 3,
+		day = 96, money = 5200, seeds = 26, crops = 18, plots = 4, planted = true, scrap = 8, roots = 10, junk = 12, potions = 8, lamp_oil = 1,
 		creatures = [
 			[&"slime", &"farm", &"water", 2, 2], [&"imp", &"farm", &"", 1, 1], [&"foal", &"farm", &"", 1, 1], [&"tree_spirit", &"farm", &"", 2, 1],
 			[&"slime", &"forage", &"earth", 1, 1], [&"slime", &"fish", &"water", 1, 1], [&"gold_toad", &"forage", &"", 1, 0],
 			[&"gold_toad", &"forage", &"", 0, 0], [&"sparrow", &"forage", &"", 0, 0], [&"will_o", &"herb", &"", 1, 0],
 			[&"tiger", &"feed", &"", 1, 0], [&"tiger", &"forage", &"", 0, 0], [&"slime", &"scrap", &"earth", 1, 1], [&"imp", &"forage", &"", 0, 0],
 		],
-		waypoints = [0, 1, 2, 3, 4, 5, 6, 7], forge = 2, yak = 2, barn = 2, naru = 2, hens = 5, lunches = 2, fish = 4, tools = true, knife = true,
+		waypoints = [0, 1, 2, 3, 4, 5, 6, 7], forge = 2, yak = 2, barn = 2, naru = 2, hens = 5, fish = 4,
 		weapons = [&"hunting_bow", &"water_staff", &"long_sword", &"crossbow", &"long_bow"], shop = [&"straw_hat", &"ball_cap"],
 		armor = [[&"leather_hood", &"rare"], [&"hunter_jerkin", &"rare"], [&"leather_shoes", &"rare"]],
 		crafted = [&"work_cap", &"rain_suit", &"work_boots"],
@@ -156,14 +156,14 @@ const STARTS: Array[Dictionary] = [
 	{
 		## 2026-10-03 5막 스레드: 곤지암 마왕을 잡아 마을 사냥터 입구에 귀여리 웨이포인트가 켜진 뒤 (나루터 고침)
 		id = &"guiyeo", name = "귀여리 앞", note = "104일 · 귀여리 웨이포인트 · 나루터 · 도시락 3",
-		day = 104, money = 7000, seeds = 26, crops = 18, plots = 4, planted = true, scrap = 8, roots = 10, junk = 12, potions = 8, lamp_oil = 1, strength = 3,
+		day = 104, money = 7000, seeds = 26, crops = 18, plots = 4, planted = true, scrap = 8, roots = 10, junk = 12, potions = 8, lamp_oil = 1,
 		creatures = [
 			[&"slime", &"farm", &"water", 2, 2], [&"imp", &"farm", &"", 1, 1], [&"foal", &"farm", &"", 1, 1], [&"tree_spirit", &"farm", &"", 2, 1],
 			[&"slime", &"forage", &"earth", 1, 1], [&"slime", &"fish", &"water", 1, 1], [&"gold_toad", &"forage", &"", 1, 0],
 			[&"gold_toad", &"forage", &"", 0, 0], [&"sparrow", &"forage", &"", 0, 0], [&"will_o", &"herb", &"", 1, 0],
 			[&"tiger", &"feed", &"", 1, 0], [&"tiger", &"forage", &"", 0, 0], [&"slime", &"scrap", &"earth", 1, 1], [&"imp", &"forage", &"", 0, 0],
 		],
-		waypoints = [0, 1, 2, 3, 4, 5, 6, 7, 8], forge = 2, yak = 2, barn = 2, naru = 2, hens = 5, lunches = 3, fish = 6, tools = true, knife = true,
+		waypoints = [0, 1, 2, 3, 4, 5, 6, 7, 8], forge = 2, yak = 2, barn = 2, naru = 2, hens = 5, fish = 6,
 		weapons = [&"hunting_bow", &"water_staff", &"long_sword", &"crossbow", &"long_bow"], shop = [&"straw_hat", &"ball_cap"],
 		armor = [[&"leather_hood", &"rare"], [&"hunter_jerkin", &"rare"], [&"leather_shoes", &"rare"]],
 		crafted = [&"work_cap", &"rain_suit", &"work_boots"],
@@ -171,14 +171,14 @@ const STARTS: Array[Dictionary] = [
 	{
 		## 2026-10-03 5막 스레드: 귀여리 대장을 잡아 나루터 나룻배로 소내섬 (마지막 대장) 에 갈 수 있는 자리
 		id = &"sonae", name = "소내섬 앞", note = "112일 · 나룻배 (사냥꾼 나루터 F) · 아기 와이번 · 도시락 3",
-		day = 112, money = 8000, seeds = 26, crops = 18, plots = 4, planted = true, scrap = 8, roots = 10, junk = 12, potions = 8, lamp_oil = 1, strength = 3,
+		day = 112, money = 8000, seeds = 26, crops = 18, plots = 4, planted = true, scrap = 8, roots = 10, junk = 12, potions = 8, lamp_oil = 1,
 		creatures = [
 			[&"slime", &"farm", &"water", 2, 2], [&"imp", &"farm", &"", 1, 1], [&"foal", &"farm", &"", 1, 1], [&"tree_spirit", &"farm", &"", 2, 1],
 			[&"slime", &"forage", &"earth", 1, 1], [&"slime", &"fish", &"water", 1, 1], [&"gold_toad", &"forage", &"", 1, 0],
 			[&"gold_toad", &"forage", &"", 0, 0], [&"sparrow", &"forage", &"", 0, 0], [&"will_o", &"herb", &"", 1, 0],
 			[&"tiger", &"feed", &"", 1, 0], [&"tiger", &"forage", &"", 0, 0], [&"slime", &"scrap", &"earth", 1, 1], [&"wyvern", &"forage", &"", 0, 0],
 		],
-		waypoints = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], forge = 2, yak = 2, barn = 2, naru = 2, hens = 5, lunches = 3, fish = 6, tools = true, knife = true,
+		waypoints = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], forge = 2, yak = 2, barn = 2, naru = 2, hens = 5, fish = 6,
 		weapons = [&"hunting_bow", &"water_staff", &"long_sword", &"crossbow", &"long_bow"], shop = [&"straw_hat", &"ball_cap"],
 		armor = [[&"leather_hood", &"rare"], [&"hunter_jerkin", &"rare"], [&"leather_shoes", &"rare"]],
 		crafted = [&"work_cap", &"rain_suit", &"work_boots"],
@@ -187,14 +187,14 @@ const STARTS: Array[Dictionary] = [
 		## 2026-10-03 시설 5 · 잔치 스레드: 용을 잡고 마을회관을 고친 뒤, 잔치상을 채우는 자리 (일곱 상 재료를 다 들고 있음)
 		id = &"feast", name = "잔치 준비", note = "125일 · 이장 · 잔치상 0/7 · 재료 넉넉",
 		day = 125, money = 9000, seeds = 26, crops = 45, herbs = 12, plots = 4, planted = true, scrap = 25, roots = 12, junk = 20, potions = 8,
-		hen_eggs = 14, fish = 10, lunches = 2, potatoes = 12, peppers = 8, cabbages = 6,
+		hen_eggs = 14, fish = 10, potatoes = 12, peppers = 8, cabbages = 6,
 		creatures = [
 			[&"slime", &"farm", &"water", 2, 2], [&"imp", &"farm", &"", 1, 1], [&"foal", &"farm", &"", 1, 1], [&"tree_spirit", &"farm", &"", 2, 1],
 			[&"slime", &"forage", &"earth", 1, 1], [&"slime", &"fish", &"water", 1, 1], [&"gold_toad", &"forage", &"", 1, 0],
 			[&"sparrow", &"errand", &"", 0, 0], [&"will_o", &"herb", &"", 1, 0], [&"tiger", &"feed", &"", 1, 0],
 			[&"slime", &"scrap", &"earth", 1, 1], [&"wyvern", &"forage", &"", 0, 0], [&"lizard", &"forage", &"", 0, 0],
 		],
-		waypoints = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], forge = 2, yak = 2, barn = 2, naru = 2, hall = 2, hens = 6, tools = true, knife = true,
+		waypoints = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], forge = 2, yak = 2, barn = 2, naru = 2, hall = 2, hens = 6,
 		weapons = [&"hunting_bow", &"water_staff", &"long_sword", &"crossbow", &"long_bow"], shop = [&"straw_hat", &"ball_cap"],
 		armor = [[&"leather_hood", &"rare"], [&"hunter_jerkin", &"rare"], [&"leather_shoes", &"rare"]],
 		crafted = [&"work_cap", &"rain_suit", &"work_boots"],
@@ -269,11 +269,6 @@ static func apply(main: Node2D, id: StringName) -> bool:
 	for z: int in Config.FIRST_WEAPON_DROPS:
 		if Config.FIRST_WEAPON_DROPS[z] in s.get("weapons", []):
 			GameState.weapon_gifts.append(z)
-	if s.get("tools", false):
-		# 넓은 괭이 · 큰 물뿌리개
-		GameState.tool_levels[Farm.Work.TILL] = 1
-		GameState.tool_levels[Farm.Work.WATER] = 1
-	GameState.hunter_knife = s.get("knife", false)
 
 	var farm: Farm = main.farm
 	for i in s.get("plots", 1) - GameState.open_plots:
@@ -367,8 +362,6 @@ static func apply(main: Node2D, id: StringName) -> bool:
 	GameState.herbs = s.get("herbs", 0)
 	GameState.hen_eggs = s.get("hen_eggs", 0)
 	GameState.fish = s.get("fish", 0)
-	GameState.lunches = s.get("lunches", 0)
-	GameState.strength = s.get("strength", 0)
 	GameState.roots = s.get("roots", 0)
 	GameState.junk = s.get("junk", 0)
 	GameState.potions = s.get("potions", 0)

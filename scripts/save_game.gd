@@ -178,6 +178,7 @@ static func apply(main: Node2D, d: Dictionary) -> void:
 	for x: Variant in gs.get("hunter_eggs", []):
 		if x is Dictionary and x.has("res"):
 			GameState.farmer_eggs.append(load(x.res))
+	_refund_removed(gs)
 
 	var farm: Farm = main.farm
 	farm.sync_plots()
@@ -287,6 +288,23 @@ static func _apply_forage(forage: Forage, fd: Dictionary) -> void:
 	forage.claimed.clear()
 	forage.bonus_today = fd.get("bonus_today", 0)
 	forage.queue_redraw()
+
+
+## 2026-10-05 시스템 줄이기(가볍게)로 없앤 것을 옛 저장 파일에서 돌려준다.
+## 도구 손보기 · 튼튼한 사냥칼 → 산 값, 남은 힘 · 빠르기 물약 · 사냥 도시락 · 매운탕 → 하나에 빨간 물약 하나.
+## (마을 옷 가게에서 산 옷은 그대로 가방 · 입은 칸에 남는다. 입양 보낸 크리처도 주민 곁에 그대로.)
+static func _refund_removed(gs: Dictionary) -> void:
+	var tools: Variant = gs.get("tool_levels", {})
+	if tools is Dictionary:
+		for work: Variant in tools:
+			if int(tools[work]) > 0:
+				GameState.money += Config.OLD_TOOL_REFUND if int(work) == Farm.Work.TILL else Config.OLD_CAN_REFUND if int(work) == Farm.Work.WATER else 0
+	if gs.get("hunter_knife", false) == true:
+		GameState.money += Config.OLD_KNIFE_REFUND
+	for k: String in ["strength", "speed", "lunches", "stews"]:
+		GameState.potions += maxi(0, int(gs.get(k, 0)))
+	if GameState.yak_brew != &"" and not Config.BREWS.has(GameState.yak_brew):
+		GameState.yak_brew = &""
 
 
 # --- 옛 저장 파일 (VERSION 1) ---------------------------------------------------

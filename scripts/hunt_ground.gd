@@ -150,14 +150,8 @@ var _night: Array[Node] = []
 var _lantern: PointLight2D
 ## 유령 막차 전조등 불빛 (대장이 있을 때만)
 var _bus_light: PointLight2D
-## 이번 사냥에 쓴 연금술사 물약 (호롱 기름 · 힘 · 빠르기)
+## 이번 사냥에 쓴 호롱 기름 (힘 · 빠르기 물약, 도시락, 매운탕은 2026-10-05 시스템 줄이기로 없앰)
 var lamp_oil := false
-var strong := false
-var quick := false
-## 목축인 사냥 도시락을 먹고 들어왔는지 (2026-09-30 축사 닭장): 이번 사냥 동안 하트 칸 +Config.LUNCH_HP
-var lunch := false
-## 뱃사공 매운탕 (2026-10-02 나루터): 이 사냥 동안 최대 체력 +STEW_HP · 경험치 xSTEW_XP_MULT
-var stew := false
 ## 사냥 음식 (2026-10-03 작물 등급 · 쓰임): 찐 감자 최대 체력 + · 고추장 주먹밥 피해 x(1+) · 김치 경험치 · 드롭 x(1+)
 var food_hp := 0
 var food_attack := 0.0
@@ -403,9 +397,9 @@ func lantern_radius() -> float:
 	return Config.LANTERN_RADIUS * (Config.LAMP_OIL_MULT if lamp_oil else 1.0)
 
 
-## 사냥꾼 한 번 공격의 피해 (힘 물약을 마셨으면 +1)
+## 사냥꾼 한 번 공격의 피해 (단위 하나. 세지는 것은 무기 · 스킬 · 주먹밥 쪽에서 곱한다)
 func power() -> int:
-	return 2 if strong else 1
+	return 1
 
 
 ## 몬스터 자리 하나에 모여 있는 수 (몰아잡기 떼가 꺼져 있으면 1)
@@ -518,15 +512,7 @@ func companions() -> Array[HuntCompanion]:
 ## 입은 장비와 세트 보너스까지 더한 하트 칸 수
 func max_life() -> int:
 	return Config.HUNTER_HP + Config.HP_PER_LEVEL * (GameState.hunter_level - 1) + Config.HP_PER_HEART * Wearables.bonus_hearts(&"hunter") + Wearables.bonus_hp(&"hunter") \
-		+ (Config.LUNCH_HP if lunch else 0) + (Config.STEW_HP if stew else 0) + HunterClass.bonus_hp() + food_hp
-
-
-## 사냥 도시락을 먹는다: 하트 칸이 늘고 늘어난 만큼 찬다.
-func eat_lunch() -> void:
-	if lunch:
-		return
-	lunch = true
-	life = mini(life + Config.LUNCH_HP, max_life())
+		+ HunterClass.bonus_hp() + food_hp
 
 
 ## 사냥 음식을 먹는다 (Config.FOODS, grade 1~3)
@@ -543,14 +529,6 @@ func eat_food(id: StringName, grade: int) -> void:
 			food_attack += float(v)
 		&"luck":
 			food_luck += float(v)
-
-
-## 매운탕을 먹는다: 하트 칸이 늘고 늘어난 만큼 찬다. 경험치는 _give_xp 에서 곱한다.
-func eat_stew() -> void:
-	if stew:
-		return
-	stew = true
-	life = mini(life + Config.STEW_HP, max_life())
 
 
 ## 빨간 물약을 마신다 (1 키). 하트가 가득이면 아끼고 마시지 않는다.
@@ -804,7 +782,7 @@ func _tick_dash(delta: float) -> void:
 	if dash_t < 0.0:
 		return
 	_trail.append({at = hunter.position, t = 0.18})
-	var mult := Wearables.speed_mult(&"hunter") * (Config.SPEED_POTION_MULT if quick else 1.0) * HunterClass.move_mult()
+	var mult := Wearables.speed_mult(&"hunter") * HunterClass.move_mult()
 	hunter.step(_dash_dir * Config.DASH_DISTANCE * mult / Config.DASH_TIME * delta)
 	dash_t += delta
 	if dash_t >= Config.DASH_TIME:
@@ -1418,7 +1396,7 @@ func _defeat(s: WildSlime) -> void:
 
 ## 경험치를 준다 (레벨 차 벌칙 적용). 레벨이 오르면 가운데 띠와 알림.
 func _give_xp(base: int) -> void:
-	var amount := maxi(1, roundi(base * HunterSkills.gap_mult(zone) * (Config.STEW_XP_MULT if stew else 1.0) * (1.0 + food_luck))) if base > 0 else 0
+	var amount := maxi(1, roundi(base * HunterSkills.gap_mult(zone) * (1.0 + food_luck))) if base > 0 else 0
 	if GameState.hunter_level >= Config.LEVEL_CAP:
 		return
 	var ups := HunterSkills.gain(amount)
@@ -1836,7 +1814,7 @@ func _tick_dust(delta: float) -> void:
 			dust.remove_at(i)
 		elif (dust[i].at as Vector2).distance_to(hunter.feet()) <= Config.GOLD_DUST_RADIUS:
 			slow = true
-	hunter.slow_mult = (Config.GOLD_DUST_SLOW if slow else 1.0) * (Config.SPEED_POTION_MULT if quick else 1.0) * HunterClass.move_mult()
+	hunter.slow_mult = (Config.GOLD_DUST_SLOW if slow else 1.0) * HunterClass.move_mult()
 
 
 ## 드롭을 줍는다. 장비면 바로 입거나 가방에 넣고, 늘어난 하트 칸만큼 하트도 채운다.

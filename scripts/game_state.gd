@@ -47,10 +47,6 @@ var waypoints: Array[int] = [0]
 ## 대장을 한 번이라도 쓰러뜨린 구역 (Config.HUNT_ZONES 번호). 이런 구역은 다음부터 들어가면 대장이 처음부터 나와 있다
 ## (2026-10-01 사용자: "보스를 한번 잡으면 그담부터는 일반 몬스터 안잡아도 보스가 팝업되어있도록").
 var bosses_beaten: Array[int] = []
-## 강화한 농사 도구 (Farm.Work 값 → 단계). 0이면 처음 도구.
-var tool_levels := {}
-## 사냥꾼 튼튼한 사냥칼을 샀는지
-var hunter_knife := false
 ## 입는 장비 (Wearables). 산 장비 id, 캐릭터별 입은 장비 (칸 → id)
 var owned_wear: Array[StringName] = []
 var worn := {&"farmer": {}, &"hunter": {}}
@@ -88,10 +84,8 @@ var yak_boss_down := false
 var material2 := 0
 var roots := 0
 var herb_bed := 0
-## 연금술사가 만든 것: 호롱 기름 · 힘 물약 · 빠르기 물약 · 크리처 보약 (빨간 물약은 potions)
+## 연금술사가 만든 것: 호롱 기름 · 크리처 보약 (빨간 물약은 potions)
 var lamp_oil := 0
-var strength := 0
-var speed := 0
 var tonics := 0
 ## 크리처 보약을 먹인 날 (그날 모든 크리처가 두 배 빠름). -1 = 없음
 var tonic_day := -1
@@ -106,10 +100,9 @@ var hens := 0
 var chicks: Array[int] = []
 var nest := 0
 var fed := 0
-## 꺼내 든 달걀 · 공급함에 진열한 달걀 · 목축인이 싼 사냥 도시락
+## 꺼내 든 달걀 · 공급함에 진열한 달걀
 var hen_eggs := 0
 var displayed_hen_eggs := 0
-var lunches := 0
 ## 나루터 (2026-10-02 시설 4): 0 = 없음, 1 = 무너진 터, 2 = 고침 (뱃사공 열림)
 var naru_state := 0
 ## 4막 대장(곤지암 마왕)을 쓰러뜨린 적이 있는지. 다음 날 아침 나루터 터가 드러난다.
@@ -137,12 +130,11 @@ var requests_done := 0
 var feast_state := 0
 var feast_dishes: Array[StringName] = []
 var feast_day := -1
-## 통발: 지금 물에 놓은 수 · 나루터 바구니의 물고기 · 꺼내 든 물고기 · 공급함에 진열한 물고기 · 뱃사공 매운탕
+## 통발: 지금 물에 놓은 수 · 나루터 바구니의 물고기 · 꺼내 든 물고기 · 공급함에 진열한 물고기
 var traps := 0
 var basket := 0
 var fish := 0
 var displayed_fish := 0
-var stews := 0
 ## 오늘 크리처가 한 물고기 몰기 수 (내일 아침 물고기 +). 아침마다 0.
 var fish_drive := 0
 ## 주민에게 입양 보낸 크리처 (2026-10-01 사용자 선택 D). {species, elements (리소스 경로), who (&"smith" 등)}
@@ -182,10 +174,6 @@ func _ready() -> void:
 func notify(text: String) -> void:
 	message.emit(text)
 	changed.emit()
-
-
-func tool_level(work: int) -> int:
-	return tool_levels.get(work, 0)
 
 
 ## 시계 글씨 (10분 단위): "오전 6:00", "오후 2:40", "밤 11:50", "새벽 1:00"
@@ -240,8 +228,6 @@ func reset() -> void:
 	hunts_today = 0
 	waypoints = [0]
 	bosses_beaten = []
-	tool_levels = {}
-	hunter_knife = false
 	owned_wear = []
 	worn = {&"farmer": {}, &"hunter": {}}
 	bag = {&"farmer": [] as Array[StringName], &"hunter": [] as Array[StringName]}
@@ -264,8 +250,6 @@ func reset() -> void:
 	roots = 0
 	herb_bed = 0
 	lamp_oil = 0
-	strength = 0
-	speed = 0
 	tonics = 0
 	tonic_day = -1
 	barn_state = 0
@@ -277,7 +261,6 @@ func reset() -> void:
 	fed = 0
 	hen_eggs = 0
 	displayed_hen_eggs = 0
-	lunches = 0
 	naru_state = 0
 	naru_boss_down = false
 	material4 = 0
@@ -297,7 +280,6 @@ func reset() -> void:
 	basket = 0
 	fish = 0
 	displayed_fish = 0
-	stews = 0
 	fish_drive = 0
 	adopted = []
 	hunter_level = 1

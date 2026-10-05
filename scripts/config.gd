@@ -95,13 +95,11 @@ const ROOT_SPOTS: Array[Vector2i] = [Vector2i(16, 16), Vector2i(29, 21), Vector2
 ## 물속성이 물 준 풀밭 한 칸마다 다음 날 들나물 +1포기, 최대 이만큼
 const HERB_WATER_BONUS_MAX := 3
 
-## 도구 강화 (2026-09-27 후보 A 첫 조각): 마을 공급함에서 돈으로 한 번 사면 끝. 값은 전부 임시.
-## 괭이·물뿌리개 1단계 = 바라보는 방향으로 앞 3칸 일자에 한 번에 쓴다.
-const TOOL_UPGRADE_REACH := 3
-const HOE_UPGRADE_PRICE := 200
-const CAN_UPGRADE_PRICE := 250
-## 사냥꾼 튼튼한 사냥칼: 이후 태어나는 크리처 능력치 바닥을 첫 크리처만큼 보장한다
-const HUNTER_KNIFE_PRICE := 400
+## 공급함 도구 손보기 (넓은 괭이 · 큰 물뿌리개) · 튼튼한 사냥칼 · 마을 옷 가게는 2026-10-05 시스템 줄이기(가볍게)로 없앴다.
+## 넓히기는 농사 기술 (FarmSkills.wide) 하나로, 사냥칼의 크리처 바닥 보장은 늘 켠다. 옛 저장 파일은 산 값을 돌려받는다 (SaveGame).
+const OLD_TOOL_REFUND := 200
+const OLD_CAN_REFUND := 250
+const OLD_KNIFE_REFUND := 400
 
 ## 크리처 훈련 (2026-09-29 사용자 선택 A, 돈 쓸 곳 2단계): 공급함에서 크리처마다 범위·속도를 한 단계씩 올린다.
 ## 값은 단계마다 두 배, 크리처·능력마다 따로 낸다. 최대 단계 = 배열 길이. 값은 전부 임시.
@@ -122,7 +120,7 @@ const HUNTS_PER_DAY := 1
 
 ## 사냥터 첫 조각 (2026-09-27 결정 A. 실시간 한 화면). 값은 전부 임시.
 ## 사냥꾼 체력 (2026-10-02 사용자: 하트 대신 "일반 체력방식"). 옛 하트 1 = 체력 HP_PER_HEART.
-## 최대 체력 = HUNTER_HP + 레벨마다 HP_PER_LEVEL + 장비 · 세트 (하트 옵션 1 = HP_PER_HEART) + 도시락 · 매운탕
+## 최대 체력 = HUNTER_HP + 레벨마다 HP_PER_LEVEL + 장비 · 세트 (하트 옵션 1 = HP_PER_HEART) + 사냥 음식 (찐 감자)
 const HP_PER_HEART := 10
 const HUNTER_HP := 50
 const HP_PER_LEVEL := 2
@@ -520,7 +518,7 @@ const HUNT_ZONES: Array[Dictionary] = [
 		## 금사리부터 확 세다 (2026-09-29 B): 체력 3→5, 하트 -2, 덜 밀림, 모래게가 무리로 튀어나옴. 대장 체력 6→9
 		damage = 2, knockback = 6.0, windup = 0.4, pack = true, boss_pattern = &"tongue",
 		## 입구 메뉴·들어올 때 보여 주는 권장 준비
-		advice = "권장: 사냥칼",
+		advice = "권장: 사냥 활 · 대장간 장비",
 		## 대장 재료 (2026-09-29 대장간 복구 A): 대장을 쓰러뜨릴 때마다 하나 (1막 대장 재료 사금 덩이)
 		boss_material = true,
 		loot = {&"money": 38, &"potion": 25, &"junk": 19, &"gear": 18},
@@ -627,7 +625,7 @@ const HUNT_ZONES: Array[Dictionary] = [
 		damage = 2, knockback = 4.0, windup = 0.35, pack = false, boss_pattern = &"tiger",
 		## 3막 대장 재료 (2026-09-30 축사 닭장): 백호를 쓰러뜨릴 때마다 산군 발톱 하나, 처음 잡으면 다음 날 마을에 축사 터
 		boss_material3 = true,
-		advice = "권장: 사냥 도시락",
+		advice = "권장: 찐 감자",
 		loot = {&"money": 34, &"potion": 26, &"junk": 20, &"gear": 20},
 		rarity = {&"normal": 25, &"magic": 45, &"rare": 30}, boss_rarity = {&"normal": 5, &"magic": 50, &"rare": 45},
 		money = [45, 90], boss_money = [140, 220],
@@ -655,7 +653,7 @@ const HUNT_ZONES: Array[Dictionary] = [
 		count = 10, hp = 13, speed = 1.3, boss_hp = 80,
 		swarm = 2,
 		damage = 3, knockback = 4.0, windup = 0.4, pack = false, boss_pattern = &"general",
-		advice = "권장: 사냥 도시락",
+		advice = "권장: 찐 감자",
 		loot = {&"money": 34, &"potion": 26, &"junk": 20, &"gear": 20},
 		rarity = {&"normal": 22, &"magic": 46, &"rare": 32}, boss_rarity = {&"normal": 5, &"magic": 48, &"rare": 47},
 		money = [50, 95], boss_money = [150, 240],
@@ -687,7 +685,7 @@ const HUNT_ZONES: Array[Dictionary] = [
 		damage = 3, knockback = 3.0, windup = 0.3, pack = false, boss_pattern = &"archdemon",
 		## 4막 대장 재료 (2026-10-02 나루터): 마왕을 쓰러뜨릴 때마다 마왕 뿔 하나, 처음 잡으면 다음 날 마을 팔당호 물가에 나루터 터
 		boss_material4 = true,
-		advice = "권장: 사냥 도시락",
+		advice = "권장: 찐 감자",
 		loot = {&"money": 32, &"potion": 26, &"junk": 20, &"gear": 22},
 		rarity = {&"normal": 20, &"magic": 46, &"rare": 34}, boss_rarity = {&"normal": 0, &"magic": 45, &"rare": 55},
 		money = [55, 105], boss_money = [180, 280],
@@ -716,7 +714,7 @@ const HUNT_ZONES: Array[Dictionary] = [
 		count = 9, hp = 15, speed = 1.3, boss_hp = 110,
 		swarm = 4, max_attackers = 3,
 		damage = 3, knockback = 3.0, windup = 0.45, pack = false, boss_pattern = &"chief",
-		advice = "권장: 사냥 도시락",
+		advice = "권장: 찐 감자",
 		loot = {&"money": 32, &"potion": 26, &"junk": 20, &"gear": 22},
 		rarity = {&"normal": 18, &"magic": 46, &"rare": 36}, boss_rarity = {&"normal": 0, &"magic": 44, &"rare": 56},
 		money = [60, 110], boss_money = [190, 300],
@@ -749,7 +747,7 @@ const HUNT_ZONES: Array[Dictionary] = [
 		count = 9, hp = 15, speed = 1.3, boss_hp = 200,
 		swarm = 3, max_attackers = 3,
 		damage = 3, knockback = 3.0, windup = 0.4, pack = false, boss_pattern = &"dragon",
-		advice = "권장: 사냥 도시락 · 매운탕",
+		advice = "권장: 찐 감자 · 김치",
 		loot = {&"money": 30, &"potion": 26, &"junk": 20, &"gear": 24},
 		rarity = {&"normal": 15, &"magic": 45, &"rare": 40}, boss_rarity = {&"normal": 0, &"magic": 40, &"rare": 60},
 		money = [65, 120], boss_money = [260, 400],
@@ -1017,16 +1015,13 @@ const JUNK_KEEP := 10
 ## 도라지밭: 아침마다 이만큼 돋는다 (안 캔 것은 새로 채움). 농부가 F로 하나씩 캐도 된다.
 const HERB_BED_PER_DAY := 6
 ## 연금술사 제작 (약방에서 연금술사 F). 재료: herbs 들나물 (농부가 든 것) · roots 도라지 · junk 잡템 · crops 무.
-## 만드는 것: potion 빨간 물약 · lamp_oil 호롱 기름 (밤 구역 불빛 x LAMP_OIL_MULT) · strength 힘 물약 (다음 사냥 한 번 공격 피해 +1)
-## · speed 빠르기 물약 (다음 사냥 한 번 걸음 x SPEED_POTION_MULT) · tonic 크리처 보약 (먹인 날 모든 크리처 일 속도 x TONIC_SPEED_MULT)
+## 만드는 것: potion 빨간 물약 · lamp_oil 호롱 기름 (밤 구역 불빛 x LAMP_OIL_MULT) · tonic 크리처 보약 (먹인 날 모든 크리처 일 속도 x TONIC_SPEED_MULT)
+## (힘 · 빠르기 물약은 2026-10-05 시스템 줄이기로 없앰: 사냥 음식 주먹밥 · 장비와 겹침)
 const BREWS := {
 	&"potion": {name = "빨간 물약", count = 2, cost = {herbs = 2, junk = 1}, effect = "체력 +30 (1 키), 두 병"},
 	&"lamp_oil": {name = "호롱 기름", count = 1, cost = {roots = 2}, effect = "밤 구역 호롱 불빛이 넓어짐 (들어갈 때 하나)"},
-	&"strength": {name = "힘 물약", count = 1, cost = {roots = 3, junk = 1}, effect = "다음 사냥 한 번 공격 피해 +1"},
-	&"speed": {name = "빠르기 물약", count = 1, cost = {herbs = 2, junk = 1}, effect = "다음 사냥 한 번 걸음 +25%"},
 	&"tonic": {name = "크리처 보약", count = 1, cost = {crops = 3, roots = 2}, effect = "먹인 날 모든 크리처 일 속도 x2"},
 }
-const SPEED_POTION_MULT := 1.25
 const TONIC_SPEED_MULT := 2.0
 
 ## 축사 복구 · 목축인 (2026-09-30 사용자 선택 A 닭장). 본편 셋째 시설. 값·자리·그림 전부 임시.
@@ -1046,7 +1041,7 @@ const BARN_COST_CROPS := 60
 const BARN_COST_MATERIAL := 20
 ## 닭장: 암탉은 아침마다 둥지에 달걀 하나 (전날 모이를 먹었으면 반드시, 안 먹었으면 HEN_HUNGRY_LAY 확률).
 ## 둥지에 하룻밤 남긴 달걀은 CHICK_HATCH_CHANCE 로 병아리가 된다 (수탉이 있으니까). 병아리는 CHICK_GROW_DAYS 뒤 암탉.
-## 닭장에는 암탉 + 병아리가 HEN_CAP 마리까지. 꺼낸 달걀은 공급함에 진열해 팔거나 목축인이 도시락을 싼다.
+## 닭장에는 암탉 + 병아리가 HEN_CAP 마리까지. 꺼낸 달걀은 공급함에 진열해 판다.
 const START_HENS := 1
 const HEN_CAP := 8
 const HEN_HUNGRY_LAY := 0.5
@@ -1057,10 +1052,7 @@ const HEN_EGG_PRICE := 25
 const WEASEL_CHANCE := 0.3
 ## 모이 주기: 닭장에서 F로 한 번에 다 먹이면 무 FEED_CROP_COST 개. 크리처에게 모이 주기(R)를 맡기면 무 없이 한 마리씩 먹인다.
 const FEED_CROP_COST := 1
-## 목축인 제작 (닭장에서 목축인 F): 사냥 도시락 = 다음 사냥 한 번 최대 체력 +LUNCH_HP (늘어난 만큼 참)
-const LUNCH_EGGS := 2
-const LUNCH_CROPS := 1
-const LUNCH_HP := 20
+## (목축인 사냥 도시락은 2026-10-05 시스템 줄이기로 없앰: 사냥 음식 찐 감자와 겹침. 달걀은 진열해 판다.)
 
 ## 팔당호 물가 (2026-10-02 나루터): 마을 오른쪽 아래 구석은 처음부터 물이다 (분원리는 팔당호 옆 마을). 줄 번호: 그 줄에서 물이 시작하는 칸.
 ## 물 칸은 아무도 못 들어가고 들나물도 안 돋는다. 그림 assets/props/lake.png (칸 31~39 · 16~23, tools/make_naru_sheets.py).
@@ -1072,7 +1064,7 @@ const LAKE_ROWS := {16: 39, 17: 38, 18: 37, 19: 36, 20: 35, 21: 34, 22: 33, 23: 
 ## 터에서 F → 돈 · 무 · 4막 대장 재료를 다 모았으면 한 번에 고친다 (대장간 · 약방 · 축사처럼).
 ## 고치면 뱃사공(마을 사람)이 오고 잔교 · 나룻배가 놓인다. 나룻배는 5막 팔당호 섬 뱃길 (그때 엶).
 ## 통발 (사용자 선택 B): 나루터에서 F로 통발 놓기 (미끼 무 하나, TRAP_MAX 개까지) → 다음 날 아침 통발마다 물고기 0~2마리가
-## 나루터 바구니에 (통발은 걷혀서 다시 놓아야 함). 바구니에서 꺼낸 물고기는 공급함에 진열해 팔거나 뱃사공이 매운탕을 끓인다.
+## 나루터 바구니에 (통발은 걷혀서 다시 놓아야 함). 바구니에서 꺼낸 물고기는 공급함에 진열해 판다.
 const NARU_ZONE := 7
 const BOSS_MATERIAL4_NAME := "마왕 뿔"
 const NARU_RECT := Rect2i(32, 17, 3, 2)
@@ -1091,12 +1083,7 @@ const TRAP_CELLS: Array[Vector2i] = [Vector2i(37, 19), Vector2i(36, 21), Vector2
 const FISH_PRICE := 45
 ## 물고기 몰기 (크리처 일): 통발이 놓여 있으면 한 번 할 때마다 내일 아침 물고기 +1 (하루 FISH_DRIVE_CAP 번까지). 물속성이 두 배 빠르다.
 const FISH_DRIVE_CAP := 4
-## 뱃사공 매운탕 (나루터에서 뱃사공 F): 다음 사냥 한 번 최대 체력 +STEW_HP · 경험치 xSTEW_XP_MULT (들어갈 때 먹음)
-const STEW_FISH := 2
-## 매운탕 양념 = 고추 (2026-10-03 농사 다양화: 고추는 도마리 대장 뒤 열림, 나루터보다 한참 먼저)
-const STEW_PEPPERS := 1
-const STEW_HP := 10
-const STEW_XP_MULT := 1.5
+## (뱃사공 매운탕은 2026-10-05 시스템 줄이기로 없앰: 사냥 음식 찐 감자 · 김치와 겹침. 물고기는 진열해 판다.)
 
 ## 마을회관 · 이장 (2026-10-03 시설 5, 사용자 선택 A 마을회관 · 이장). 본편 마지막 시설. 값 · 자리 · 그림 전부 임시.
 ## 5막 대장 (소내섬 용, 마지막 대장) 을 처음 쓰러뜨린 다음 날 아침, 마을 아랫길 아래 풀밭에 무너진 마을회관 터가 드러난다.
@@ -1198,15 +1185,7 @@ const EXPEDITION_JUNK := [1, 2]
 ## 대장 재료 (막 대장 구역만) · 장비 (그 구역 등급 무게, 공용 창고로) 확률, 팀 힘을 곱한다
 const EXPEDITION_MATERIAL_CHANCE := 0.1
 const EXPEDITION_GEAR_CHANCE := 0.06
-## 입양: 시설을 고친 주민마다 받아 주는 수 · 보답 (한 번) · 지내는 칸
-const ADOPT_CAP := 4
-const ADOPT_GIFTS := {
-	&"smith": {name = "대장장이", text = "고철 5개", count = 5},
-	&"alchemist": {name = "연금술사", text = "빨간 물약 2병", count = 2},
-	&"rancher": {name = "목축인", text = "사냥 도시락 1개", count = 1},
-	&"ferryman": {name = "뱃사공", text = "물고기 4마리", count = 4},
-	&"chief": {name = "이장", text = "2000원", count = 2000},
-}
+## 입양 (옛 저장 파일만, 2026-10-05 입양 보내기 없앰): 입양 크리처가 지내는 칸
 const ADOPT_SPOTS := {
 	&"smith": [Vector2i(3, 17), Vector2i(2, 17), Vector2i(3, 18), Vector2i(2, 18)],
 	&"alchemist": [Vector2i(18, 19), Vector2i(17, 19), Vector2i(16, 18), Vector2i(16, 19)],
@@ -1240,7 +1219,7 @@ const CROPS := {
 	&"potato": {name = "감자", row = 1, days = 2, picks = 1, regrow = 0, amount = 2, price = 15,
 		held = "potatoes", seed_var = "potato_seeds", pack = 5, pack_price = 50, zone = FORGE_ZONE, note = "2일 · 한 칸에 둘"},
 	&"pepper": {name = "고추", row = 2, days = 4, picks = 4, regrow = 2, amount = 1, price = 40,
-		held = "peppers", seed_var = "pepper_seeds", pack = 5, pack_price = 150, zone = YAK_ZONE, note = "4일 · 딴 뒤 2일마다 또 (4번) · 매운탕"},
+		held = "peppers", seed_var = "pepper_seeds", pack = 5, pack_price = 150, zone = YAK_ZONE, note = "4일 · 딴 뒤 2일마다 또 (4번) · 주먹밥 · 김치"},
 	&"cabbage": {name = "배추", row = 3, days = 6, picks = 1, regrow = 0, amount = 1, price = 110,
 		held = "cabbages", seed_var = "cabbage_seeds", pack = 5, pack_price = 200, zone = BARN_ZONE, note = "6일 · 비쌈 · 김치"},
 }

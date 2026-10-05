@@ -62,47 +62,22 @@ func _ready() -> void:
 	_check(not main.supply_options().has(&"expand_field"), "다 넓히면 선택창에서 빠짐")
 	main.close_menu()
 
-	# 1-2) 도구 강화 (A 첫 조각): 괭이·물뿌리개를 공급함에서 사면 앞 3칸 일자에 한 번에 쓴다
-	_check(main.supply_options().has(&"upgrade_hoe") and main.supply_option_text(&"upgrade_can").contains("큰 물뿌리개"), "공급함에 도구 손보기")
-	_check(not main.supply_action(&"upgrade_hoe") and GameState.tool_level(Farm.Work.TILL) == 0, "돈이 모자라면 도구를 못 바꿈")
+	# 1-2) 도구 손보기 · 사냥칼 · 마을 옷 가게 · 입양은 2026-10-05 시스템 줄이기(가볍게)로 공급함에서 빠졌다
+	var sup: Array[StringName] = main.supply_options()
+	_check(not sup.has(&"upgrade_hoe") and not sup.has(&"upgrade_can") and not sup.has(&"buy_knife") and not sup.has(&"adopt") and not sup.has(&"rain_boots") and not sup.has(&"straw_hat"), "공급함에 도구 손보기 · 사냥칼 · 옷 가게 · 입양 없음")
 	var row := fc(8, 3)
 	farmer.position = Farm.center_of(row + Vector2i.LEFT)
 	farmer.facing = Vector2i.RIGHT
 	main.tool_index = 0
 	main.use_tool()
-	_check(farm0.get_cell(row).tilled and not farm0.get_cell(row + Vector2i.RIGHT).tilled, "처음 괭이는 한 칸만")
-	GameState.money = Config.HOE_UPGRADE_PRICE + Config.CAN_UPGRADE_PRICE + Config.HUNTER_KNIFE_PRICE
-	_check(main.supply_action(&"upgrade_hoe") and main.supply_action(&"upgrade_can") and main.supply_action(&"buy_knife") and GameState.money == 0, "넓은 괭이 · 큰 물뿌리개 · 사냥칼 사기")
-	_check(not main.supply_action(&"upgrade_hoe") and not main.supply_options().has(&"upgrade_can") and not main.supply_options().has(&"buy_knife"), "산 도구는 선택창에서 빠짐")
-	main._refresh_hud()
-	_check(main._status.text.contains("넓은 괭이"), "HUD에 바뀐 도구 이름")
-	main.use_tool()
-	_check(farm0.get_cell(row + Vector2i(1, 0)).tilled and farm0.get_cell(row + Vector2i(2, 0)).tilled and not farm0.get_cell(row + Vector2i(3, 0)).tilled, "넓은 괭이는 앞 3칸 일자")
-	main.tool_index = 1
-	for i in 3:
-		farmer.position = Farm.center_of(row + Vector2i(i - 1, 0))
-		main.use_tool()
-	main.tool_index = 2
-	farmer.position = Farm.center_of(row + Vector2i.LEFT)
-	main.use_tool()
-	_check(farm0.get_cell(row).watered and farm0.get_cell(row + Vector2i(2, 0)).watered, "큰 물뿌리개는 심은 3칸에 한 번에 물")
-	for i in 3:
-		var rc: Farm.Cell = farm0.get_cell(row + Vector2i(i, 0))
-		rc.tilled = false
-		rc.planted = false
-		rc.watered = false
+	_check(farm0.get_cell(row).tilled and not farm0.get_cell(row + Vector2i.RIGHT).tilled, "처음 괭이는 한 칸만 (넓히기는 농사 기술로)")
+	farm0.get_cell(row).tilled = false
 	main.close_menu()
 
-	# 1-3) 입는 장비 (B): 공급함에서 사면 바로 입고, 덧그림이 몸 시트와 같은 칸을 따라간다
-	_check(main.supply_options().has(&"rain_boots") and main.supply_option_text(&"seed_vest").contains("씨앗 주머니 조끼"), "공급함에 입는 장비")
-	_check(not main.supply_action(&"rain_boots") and Wearables.speed_mult(&"farmer") == 1.0, "돈이 모자라면 장비를 못 삼")
-	var wear_total := 0
+	# 1-3) 입는 장비: 옛 마을 옷(옛 저장 파일 · 테스트 시작)은 입으면 덧그림이 몸 시트와 같은 칸을 따라간다
 	for id: StringName in Wearables.shop_items():
-		wear_total += Wearables.ITEMS[id].price
-	GameState.money = wear_total
-	for id: StringName in Wearables.shop_items():
-		_check(main.supply_action(id), "장비 사서 입기: %s" % Wearables.ITEMS[id].name)
-	_check(GameState.money == 0 and not main.supply_action(&"rain_boots"), "산 장비는 다시 못 삼")
+		Wearables.gain_and_wear(id)
+	main.player.refresh_wear()
 	_check(Wearables.worn_by(&"farmer").size() == 3 and Wearables.worn_by(&"hunter").size() == 2, "농부 모자·옷·신발, 사냥꾼 모자·신발")
 	_check(is_equal_approx(Wearables.speed_mult(&"farmer"), 1.15) and is_equal_approx(Wearables.speed_mult(&"hunter"), 1.15), "장화·등산화는 걷기 +15%")
 	_check(farmer._wear.size() == 3 and farmer.outfit == &"farmer", "마을에서는 밭 옷 덧그림 (모자 · 옷 · 신발)")
@@ -2224,7 +2199,6 @@ func _ready() -> void:
 	_check(b_c.data.work_speed(CreatureJobs.HERB) > b_c.data.work_speed(CreatureJobs.FORAGE), "불 속성은 도라지밭 일이 빠름")
 	GameState.hunts_today = 0
 	GameState.lamp_oil = 1
-	GameState.strength = 1
 	if not b_zi in GameState.waypoints:
 		GameState.waypoints.append(b_zi)
 	main.enter_hunt(b_c, b_zi)
@@ -2234,8 +2208,6 @@ func _ready() -> void:
 	bjh.companion_ai = false
 	_check(bjh.zone == b_zi and bjh.is_night() and bjh.lamps.size() == b_map.find("L").size(), "번천에 들어옴: 밤, 가로등 %d" % bjh.lamps.size())
 	_check(bjh.lamp_oil and GameState.lamp_oil == 0 and is_equal_approx(bjh.lantern_radius(), Config.LANTERN_RADIUS * Config.LAMP_OIL_MULT), "호롱 기름을 채워 호롱 불빛이 넓음")
-	_check(bjh.strong and GameState.strength == 0 and bjh.power() == 2, "힘 물약: 이번 사냥 피해 +1")
-	bjh.strong = false
 	bjh.lamp_oil = false
 	var b_feet: Vector2 = main.player.feet()
 	var b_lamps := bjh.lamps.duplicate()
@@ -2503,7 +2475,7 @@ func _ready() -> void:
 	_check(main.restore_barn() and GameState.barn_state == 2 and main.rancher.visible and GameState.hens == Config.START_HENS and GameState.money == 3 and GameState.crops == 4 and GameState.material3 == 0,
 		"축사 복구 (돈 %d · 무 %d · 산군 발톱 %d) → 목축인 · 암탉 %d" % [Config.BARN_COST_MONEY, Config.BARN_COST_CROPS, Config.BARN_COST_MATERIAL, Config.START_HENS])
 	_check(FacilityWorkers.is_open(&"barn"), "축사 일꾼 자리 (모이 주기)")
-	_check(main.coop_options().has(&"lunch") and main.coop_options().has(&"feed"), "닭장: 모이 주기 · 목축인에게 도시락 부탁")
+	_check(not main.coop_options().has(&"lunch") and main.coop_options().has(&"feed"), "닭장: 모이 주기 (도시락은 2026-10-05 없앰)")
 	_check(main.coop_action(&"feed") and GameState.fed == GameState.hens and GameState.crops == 3, "모이 주기 (무 %d)" % Config.FEED_CROP_COST)
 	var m_rng := RandomNumberGenerator.new()
 	m_rng.seed = 7
@@ -2540,20 +2512,14 @@ func _ready() -> void:
 	m_t.job = CreatureJobs.FEED
 	m_t._busy = false
 	_check(m_t._feed_once(), "아기 호랑이가 모이 주기 일을 함")
-	# 달걀: 꺼내기 → 공급함 진열 → 밤사이 팔림, 목축인 사냥 도시락 → 하트 +2
+	# 달걀: 꺼내기 → 공급함 진열 → 밤사이 팔림
 	GameState.nest = 5
 	GameState.hen_eggs = 0
 	_check(main.coop_action(&"take_nest") and GameState.hen_eggs == 5 and GameState.nest == 0, "둥지 달걀 꺼내기")
-	GameState.crops = 1
-	_check(main.coop_options().has(&"lunch") and main.coop_action(&"lunch") and GameState.lunches == 1 and GameState.hen_eggs == 3 and GameState.crops == 0, "목축인 사냥 도시락 (달걀 %d · 무 %d)" % [Config.LUNCH_EGGS, Config.LUNCH_CROPS])
-	_check(main.supply_options().has(&"display_hen_eggs") and main.supply_action(&"display_hen_eggs") and GameState.displayed_hen_eggs == 3, "달걀 진열")
+	_check(main.supply_options().has(&"display_hen_eggs") and main.supply_action(&"display_hen_eggs") and GameState.displayed_hen_eggs == 5, "달걀 진열")
 	var m_m0 := GameState.money
 	main.next_day()
-	_check(GameState.money >= m_m0 + 3 * Config.HEN_EGG_PRICE and GameState.displayed_hen_eggs == 0, "진열한 달걀이 밤사이 팔림")
-	GameState.hunts_today = 0
-	main.enter_hunt(null, 0)
-	_check(main.hunt.lunch and GameState.lunches == 0 and main.hunt.life == main.hunt.max_life() and main.hunt.max_life() == Config.HUNTER_HP + Config.HP_PER_LEVEL * (GameState.hunter_level - 1) + Config.HP_PER_HEART * Wearables.bonus_hearts(&"hunter") + Config.LUNCH_HP, "사냥 도시락: 들어갈 때 먹고 체력 +%d" % Config.LUNCH_HP)
-	main.leave_hunt()
+	_check(GameState.money >= m_m0 + 5 * Config.HEN_EGG_PRICE and GameState.displayed_hen_eggs == 0, "진열한 달걀이 밤사이 팔림")
 
 	# 38) 테스트용 시작 지점 (2026-09-29 사용자: "매번 처음부터 시작하는게 조금 어려운거같아")
 	_check(not main.menu_open, "테스트 장면 안에서는 시작 지점 창이 안 뜸")
@@ -2582,7 +2548,7 @@ func _ready() -> void:
 		if sid == &"forge_ready":
 			_check(not ts.restore_forge() and SiteWork.building(&"forge") and not ts.smith.visible, "대장간 고치기 직전: 바로 공사를 시작할 수 있음")
 		if sid == &"barn":
-			_check(GameState.barn_state == 2 and ts.rancher.visible and GameState.hens == spec.hens and GameState.lunches == 1, "축사 복구 뒤: 목축인 · 암탉 %d · 도시락" % GameState.hens)
+			_check(GameState.barn_state == 2 and ts.rancher.visible and GameState.hens == spec.hens, "축사 복구 뒤: 목축인 · 암탉 %d" % GameState.hens)
 		if sid != &"fresh":
 			_check(GameState.hunter_unlocked and GameState.village_eggs.is_empty() and ts.farm.get_cell(Config.FIELD_PLOTS[0].position).planted, "%s: 사냥꾼 열림 · 밭 심어 둠" % sid)
 			# 가장 깊은 웨이포인트에서 바로 사냥 들어가기
@@ -2639,22 +2605,12 @@ func _ready() -> void:
 	_check(absf(ex_esum / 100.0 - 67.0 / 3.0) < 4.0, "금사리 보통 팀 하룻밤 돈 평균 %.0f원 ≈ 사냥 한 번(67원)의 1/3" % (ex_esum / 100.0))
 	Expedition.recall(ex, 1)
 	_check(Expedition.team(ex, 1).is_empty() and Expedition.idle(ex).size() == 5 and team1.all(func(x: Creature) -> bool: return x.visible and x.job == CreatureJobs.FORAGE), "불러들이면 마을로 돌아와 채집")
-	# 입양
-	_check(&"adopt" in ex.supply_options(), "공급함: 크리처 입양 보내기")
-	var ex_n_before: int = ex.creatures.size()
-	var ex_scrap0 := GameState.scrap
-	var ex_potions0 := GameState.potions
-	var ex_who1 := Expedition.adopt(ex, Expedition.idle(ex)[0])
-	var ex_who2 := Expedition.adopt(ex, Expedition.idle(ex)[0])
-	_check(ex_who1 == &"smith" and ex_who2 == &"alchemist" and GameState.scrap == ex_scrap0 + 5 and GameState.potions == ex_potions0 + 2, "입양: 대장장이 → 고철 +5, 연금술사 → 빨간 물약 +2")
-	await get_tree().process_frame
-	_check(ex.creatures.size() == ex_n_before - 2 and ex.adoptees.size() == 2 and GameState.adopted.size() == 2 and ex.adoptees[0].position == Farm.center_of(Config.ADOPT_SPOTS[&"smith"][0]),
-		"입양된 크리처는 마을 크리처에서 빠지고 주민 곁에 있음")
-	for i in 20:
-		if Expedition.idle(ex).is_empty():
-			break
-		Expedition.adopt(ex, Expedition.idle(ex)[0])
-	_check(Expedition.adopted_by(&"smith") <= Config.ADOPT_CAP and GameState.adopted.size() == 5, "쉬는 크리처가 다 입양되면 끝 (%d마리)" % GameState.adopted.size())
+	# 입양 보내기는 2026-10-05 시스템 줄이기로 없앰. 옛 저장 파일의 입양 크리처만 주민 곁에 그린다.
+	_check(not &"adopt" in ex.supply_options(), "공급함에 입양 보내기 없음")
+	var ex_d: CreatureData = Expedition.idle(ex)[0].data
+	GameState.adopted.append({species = ex_d.species.resource_path, elements = ex_d.elements.map(func(e: CreatureElement) -> String: return e.resource_path), who = &"smith"})
+	var ex_a := Expedition.spawn_adopted(ex, GameState.adopted.size() - 1)
+	_check(ex.adoptees.size() == 1 and ex_a.position == Farm.center_of(Config.ADOPT_SPOTS[&"smith"][0]), "옛 저장 파일의 입양 크리처는 주민 곁에 있음")
 	ex.queue_free()
 	await get_tree().process_frame
 
@@ -2747,15 +2703,18 @@ func _save_load_checks() -> void:
 	GameState.fed = 1
 	GameState.displayed_crops = 5
 	GameState.tonic_day = 69
-	GameState.tool_levels[Farm.Work.HARVEST] = 1
 	a.farm.do_work(Farm.Work.WATER, fc(2, 2))
 	a.forage.water(Config.FORAGE_CELLS[7])
 	var carried: Creature = a.creatures[5]
 	a.player.position = Farm.center_of(fc(9, 9))
 	carried.pick_up(a.player)
 	a.creatures[0].data.radius_level = 3
-	# 원정 · 입양 (42): 하나는 대장장이에게 입양, 남은 쉬는 크리처는 금사리 원정
-	Expedition.adopt(a, Expedition.idle(a)[-1])
+	# 원정 · 입양 (42): 하나는 대장장이에게 입양 (옛 저장 파일처럼 직접 넣음), 남은 쉬는 크리처는 금사리 원정
+	var a_ad: Creature = Expedition.idle(a)[-1]
+	GameState.adopted.append({species = a_ad.data.species.resource_path, elements = a_ad.data.elements.map(func(e: CreatureElement) -> String: return e.resource_path), who = &"smith"})
+	a.creatures.erase(a_ad)
+	a_ad.queue_free()
+	Expedition.spawn_adopted(a, GameState.adopted.size() - 1)
 	Expedition.send(a, 1)
 	a.player.position = Farm.center_of(Config.HUNTER_CELL)
 	a.player.facing = Vector2i.LEFT
@@ -2831,14 +2790,24 @@ func _save_load_checks() -> void:
 
 	# 옛 저장 파일 (나중에 늘어난 변수가 없음): 없는 변수는 처음 값으로
 	var old := SaveGame.read(2)
-	old.gs.erase("lunches")
+	old.gs.erase("hens")
 	old.gs.erase("barn_state")
+	# 2026-10-05 시스템 줄이기로 없앤 것: 도구 손보기 · 사냥칼은 값을, 남은 버프 음식은 빨간 물약으로 돌려받음
+	old.gs["tool_levels"] = {Farm.Work.TILL: 1, Farm.Work.WATER: 1}
+	old.gs["hunter_knife"] = true
+	old.gs["lunches"] = 2
+	old.gs["stews"] = 1
+	old.gs["yak_brew"] = &"strength"
+	var old_money: int = old.gs.money
+	var old_potions: int = old.gs.potions
 	GameState.reset()
 	var c: Node2D = load("res://scenes/main.tscn").instantiate()
 	add_child(c)
 	await get_tree().process_frame
 	SaveGame.apply(c, old)
-	_check(GameState.day == 70 and GameState.lunches == 0 and GameState.barn_state == 0 and c.barn == null, "옛 저장 파일: 없는 변수는 처음 값으로 읽음")
+	_check(GameState.day == 70 and GameState.hens == 0 and GameState.barn_state == 0 and c.barn == null, "옛 저장 파일: 없는 변수는 처음 값으로 읽음")
+	_check(GameState.money == old_money + Config.OLD_TOOL_REFUND + Config.OLD_CAN_REFUND + Config.OLD_KNIFE_REFUND and GameState.potions == old_potions + 3 and GameState.yak_brew == &"",
+		"옛 저장 파일: 없앤 도구 · 사냥칼 값과 버프 음식(물약으로)을 돌려받음")
 	c.queue_free()
 	await get_tree().process_frame
 
@@ -3702,7 +3671,7 @@ func _naru_checks() -> void:
 	GameState.hunter_unlocked = true
 	m.player.position = Farm.center_of(Config.FERRYMAN_CELL) + Vector2(10, 0)
 	m.interact()
-	_check(m.menu_open and m.menu_kind == &"dock" and m.dock_options().has(&"stew"), "뱃사공에게 F → 나루터 창 (매운탕도)")
+	_check(m.menu_open and m.menu_kind == &"dock" and not m.dock_options().has(&"stew"), "뱃사공에게 F → 나루터 창 (매운탕은 2026-10-05 없앰)")
 	m.close_menu()
 	# 통발
 	var crops0 := GameState.crops
@@ -3722,34 +3691,15 @@ func _naru_checks() -> void:
 	_check(sl.work_once() == false or sl.position.distance_to(Farm.center_of(sl.home)) > 0.5, "통발이 없으면 물고기 몰기 크리처는 쉼")
 	var empty: Dictionary = m.traps_night(rng)
 	_check(empty.traps == 0 and empty.caught == 0, "통발을 안 놓으면 물고기 없음")
-	# 꺼내기 · 매운탕 · 팔기
+	# 꺼내기 · 팔기
 	var basket := GameState.basket
 	_check(m.dock_action(&"take_fish") and GameState.fish == basket and GameState.basket == 0, "바구니 물고기 꺼내기")
-	GameState.fish = maxi(GameState.fish, Config.STEW_FISH + 1)
-	var fish0 := GameState.fish
-	GameState.peppers = 0
-	_check(not m.dock_action(&"stew"), "고추가 없으면 매운탕을 못 끓임")
-	GameState.peppers = Config.STEW_PEPPERS
-	_check(m.dock_action(&"stew") and GameState.stews == 1 and GameState.fish == fish0 - Config.STEW_FISH and GameState.peppers == 0, "뱃사공 매운탕 (물고기 %d · 고추 %d)" % [Config.STEW_FISH, Config.STEW_PEPPERS])
-	_check(&"stew" in m.dock_options(), "매운탕은 나루터 창에서 뱃사공에게 부탁")
+	GameState.fish = maxi(GameState.fish, 3)
 	var money0 := GameState.money
 	var sell := GameState.fish
 	m.supply_action(&"display_fish")
 	m.next_day()
 	_check(GameState.money >= money0 + sell * Config.FISH_PRICE and GameState.fish == 0, "공급함에 진열한 물고기는 밤사이 팔림 (%d마리)" % sell)
-	# 매운탕을 먹고 사냥: 하트 칸 +1 · 경험치 x1.5
-	GameState.hunts_today = 0
-	var hearts0: int = 0
-	m.enter_hunt(null, 0)
-	var h: HuntGround = m.hunt
-	_check(h.stew and GameState.stews == 0, "사냥에 들어갈 때 매운탕을 먹음")
-	h.stew = false
-	hearts0 = h.max_life()
-	h.stew = true
-	_check(h.max_life() == hearts0 + Config.STEW_HP, "매운탕: 최대 체력 +%d" % Config.STEW_HP)
-	m.leave_hunt()
-	# 입양: 뱃사공도 받아 줌
-	_check(Expedition.villager_open(&"ferryman") and Config.ADOPT_SPOTS[&"ferryman"].size() == 4, "뱃사공도 크리처 입양을 받음")
 	# 저장 → 불러오기: 나루터 · 놓인 통발 · 바구니
 	GameState.traps = 2
 	GameState.basket = 3

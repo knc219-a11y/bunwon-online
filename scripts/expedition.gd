@@ -8,8 +8,7 @@ extends RefCounted
 ## 불러들일 때까지 날마다 다시 떠난다 (Claude 기본값: 날마다 다시 보내는 손일이 없게).
 ## 알은 가져오지 않는다 (규칙: 알은 늘 사냥꾼이 야생에서). 돈은 5마리 보통 팀이 그 구역 사냥 한 번의 약 1/3 (사용자 기본값).
 ##
-## 입양: 공급함에서 "크리처 입양 보내기" → 쉬는 · 채집 크리처를 고친 시설의 주민(대장장이 · 연금술사 · 목축인)에게 보낸다.
-## 주민 곁에서 지내며 (일은 안 함, 마을 크리처 수에서 빠짐) 그 자리에서 한 번 작은 보답을 받는다. 되돌릴 수 없다.
+## 입양 보내기는 2026-10-05 시스템 줄이기로 없앴다. 옛 저장 파일의 입양 크리처만 주민 곁에 그린다.
 
 const JOB := &"expedition"
 
@@ -187,82 +186,9 @@ static func zone_text(main: Node2D, zone: int) -> String:
 	return "%s 원정 보내기 (잘 맞음: %s)" % [zd.name, Config.EXPEDITION_ZONES[zone].hint]
 
 
-# --- 입양 ---------------------------------------------------------------------
-
-## 크리처를 받아 줄 주민 (시설을 고친 주민, 정원이 남은 주민). 입양한 수가 적은 주민 먼저.
-static func next_villager() -> StringName:
-	var best := &""
-	var best_n := Config.ADOPT_CAP
-	for who: StringName in [&"smith", &"alchemist", &"rancher", &"ferryman", &"chief"]:
-		if not villager_open(who):
-			continue
-		var n := adopted_by(who)
-		if n < best_n:
-			best = who
-			best_n = n
-	return best
-
-
-static func villager_open(who: StringName) -> bool:
-	match who:
-		&"smith":
-			return GameState.forge_state >= 2
-		&"alchemist":
-			return GameState.yak_state >= 2
-		&"rancher":
-			return GameState.barn_state >= 2
-		&"ferryman":
-			return GameState.naru_state >= 2
-		&"chief":
-			return GameState.hall_state >= 2
-	return false
-
-
-static func any_villager() -> bool:
-	return [&"smith", &"alchemist", &"rancher", &"ferryman", &"chief"].any(func(w: StringName) -> bool: return villager_open(w))
-
-
-static func adopted_by(who: StringName) -> int:
-	return GameState.adopted.filter(func(a: Dictionary) -> bool: return a.who == who).size()
-
-
-static func gift_text(who: StringName) -> String:
-	var g: Dictionary = Config.ADOPT_GIFTS[who]
-	return "%s %s" % [g.name, g.text]
-
-
-## 크리처 하나를 다음 주민에게 입양 보낸다 (되돌릴 수 없음). 받은 주민 id, 못 보내면 &"".
-static func adopt(main: Node2D, s: Creature) -> StringName:
-	if s == null or s not in idle(main):
-		return &""
-	var who := next_villager()
-	if who == &"":
-		GameState.notify("받아 줄 주민이 없다 (시설을 고친 주민마다 %d마리까지)." % Config.ADOPT_CAP)
-		return &""
-	var d := s.data
-	GameState.adopted.append({
-		species = d.species.resource_path,
-		elements = d.elements.map(func(e: CreatureElement) -> String: return e.resource_path),
-		who = who,
-	})
-	main.creatures.erase(s)
-	s.queue_free()
-	var g: Dictionary = Config.ADOPT_GIFTS[who]
-	match who:
-		&"smith":
-			GameState.scrap += g.count
-		&"alchemist":
-			GameState.potions += g.count
-		&"rancher":
-			GameState.lunches += g.count
-		&"ferryman":
-			GameState.fish += g.count
-		&"chief":
-			GameState.money += g.count
-	spawn_adopted(main, GameState.adopted.size() - 1)
-	GameState.notify("%s %s이(가) %s 곁에서 지내게 됐다. 보답으로 %s." % [d.element_names(), d.species.display_name, g.name, g.text])
-	return who
-
+# --- 입양 (옛 저장 파일만) -----------------------------------------------------
+## 입양 보내기는 2026-10-05 시스템 줄이기(가볍게)로 없앴다 (원정과 겹치고 보답이 작았음).
+## 그 전에 입양 보낸 크리처만 GameState.adopted 로 남아 주민 곁에 그린다.
 
 ## 입양된 크리처를 주민 곁에 그린다 (일은 안 함). 불러오기 때는 전부 다시 만든다.
 static func spawn_adopted(main: Node2D, i: int) -> Creature:
