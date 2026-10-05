@@ -14,7 +14,7 @@ const ATTACK_COLUMNS := {&"melee": [6, 7, 8, 9], &"bow": [10, 11, 12], &"staff":
 const ATTACK_WEIGHTS := {&"melee": [0.14, 0.14, 0.36, 0.36], &"bow": [0.16, 0.2, 0.64], &"staff": [0.2, 0.45, 0.35]}
 ## SpriteCook 주인공 A (2026-10-05, tools/import_spritecook_hero.py): 시트가 20칸 이상이면 걷기 8칸 (16-19 열에 나머지),
 ## 22칸 이상이면 칼 공격 6칸 (뽑기 · 치켜들기 · 베기 · 마무리 · 거두기 2) 이고 칼은 몸에 그려져 있다
-## (칸 밖으로 나간 칼 · 팔은 assets/weapons/<시트 이름>_melee.png).
+## (칸 밖으로 나간 칼 · 팔은 assets/weapons/<시트 이름>_melee.png). 몸마다 무기 그림이 있으면 그걸 쓴다 (<시트 이름>_<종류>.png).
 const WALK8_COLUMNS: Array[int] = [2, 16, 3, 17, 4, 18, 5, 19]
 const MELEE6_COLUMNS: Array[int] = [6, 7, 8, 9, 20, 21]
 const MELEE6_WEIGHTS: Array[float] = [0.14, 0.14, 0.2, 0.24, 0.14, 0.14]
@@ -199,7 +199,7 @@ func attack(kind: StringName, dur: float, reverse := false) -> void:
 	var tex := load("res://assets/weapons/%s.png" % kind) as Texture2D
 	if sheet and sheet.resource_path != "":
 		var own := "res://assets/weapons/%s_%s.png" % [sheet.resource_path.get_file().get_basename(), kind]
-		if attack_columns(kind) != ATTACK_COLUMNS[kind] and ResourceLoader.exists(own):
+		if ResourceLoader.exists(own):
 			tex = load(own) as Texture2D
 	if _weapon.texture != tex:
 		_weapon.texture = tex
